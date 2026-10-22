@@ -202,12 +202,18 @@ volumes:
 
 networks:
   ai-net:
+  # Les trois réseaux suivants sont « internes » : Docker ne leur donne aucune sortie (ni Internet, ni réseau local).
+  # Les agents qui y sont reliés ne joignent que les conteneurs du même réseau. Ollama et Open WebUI sortent par ai-net.
+  # Voir docs/isolation-agents.md.
   # Nom fixe pour que le projet OpenClaw puisse le rejoindre
   llm-net:
     name: llm-net
+    internal: true
   # Idem pour Hermes : réseau séparé de celui d'OpenClaw, ils ne se voient pas
   hermes-net:
     name: hermes-net
+    internal: true
   # Réseau d'observabilité : Open WebUI et Hermes y joignent Langfuse, et rien d'autre
   obs-net:
     name: obs-net
+    internal: true

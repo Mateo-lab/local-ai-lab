@@ -44,12 +44,13 @@ OpenClaw est un agent (interface web + passerelle) qui parle à ton Ollama local
 - **Thinking** : réglé sur « Default » ; les modèles Qwen peuvent réfléchir longuement avant de répondre. « Off » accélère les réponses.
 - **VRAM** : la version 64k occupe ≈ 21 Go (cache KV en q8_0). Ne pas laisser ComfyUI tourner en même temps (`lab mode normal`).
 
-## Sécurité : à traiter
+## Sécurité
 
-- **Ports exposés à tout le réseau.** `ss -tlnp | grep -E '18789|3978'` montre `0.0.0.0` et `[::]` pour les deux ports (18789 : interface, 3978 : service des canaux de messagerie). Le compose officiel les publie sur toutes les interfaces et l'installation fixe `gateway.bind=lan`. Seul le jeton protège la passerelle depuis le réseau local ou le VPN. À restreindre à `127.0.0.1` (ou par pare-feu `DOCKER-USER`).
+- **Ports limités à `127.0.0.1` (fait le 22 octobre 2026).** Le compose officiel publie 18789 (interface), 18790 (bridge) et 3978 (canaux de messagerie) sur toutes les interfaces, et l'installation fixe `gateway.bind=lan`. Dans `~/openclaw/.env` : `OPENCLAW_GATEWAY_PORT=127.0.0.1:18789`, `OPENCLAW_BRIDGE_PORT=127.0.0.1:18790`, `OPENCLAW_MSTEAMS_PORT=127.0.0.1:3978` (sans modifier le compose officiel), puis recréation de la passerelle et `docker network connect llm-net …`. Contrôle : `ss -tlnp | grep -E ':(18789|18790|3978)'` n'affiche que `127.0.0.1`. `openclaw/install.sh` le fait désormais (sauvegarde `.env.avant-localhost`).
 - **59 outils** (journal : `cataloged 59 tools`). Je n'ai pas vu la liste ni l'état du bac à sable : ne pas confier à l'agent de tâches qui lisent ou écrivent des fichiers ou lancent des commandes avant de les avoir relus dans l'interface.
 - **Aucun canal de messagerie** n'est configuré (volontaire) : tout ce qui arrive de l'extérieur peut donner des instructions à un agent.
 - Le message de test parti vers OpenAI (refusé) montre qu'un mauvais réglage du modèle peut envoyer ce que tu écris à un service extérieur : après toute modification, vérifier le modèle actif.
+- **Pas d'accès à Internet** : la passerelle ne joint qu'Ollama ; toute connexion sortante est bloquée par `lab isolation` ([isolation-agents.md](isolation-agents.md)). Un modèle hébergé sélectionné par erreur ne peut donc plus rien envoyer dehors.
 
 ## Mise à jour
 
@@ -60,7 +61,6 @@ OpenClaw est un agent (interface web + passerelle) qui parle à ton Ollama local
 - **La qualité des réponses** d'OpenClaw avec ce modèle n'a pas été jugée ; seul le fonctionnement (`chat.send`, réponse en ≈ 11 s au premier message) a été constaté dans les journaux.
 - **`contextTokens`** : l'interprétation (plafond envoyé à Ollama) est une déduction ; elle est confortée par `ollama ps` (65536 après modification) mais pas par la documentation d'OpenClaw. La modification a été faite directement dans `openclaw.json` ; je ne sais pas si une mise à jour ou la redécouverte des modèles la remet à 32768. Si c'est le cas, passer par la commande `config` de la CLI (non explorée).
 - La **mémoire sémantique** est dégradée (`memory_index_chunks_vec not updated — semantic vector embeddings unavailable`) : aucun modèle d'embeddings n'est configuré. Non traité.
-- **Les ports 18789 et 3978** restent ouverts sur toutes les interfaces : correctif non écrit ni testé.
 - **Bac à sable et outils** : état non vérifié (voir plus haut).
 - Le correctif de `install.sh` (rattachement automatique à `llm-net`) a été écrit mais **pas exécuté** ; la syntaxe a été contrôlée (`bash -n`).
 - Le dossier `~/openclaw` et `~/.openclaw` contiennent des identifiants (jeton de la passerelle) : ils ne sont pas inclus dans les sauvegardes décrites par `docs/sauvegardes.md` (non vérifié).

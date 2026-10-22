@@ -24,6 +24,7 @@ Si `~/.local/bin` n'est pas dans ton PATH, la commande l'indique (ligne à ajout
 | `lab bench [nom] [...]` | Banc d'essai. Sans nom : liste. Le modèle est celui qui est chargé (sinon le premier installé) ; force-le avec `--model NOM` ou `LAB_MODEL=NOM` |
 | `lab gpu-limit status\|install [W]\|remove` | Voir `performance.md` §1 |
 | `lab bureau on\|off\|status [--boot]` | Bureau à distance à la demande : voir `acces-distant.md` §9 |
+| `lab isolation install\|apply\|status\|test\|remove\|uninstall` | Coupe Internet, le réseau local et la machine aux agents (Hermes, OpenClaw) : `isolation-agents.md` |
 | `lab client [--print]` | Génère la configuration SSH du PC (raccourci `aibeast`, tunnels, bureau à distance) depuis `lab.conf` : `acces-distant.md` §5 |
 | `lab backup init\|run\|list\|check\|restore\|schedule` | Voir `sauvegardes.md` |
 | `lab config [list\|set MODEL NOM]` / `lab main-model` | Modèle principal mémorisé (voir `docs/raccourcis-windows.md`) |

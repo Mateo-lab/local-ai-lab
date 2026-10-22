@@ -30,6 +30,7 @@ Sans `lab.conf`, les valeurs par défaut s'appliquent.
 | `LAB_SSH_PORT` | `22` | `lab client` |
 | `LAB_SSH_KEY` | `~/.ssh/id_ed25519` | `lab client` : clé privée **sur le PC** |
 | `LAB_RDP_LOCAL_PORT` | `13389` | `lab client` : port local du tunnel vers le bureau à distance (3389 de la machine IA) |
+| `LAB_AGENT_SSH_ALLOW` | vide (aucune exception) | `lab isolation` : machines de test que Hermes peut joindre en SSH (`IP` ou `IP:PORT`, séparées par des espaces) |
 
 Remarques :
 

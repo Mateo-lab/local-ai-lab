@@ -14,6 +14,7 @@
 #   lab gpu-limit status|install [W]|remove    limite de puissance GPU permanente
 #   lab bureau on|off|status [--boot]          bureau à distance (≈ 100 W)
 #   lab client [--print]           génère la config SSH (tunnels + bureau à distance) du PC client depuis lab.conf : docs/acces-distant.md
+#   lab isolation install|apply|status|test|remove|uninstall   coupe Internet aux agents (Hermes, OpenClaw) : docs/isolation-agents.md
 #   lab backup init|run|list|check|restore|schedule    sauvegardes chiffrées
 #   lab update [--no-backup]       met à jour les images, mémorise les anciennes
 #   lab rollback                   revient aux images d'avant la dernière mise à jour
@@ -296,6 +297,7 @@ cmd_remote() { exec "$ROOT/scripts/remote.sh" "$@"; }
 cmd_gpu_limit() { [ $# -eq 0 ] && set -- status; exec "$ROOT/scripts/gpu-power-limit.sh" "$@"; }
 cmd_backup()    { exec "$ROOT/scripts/backup.sh" "$@"; }
 cmd_client()    { exec "$ROOT/scripts/client-config.sh" "$@"; }
+cmd_isolation() { exec "$ROOT/scripts/isolation-agents.sh" "$@"; }
 
 cmd_bureau() {
   local act="${1:-status}"; shift || true; local boot=0; [ "${1:-}" = "--boot" ] && boot=1
@@ -368,6 +370,11 @@ cmd_doctor() {
     if grep -q 'CPU' <<<"$op"; then wa "un modèle déborde sur le CPU (voir : docker exec ollama ollama ps)"; else ok "modèle(s) chargé(s) 100 % GPU"; fi
   fi
 
+  # Isolation des agents (docs/isolation-agents.md)
+  local nint=0 n; for n in llm-net hermes-net obs-net; do [ "$(docker network inspect -f '{{.Internal}}' "$n" 2>/dev/null)" = true ] && nint=$((nint+1)); done
+  [ "$nint" = 3 ] && ok "réseaux des agents internes (llm-net, hermes-net, obs-net)" || ko "réseaux des agents : $nint/3 internes (agents avec accès Internet ; voir docs/isolation-agents.md)"
+  if systemctl is-active --quiet ai-lab-isolation.service; then ok "pare-feu des agents actif (lab isolation status)"
+  else wa "pare-feu des agents inactif : Hermes et OpenClaw peuvent sortir (lab isolation install)"; fi
   if command -v restic >/dev/null && [ -f "${BACKUP_PASSWORD_FILE:-$HOME/.config/aibeast-backup/password}" ]; then
     local l; if l="$("$ROOT/scripts/backup.sh" last 2>/dev/null)"; then ok "dernière sauvegarde : $l"; else wa "dernière sauvegarde : ${l:-introuvable} (lab backup run)"; fi
   else wa "sauvegardes non configurées (lab backup init)"; fi
@@ -431,7 +438,7 @@ case "$c" in
   bench) cmd_bench "$@" ;;   gpu-limit) cmd_gpu_limit "$@" ;;  bureau) cmd_bureau "$@" ;;
   backup) cmd_backup "$@" ;; update) cmd_update "$@" ;;    rollback) cmd_rollback ;;
   mode) cmd_mode "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     config) cmd_config "$@" ;;
-  tmux) cmd_tmux "$@" ;;     main-model) main_model ;;  client) cmd_client "$@" ;;
-  help|-h|--help|"") sed -n '2,25p' "$SELF" | sed 's/^# \{0,1\}//' ;;
-  *) echo "lab : commande inconnue « $c »" >&2; sed -n '2,25p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
+  tmux) cmd_tmux "$@" ;;     main-model) main_model ;;  client) cmd_client "$@" ;;  isolation) cmd_isolation "$@" ;;
+  help|-h|--help|"") sed -n '2,26p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  *) echo "lab : commande inconnue « $c »" >&2; sed -n '2,26p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
 esac

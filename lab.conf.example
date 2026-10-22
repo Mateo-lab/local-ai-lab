@@ -41,3 +41,9 @@
 # Port local (sur ton PC) du tunnel vers le bureau à distance (RDP, port 3389 de la machine IA).
 # 13389 plutôt que 3389 : sous Windows, 3389 peut déjà être pris par le bureau à distance du PC lui-même.
 #LAB_RDP_LOCAL_PORT=13389
+
+# ─── 3. Isolation des agents (lab isolation) ───────────────────────────────────
+# Hermes et OpenClaw n'ont accès ni à Internet, ni au réseau local, ni à cette machine.
+# Exceptions : machines de test que Hermes peut joindre en SSH (lab remote), séparées par des espaces,
+# sous la forme IP ou IP:PORT (port 22 par défaut). Vide = aucune exception. Voir docs/isolation-agents.md.
+#LAB_AGENT_SSH_ALLOW="192.168.1.60"

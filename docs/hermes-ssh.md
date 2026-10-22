@@ -43,6 +43,10 @@ Ajoute `--windows` : `lab remote add NOM hermes@ADRESSE --windows`. Au lieu des 
 
 ## Bonnes pratiques
 
+- **Isolation** : Hermes n'a aucun accès réseau sauf ceux que tu autorises. Ajoute l'adresse de la machine à
+  `LAB_AGENT_SSH_ALLOW` dans `lab.conf`, puis `lab isolation apply` : sinon la connexion SSH est bloquée
+  ([isolation-agents.md](isolation-agents.md)).
+
 - **Prends un instantané de la VM** avant chaque séance : l'agent peut casser la machine, par erreur ou parce qu'un texte lu l'y a poussé.
 - **Utilise une machine sans secret** : pas de jetons, pas de clés d'autres machines, pas de partage réseau monté, et si possible isolée de ton réseau sensible. Hermes, lui, ne peut atteindre que ce que la machine atteint.
 - Si les tests ont besoin d'installer des paquets, installe-les toi-même avant ; ne donne pas `sudo` à l'utilisateur. Si c'est indispensable, une règle `sudoers` limitée à une commande précise vaut mieux qu'un `sudo` complet.

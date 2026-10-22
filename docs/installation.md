@@ -130,6 +130,9 @@ règle `LAB_DATA_DIR` (§3).
 | Tri des mails Gmail (n8n) | voir la doc | [n8n-gmail.md](n8n-gmail.md) |
 | OpenClaw | `./openclaw/install.sh` | `README.md` |
 
+**Avant d'utiliser Hermes ou OpenClaw**, coupe-leur Internet : `lab isolation install` puis `lab isolation test`
+([isolation-agents.md](isolation-agents.md)).
+
 **Fais au moins les sauvegardes** : `lab backup init` affiche un mot de passe à garder **hors de la machine**
 (gestionnaire de mots de passe).
 

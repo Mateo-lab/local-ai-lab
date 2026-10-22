@@ -450,6 +450,10 @@ Relancer : `./3-demarrer.sh`, puis `docker compose up -d` dans `langfuse/app` et
 
 ## Sécurité (à lire avant de donner des outils à un agent)
 
+- **Agents sans Internet** : Hermes et OpenClaw ne joignent qu'Ollama (et Langfuse) ; Internet, le réseau local et la
+  machine elle-même leur sont fermés, sauf SSH vers les machines de test que tu autorises : `lab isolation install`,
+  [docs/isolation-agents.md](docs/isolation-agents.md).
+
 - **Vérifie l'exposition** : `ss -tlnp | grep -E '18789|3000|3001|3002|5678|6333|8188|9090|11434'`. Aucun ne doit écouter sur
   `0.0.0.0`. Le port 18789 d'OpenClaw est publié par son compose officiel : sinon, restreins-le par pare-feu
   (Docker contourne UFW ; voir la chaîne `DOCKER-USER`).
