@@ -453,6 +453,9 @@ Relancer : `./3-demarrer.sh`, puis `docker compose up -d` dans `langfuse/app` et
 
 ## Sécurité (à lire avant de donner des outils à un agent)
 
+Vue d'ensemble avec diagrammes (réseaux, ports, accès, agents, risques restants) :
+[docs/architecture-securite.md](docs/architecture-securite.md).
+
 - **Agents sans Internet** : Hermes et OpenClaw ne joignent qu'Ollama (et Langfuse) ; Internet, le réseau local et la
   machine elle-même leur sont fermés, sauf SSH vers les machines de test que tu autorises : `lab isolation install`,
   [docs/isolation-agents.md](docs/isolation-agents.md).

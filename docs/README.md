@@ -22,6 +22,7 @@ cette machine de référence : RTX 3090 24 Go, 64 Go de RAM, Ubuntu 26.04.
 | [n8n-gmail.md](n8n-gmail.md) | Tri des mails Gmail par le modèle local dans n8n, anciens mails, corbeille validée (workflows dans `n8n/`) |
 | [developpement-agents.md](developpement-agents.md) | Développer avec Hermes : projets git, boucle code → test → review, fusion par toi (`lab dev`) |
 | [generation-images.md](generation-images.md) | Images avec Qwen-Image-2.1 dans ComfyUI : installation, réglages, mesures, exemples, pièges |
+| [architecture-securite.md](architecture-securite.md) | **Vue d'ensemble** : réseaux, ports, accès, confinement des agents, protections et risques restants, avec diagrammes |
 | [isolation-agents.md](isolation-agents.md) | Agents sans Internet : réseaux internes, pare-feu (`lab isolation`), exceptions SSH, vérification |
 | [openclaw.md](openclaw.md) | OpenClaw : installation, pièges rencontrés (réseau, clé factice, modèle, contexte 64k), sécurité, mise à jour |
 | [agents-langfuse.md](agents-langfuse.md) | Langfuse, brancher Hermes, mode agents, ComfyUI (1er démarrage), pièges rencontrés |
