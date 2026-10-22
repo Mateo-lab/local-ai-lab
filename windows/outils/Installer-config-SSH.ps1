@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 function Fin($msg, $code) { Write-Host $msg; if ($Host.Name -eq "ConsoleHost") { Read-Host "Appuie sur Entree pour fermer" | Out-Null }; exit $code }
 
 if (-not (Test-Path $Fichier)) { Fin "Fichier introuvable : $Fichier`nSur la machine IA : lab client, puis copie windows/ssh_config_aibeast.txt dans le dossier windows\ de ce PC." 1 }
-$nouveau = @(Get-Content $Fichier | ForEach-Object { $_.TrimEnd("`r") })
+$nouveau = @(Get-Content -Encoding UTF8 $Fichier | ForEach-Object { $_.TrimEnd("`r") })   # UTF8 : sinon PowerShell 5.1 abime les accents
 if (-not ($nouveau | Where-Object { $_ -match '^\s*Host\s+aibeast\s*$' })) { Fin "Le fichier $Fichier ne contient pas de bloc 'Host aibeast'." 1 }
 if (-not ($nouveau | Where-Object { $_ -match '^\s*HostName\s+\S' })) { Fin "Le fichier $Fichier ne contient pas de ligne HostName." 1 }
 
@@ -25,7 +25,7 @@ if (Test-Path $Config) {
     $sauvegarde = "$Config.avant-$(Get-Date -Format yyyyMMdd-HHmm)"
     Copy-Item $Config $sauvegarde
     Write-Host "Sauvegarde : $sauvegarde"
-    $ancien = @(Get-Content $Config)
+    $ancien = @(Get-Content -Encoding UTF8 $Config)
 }
 
 # Retirer l'ancien bloc « Host aibeast » (et les commentaires « # » qui le precedent immediatement)
