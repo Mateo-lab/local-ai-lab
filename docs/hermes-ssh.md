@@ -85,6 +85,9 @@ avec les droits **SYSTEM**.
 **Côté agent** : règle 6 de son `AGENTS.md` (`hermes/dev-template/AGENTS.md`). Historique : `approbations.log` et
 `resultats\journal.log` dans `C:\ProgramData\hermes-admin`. Durée maximale d'une exécution : 1 heure.
 
+Constaté le 22 octobre 2026 sur la machine Windows de référence : installation, approbation d'un script de test et
+lancement par Hermes fonctionnent ; Hermes reste un compte standard.
+
 ## Bonnes pratiques
 
 - **Isolation** : Hermes n'a aucun accès réseau sauf ceux que tu autorises. Ajoute l'adresse de la machine à
