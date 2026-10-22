@@ -86,27 +86,49 @@ s'exécute dans la passerelle avec `node`. `lab isolation status` affiche les r�
 ## 6. Passer une installation existante en réseaux internes
 
 Les réseaux `llm-net`, `hermes-net` et `obs-net` doivent être supprimés puis recréés. Les **données ne sont pas
-touchées** (elles sont dans les volumes) ; les services concernés redémarrent (≈ 1 minute) : Ollama, Open WebUI et le
-reste d'`ai-stack`, la passerelle OpenClaw, le portail, Langfuse s'il tourne.
+touchées** (elles sont dans les volumes, et ce que Hermes conserve est dans `hermes/data`) ; les services concernés
+redémarrent (≈ 1 minute) : `ai-stack` (Ollama, Open WebUI…), le portail, Langfuse, la passerelle OpenClaw.
+
+Piège rencontré sur la machine de référence : des **sessions Hermes orphelines** (conteneurs `hermes-hermes-run-…`
+restés en marche des jours après la fermeture de leur terminal) bloquaient la suppression des réseaux. Le script
+ci-dessous les retire, puis vérifie chaque étape et **s'arrête** au premier problème. Coller tout le bloc :
 
 ```bash
+bash <<'EOF'
+set -euo pipefail
 cd ~/Documents/ai-lab
-# 1. Arrêter et retirer les conteneurs reliés à ces réseaux (SANS -v : les volumes et les données restent)
-(cd ~/openclaw 2>/dev/null && docker compose -f docker-compose.yml down)
-[ -f langfuse/app/docker-compose.yml ] && (cd langfuse/app && docker compose down)
+interne() { [ "$(docker network inspect -f '{{.Internal}}' "$1" 2>/dev/null)" = true ]; }
+echo "1. Sessions Hermes encore en marche (hermes/data n'est pas touché)"
+docker ps -a --filter name=hermes-hermes-run --format '   {{.Names}}  {{.Status}}'
+docker ps -aq --filter name=hermes-hermes-run | xargs -r docker rm -f
+echo "2. Arrêt de ce qui est relié aux réseaux (SANS -v : volumes et données restent)"
+(cd ~/openclaw 2>/dev/null && docker compose -f docker-compose.yml down) || true
+[ ! -f langfuse/app/docker-compose.yml ] || (cd langfuse/app && docker compose down)
 (cd portail && docker compose down)
-(cd ai-stack && docker compose down)           # supprime aussi llm-net, hermes-net, obs-net
-docker network ls | grep -E 'llm-net|hermes-net|obs-net' && echo "un réseau reste : voir ci-dessous" || echo "réseaux supprimés"
-# 2. Tout recréer : les réseaux reviennent en « internes »
+(cd ai-stack && docker compose down)
+echo "3. Suppression des réseaux non internes"
+for n in llm-net hermes-net obs-net; do
+  if docker network inspect "$n" >/dev/null 2>&1 && ! interne "$n"; then
+    docker network rm "$n" || { echo "ARRÊT : $n encore utilisé par : $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$n")"; exit 1; }
+  fi
+done
+echo "4. Redémarrage"
 lab start
-(cd ~/openclaw && docker compose -f docker-compose.yml up -d openclaw-gateway && docker network connect llm-net openclaw-openclaw-gateway-1)
-# 3. Pare-feu, puis vérification
-lab isolation install && lab isolation test && lab doctor
+for n in llm-net hermes-net obs-net; do interne "$n" || { echo "ARRÊT : $n n'est pas interne"; exit 1; }; done
+[ -n "$(docker ps -q --filter name=^ollama$)" ] || { echo "ARRÊT : Ollama ne tourne pas (lab logs ollama)"; exit 1; }
+if [ -d ~/openclaw ]; then
+  (cd ~/openclaw && docker compose -f docker-compose.yml up -d --force-recreate openclaw-gateway)
+  docker network connect llm-net openclaw-openclaw-gateway-1 2>/dev/null || true
+fi
+echo "5. Pare-feu et vérification"
+if systemctl is-active --quiet ai-lab-isolation.service; then lab isolation apply; else lab isolation install; fi
+lab isolation test
+lab doctor | tail -9
+EOF
 ```
 
-Si un réseau reste (`docker network ls`), un conteneur y est encore relié :
-`docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' NOM_DU_RESEAU`, arrêter ce conteneur, puis
-`docker network rm NOM_DU_RESEAU`.
+Si un `ARRÊT` apparaît, rien d'autre n'est fait après ce point ; `lab start` relance les services sur les réseaux
+existants (sans isolation) le temps de corriger.
 
 **Jamais `docker compose down -v`** : `-v` supprimerait les volumes (modèles, conversations, workflows).
 
@@ -117,10 +139,11 @@ Si un réseau reste (`docker network ls`), un conteneur y est encore relié :
 
 ## Ce qui n'est pas vérifié
 
-- L'ensemble a été écrit et testé hors de la machine (syntaxe, sondes de test) ; il n'a pas encore été appliqué sur
-  une vraie installation au moment de cette rédaction.
-- Que l'image de Hermes contienne `python3` à cet emplacement (sinon `lab isolation test` échoue pour Hermes sans
-  que l'isolation soit en cause).
+- **Vérifié le 22 octobre 2026 sur la machine de référence** (Docker 29.9, iptables) : `lab isolation test` réussit
+  pour OpenClaw et Hermes (Ollama joignable ; Internet par IP et par nom bloqué ; machine hôte bloquée ; machine de
+  test autorisée joignable en SSH). Le script du §6 est la version corrigée après le premier passage (sessions
+  Hermes orphelines) : sa forme complète n'a pas été rejouée.
+- Le redémarrage de la machine (réapplication des règles par le service systemd) n'a pas encore été observé.
 - Le comportement de l'assistant d'installation d'OpenClaw (`setup.sh`) quand l'isolation est déjà active : s'il a
   besoin d'Internet, désactiver le temps de l'installation (`lab isolation remove`).
 - IPv6 n'est pas filtré : les réseaux Docker du lab n'ont pas d'IPv6 activé. Si tu l'actives, ces règles ne suffisent
