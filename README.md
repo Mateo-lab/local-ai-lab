@@ -415,6 +415,8 @@ docker compose logs -f openclaw-gateway
 ```
 
 Mise à jour : `cd ~/openclaw && git pull && docker compose pull && docker compose up -d`.
+**Important :** le script officiel appelle `docker compose -f docker-compose.yml`, qui ignore l'override réseau. Après toute recréation de la passerelle (mise à jour, `up -d`), rattache-la à Ollama : `docker network connect llm-net $(docker compose -f docker-compose.yml ps -q openclaw-gateway)` (sans effet si elle y est déjà ; `./openclaw/install.sh` le fait aussi).
+Installation réelle, pièges et sécurité (ports 18789 et 3978 publiés sur toutes les interfaces) : [docs/openclaw.md](docs/openclaw.md).
 
 ## Stockage (second SSD sur /data) — optionnel
 

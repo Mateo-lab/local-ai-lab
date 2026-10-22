@@ -154,8 +154,8 @@ ss -tlnp | grep -vE '127\.0\.0\.1|\[::1\]|127\.0\.0\.53'
 ```
 
 Ne doivent apparaître que **SSH (22)** et, s'il est activé, le **bureau à distance (3389)**. Toutes les interfaces
-du lab écoutent sur `127.0.0.1` et ne sont joignables que par les tunnels SSH. Exception connue : le port 18789
-d'OpenClaw, publié par son compose officiel (voir la section Sécurité du `README.md`).
+du lab écoutent sur `127.0.0.1` et ne sont joignables que par les tunnels SSH. Exception connue : OpenClaw publie
+les ports 18789 et 3978 sur toutes les interfaces (compose officiel) : voir [openclaw.md](openclaw.md), section Sécurité.
 
 ## 10. Tenir à jour
 
