@@ -106,6 +106,6 @@ function Test-Tcp([string]$h, [int]$p) {
 Write-Host "--- Verifications ---"
 $i = Test-Tcp "1.1.1.1" 443
 Write-Host ("Internet (1.1.1.1:443)      : " + $(if ($i) { "JOIGNABLE  <- probleme" } else { "bloque (bien)" }))
-$d = $false; try { [Net.Dns]::GetHostAddresses("example.com") | Out-Null; $d = $true } catch { }
+$d = $false; try { $d = [Net.Dns]::GetHostAddressesAsync("example.com").Wait(5000) } catch { }   # 5 s au plus : DNS bloque = pas de reponse
 Write-Host ("Resolution DNS example.com  : " + $(if ($d) { if ($GarderDns) { "resolu (DNS garde volontairement)" } else { "RESOLU  <- probleme (cache ? relancer apres 'ipconfig /flushdns')" } } else { "bloquee (bien)" }))
 Get-NetFirewallRule -Group $Groupe | Format-Table DisplayName, Enabled, Direction, Action -AutoSize

@@ -145,7 +145,7 @@ cmd_test() {
   [ -f "$HDIR/.env" ] || printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > "$HDIR/.env"
   echo "Connexion depuis le conteneur Hermes (c'est ce que verra l'agent)…"
   # Test Internet/DNS lancé SUR la machine (Windows) ; encodé pour éviter tout problème de guillemets
-  local enc; enc="$(printf '%s' '$c=New-Object Net.Sockets.TcpClient;try{$o=$c.ConnectAsync("1.1.1.1",443).Wait(4000)}catch{$o=$false};$c.Close();$d=$true;try{[Net.Dns]::GetHostAddresses("example.com")|Out-Null}catch{$d=$false};"internet="+$o+" dns="+$d' | iconv -t UTF-16LE | base64 -w0)"
+  local enc; enc="$(printf '%s' '$c=New-Object Net.Sockets.TcpClient;try{$o=$c.ConnectAsync("1.1.1.1",443).Wait(4000)}catch{$o=$false};$c.Close();try{$d=[Net.Dns]::GetHostAddressesAsync("example.com").Wait(5000)}catch{$d=$false};"internet="+$o+" dns="+$d' | iconv -t UTF-16LE | base64 -w0)"
   local probe="command -v ssh >/dev/null || { echo 'ERREUR : pas de client ssh dans l image Hermes'; exit 3; }
 S='ssh -n -F $INSIDE/config $name'
 echo -n 'utilisateur : '; \$S whoami || exit 4
