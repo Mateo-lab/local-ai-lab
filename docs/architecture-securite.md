@@ -230,6 +230,10 @@ flowchart LR
 | ② Commandes | Pare-feu Windows : blocage sortant vers toutes les adresses publiques (IPv4 et IPv6), pour **toute** la machine (le pare-feu Windows ne sait pas viser un seul compte local) ; le compte de l'agent ne peut pas le modifier |
 | ③ DNS | Blocage du port 53 en sortie |
 
+**Scripts en administrateur** : l'agent ne devient jamais administrateur (sinon il pourrait défaire ①, ② et ③). Il
+lance en administrateur, par une tâche planifiée qu'il peut déclencher mais pas modifier, **uniquement les scripts que
+tu as relus et approuvés**, avec des arguments filtrés ([hermes-ssh.md](hermes-ssh.md), « Scripts en administrateur »).
+
 Mise en place : `windows/outils/Isoler-machine-de-test.ps1` (en administrateur sur la machine de test). Contrôle depuis
 la machine IA, avec les yeux de Hermes : `lab remote test NOM`.
 

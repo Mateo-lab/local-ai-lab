@@ -41,11 +41,56 @@ Ajoute `--windows` : `lab remote add NOM hermes@ADRESSE --windows`. Au lieu des 
 - Le pare-feu Windows peut limiter l'accès SSH à l'adresse d'AiBeast : `Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -RemoteAddress ADRESSE_AIBEAST`.
 - Il faut qu'AiBeast **atteigne** le PC (même réseau, ou VPN dans les deux sens) : `ping -c 2 ADRESSE` depuis AiBeast.
 
+## Scripts en administrateur (machine Windows)
+
+L'agent n'est **jamais** administrateur de la machine de test : sinon il pourrait désactiver le pare-feu qui coupe
+Internet ou réactiver les tunnels SSH ([isolation-agents.md](isolation-agents.md) §5). Pour les scripts `.bat`/`.cmd`
+qui doivent tourner en administrateur, il passe par **des scripts que tu as approuvés** :
+
+```mermaid
+flowchart LR
+    H["Hermes (compte standard)"] -- "1. écrit test.bat dans son dossier work" --> W["C:\Users\hermes\work"]
+    U["Toi (administrateur)"] -- "2. relis puis Approuver-script-hermes.ps1" --> A["C:\ProgramData\hermes-admin\approuves<br/>lecture seule pour Hermes"]
+    H -- "3. lancer.ps1 test.bat COM3" --> D["demandes\ (seul dossier où il écrit)"]
+    H -- "déclenche (pas de modification possible)" --> T["Tâche planifiée Hermes-admin<br/>compte SYSTEM"]
+    T -- "exécute UNIQUEMENT un script approuvé,<br/>arguments filtrés" --> A
+    T -- "sortie + code" --> R["resultats\ (lecture seule pour Hermes)"]
+    R --> H
+```
+
+**Installation** (une fois, sur la machine de test, PowerShell en administrateur, fichiers copiés depuis
+`windows\outils\`) :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Installer-admin-hermes.ps1                 # compte : hermes
+powershell -ExecutionPolicy Bypass -File .\Installer-admin-hermes.ps1 -Desinstaller   # tout retirer
+```
+
+**Approuver un script** (à chaque nouveau script ou nouvelle version) : le script est affiché en entier, les lignes
+sensibles sont signalées (pare-feu, SSH, comptes, droits, tâches, services, registre, téléchargements, fichiers que
+l'agent peut modifier), puis il faut taper `oui`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Fichier C:\Users\hermes\work\projet\test.bat
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Lister      # scripts approuvés (empreinte)
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Retirer test.bat
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Journal     # dernières exécutions
+```
+
+Ce qu'il faut vérifier en relisant : le script ne doit appeler **que des fichiers placés à côté de lui** (`%~dp0`) ou des
+programmes du système, jamais un fichier du profil de l'agent (il pourrait le modifier après ton approbation), et ne
+doit pas toucher au pare-feu, à SSH, aux comptes ni à `C:\ProgramData\hermes-admin`. Ce qui est approuvé s'exécute
+avec les droits **SYSTEM**.
+
+**Côté agent** : règle 6 de son `AGENTS.md` (`hermes/dev-template/AGENTS.md`). Historique : `approbations.log` et
+`resultats\journal.log` dans `C:\ProgramData\hermes-admin`. Durée maximale d'une exécution : 1 heure.
+
 ## Bonnes pratiques
 
 - **Isolation** : Hermes n'a aucun accès réseau sauf ceux que tu autorises. Ajoute l'adresse de la machine à
   `LAB_AGENT_SSH_ALLOW` dans `lab.conf`, puis `lab isolation apply` : sinon la connexion SSH est bloquée
   ([isolation-agents.md](isolation-agents.md)).
+- **Jamais administrateur** : pour les scripts qui en ont besoin, voir « Scripts en administrateur » ci-dessus.
 - **Pas d'Internet par la machine de test** : lance `windows\outils\Isoler-machine-de-test.ps1` en administrateur sur
   la machine (Internet et DNS coupés pour toute la machine, tunnels SSH interdits au compte de Hermes), puis
   `lab remote test NOM` (section 5 d'[isolation-agents.md](isolation-agents.md)).
