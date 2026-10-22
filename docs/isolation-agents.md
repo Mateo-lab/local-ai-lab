@@ -181,8 +181,8 @@ existants (sans isolation) le temps de corriger.
   besoin d'Internet, désactiver le temps de l'installation (`lab isolation remove`).
 - IPv6 n'est pas filtré : les réseaux Docker du lab n'ont pas d'IPv6 activé. Si tu l'actives, ces règles ne suffisent
   plus.
-- Machine de test : le script `Isoler-machine-de-test.ps1` a été vérifié pour sa syntaxe (PowerShell 7) et sa
-  modification de `sshd_config` (sur une copie) ; ses règles de pare-feu n'ont pas encore été appliquées sur la vraie
-  machine au moment de cette rédaction.
+- **Machine de test : vérifié le 22 octobre 2026** sur la machine Windows de référence, avec `lab remote test` :
+  tunnel SSH refusé, Internet et DNS bloqués depuis la machine, connexion SSH de l'agent toujours possible. Avant le
+  script, le même test montrait `internet=True dns=True`.
 - Les règles visent le pare-feu iptables de Docker (cas d'Ubuntu par défaut) ; avec le pare-feu nftables natif de
   Docker, elles ne s'appliqueraient pas.
