@@ -45,6 +45,8 @@ Plus besoin de donner `--model` : `lab bench`, `lab dev start` et `lab dev ctx64
 
 | Fichier | Rôle |
 |---|---|
+| `Installer-config-SSH.bat` | Installe ou met à jour le raccourci `aibeast` dans `%USERPROFILE%\.ssh\config` à partir de `windows\ssh_config_aibeast.txt` (généré par `lab client`) ; sauvegarde l'ancienne configuration, ne touche pas aux autres blocs |
+| `Isoler-machine-de-test.ps1` | À lancer **en administrateur sur la machine de test** des agents (pas sur ton PC) : coupe Internet et le DNS pour cette machine, interdit les tunnels SSH au compte de Hermes ; `-Annuler` pour revenir (voir `docs/isolation-agents.md`) |
 | `recuperer-work-hermes.bat` | À lancer sur la machine de test Windows (`lab remote add … --windows`) avec ton compte : copie `C:\Users\hermes\work` vers `Documents\hermes-work` (robocopy, ne supprime rien) |
 | `Deployer-sur-AiBeast.ps1` | Livre `ai-lab.tar.gz` (produite sur AiBeast par `scripts/release.sh`). Refuse si le dépôt git d'AiBeast a des modifications non commitées, affiche `git status` après extraction. Sauvegarde de sécurité `~/avant-*.tgz` (≈ 1 Mo : sans `bench/.venv` ni `bench/results`, que la livraison ne touche jamais) |
 

@@ -339,6 +339,9 @@ docker exec ollama ollama list        # nom exact du modèle
   après l'autre sur la 3090 : ça marche, mais sans gain de vitesse. Monter ce réglage multiplie la mémoire de contexte
   et peut faire déborder la VRAM.
 - Le conteneur est jetable (`--rm`) : seul ce qui est dans `hermes/data/` est conservé.
+- **Fermer le terminal arrête la session** (conteneur `hermes-session-…` supprimé), même si la connexion SSH tombe.
+  Pour qu'une session survive à une coupure, lance-la dans `tmux`. `lab doctor` signale une session en marche depuis
+  plus de 12 h.
 
 ## Langfuse (suivi des agents) — optionnel
 

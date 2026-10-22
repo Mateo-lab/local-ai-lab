@@ -46,6 +46,9 @@ Ajoute `--windows` : `lab remote add NOM hermes@ADRESSE --windows`. Au lieu des 
 - **Isolation** : Hermes n'a aucun accès réseau sauf ceux que tu autorises. Ajoute l'adresse de la machine à
   `LAB_AGENT_SSH_ALLOW` dans `lab.conf`, puis `lab isolation apply` : sinon la connexion SSH est bloquée
   ([isolation-agents.md](isolation-agents.md)).
+- **Pas d'Internet par la machine de test** : lance `windows\outils\Isoler-machine-de-test.ps1` en administrateur sur
+  la machine (Internet et DNS coupés pour toute la machine, tunnels SSH interdits au compte de Hermes), puis
+  `lab remote test NOM` (section 5 d'[isolation-agents.md](isolation-agents.md)).
 
 - **Prends un instantané de la VM** avant chaque séance : l'agent peut casser la machine, par erreur ou parce qu'un texte lu l'y a poussé.
 - **Utilise une machine sans secret** : pas de jetons, pas de clés d'autres machines, pas de partage réseau monté, et si possible isolée de ton réseau sensible. Hermes, lui, ne peut atteindre que ce que la machine atteint.

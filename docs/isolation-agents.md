@@ -48,7 +48,7 @@ Le service systemd `ai-lab-isolation` réapplique les règles à chaque démarra
    LAB_AGENT_SSH_ALLOW="192.168.1.60"            # plusieurs : "192.168.1.60 192.168.1.61:2222"
    ```
 2. Réseaux internes : sur une **nouvelle** installation, rien à faire (`./3-demarrer.sh` les crée ainsi). Sur une
-   installation **existante**, Docker ne modifie pas un réseau déjà créé : il faut le recréer (§6).
+   installation **existante**, Docker ne modifie pas un réseau déjà créé : il faut le recréer (§7).
 3. Pare-feu :
    ```bash
    lab isolation install     # service systemd + application immédiate (demande sudo)
@@ -70,7 +70,40 @@ Le test ouvre de vraies connexions depuis l'intérieur des conteneurs et compare
 Pour Hermes, le test lance un conteneur temporaire (`docker compose run --rm`) avec `python3` ; pour OpenClaw, il
 s'exécute dans la passerelle avec `node`. `lab isolation status` affiche les règles et le nombre de paquets bloqués.
 
-## 5. Conséquences à connaître
+## 5. La machine de test (lien SSH de Hermes)
+
+Le pare-feu d'AiBeast laisse Hermes ouvrir SSH vers les machines de `LAB_AGENT_SSH_ALLOW`. Par ce lien, Hermes
+pourrait encore joindre Internet de deux façons ; les deux sont fermées :
+
+| Chemin | Protection |
+|---|---|
+| **Tunnel SSH** (redirection de port `-L`, proxy SOCKS `-D`, `-W`) à travers la machine de test | Option `restrict` sur la clé de Hermes (posée par `lab remote add`) **et**, côté serveur SSH, pour son compte : `AllowTcpForwarding no`, `AllowStreamLocalForwarding no`, `PermitTunnel no`, `AllowAgentForwarding no`, `X11Forwarding no` |
+| **Commandes lancées sur la machine de test** (PowerShell, `curl`…) qui sortent par sa connexion | Internet coupé pour **toute** la machine par son pare-feu : règles de blocage sortant vers toutes les adresses publiques (IPv4 et IPv6) et du DNS (port 53, qui permettrait de faire sortir des données par des requêtes à la box). Le réseau local reste joignable |
+
+Pourquoi toute la machine ? Le pare-feu de Windows ne sait pas bloquer Internet pour un seul compte local
+(le filtrage par utilisateur ne vaut que pour du trafic authentifié par IPsec) : seule une règle pour toute la
+machine est fiable. Un compte sans droits d'administrateur, comme celui de Hermes, ne peut pas la modifier.
+
+**Mise en place**, sur la machine de test Windows, dans PowerShell **en administrateur**, avec le fichier
+`windows\outils\Isoler-machine-de-test.ps1` copié sur cette machine :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1            # compte de l'agent : hermes
+powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -Annuler   # rendre Internet à la machine
+```
+
+Le script sauvegarde la configuration du pare-feu et `sshd_config` (dans `C:\ProgramData\ssh`), pose les règles
+(groupe « local-ai-lab isolation »), ajoute les options SSH au bloc `Match User hermes` (vérifié par `sshd -t`,
+version précédente remise en cas d'erreur), puis vérifie qu'Internet et le DNS sont bloqués.
+
+**Vérification depuis AiBeast**, avec les yeux de Hermes : `lab remote test NOM`. Lignes attendues :
+`tunnel SSH refusé : bien`, `Internet depuis la machine : bloqué, bien`, `DNS depuis la machine : bloqué, bien`.
+
+**Conséquences** : plus d'Internet pour personne sur cette machine (mises à jour Windows comprises). Pour une mise à
+jour : `-Annuler`, la mise à jour, puis relancer le script. Si la machine de test n'est joignable que par un client VPN
+installé sur elle-même, ce client ne pourra plus se connecter : vérifier avant.
+
+## 6. Conséquences à connaître
 
 - **Hermes** : plus de recherche web, de téléchargement de paquets (`pip`, `npm`), d'outils navigateur, ni
   d'installation de plugin depuis Internet (par exemple `plugins install langfuse`). Pour une installation ponctuelle :
@@ -83,7 +116,7 @@ s'exécute dans la passerelle avec `node`. `lab isolation status` affiche les r�
 - **OpenClaw recréé** (mise à jour, `docker compose down`) : son réseau peut changer d'identifiant. `openclaw/install.sh`
   réapplique les règles ; sinon `lab isolation apply`. `lab isolation status` signale un réseau non couvert.
 
-## 6. Passer une installation existante en réseaux internes
+## 7. Passer une installation existante en réseaux internes
 
 Les réseaux `llm-net`, `hermes-net` et `obs-net` doivent être supprimés puis recréés. Les **données ne sont pas
 touchées** (elles sont dans les volumes, et ce que Hermes conserve est dans `hermes/data`) ; les services concernés
@@ -132,21 +165,24 @@ existants (sans isolation) le temps de corriger.
 
 **Jamais `docker compose down -v`** : `-v` supprimerait les volumes (modèles, conversations, workflows).
 
-## 7. Revenir en arrière
+## 8. Revenir en arrière
 
 - Pare-feu seul : `lab isolation uninstall`.
-- Réseaux : retirer les trois lignes `internal: true` d'`ai-stack/docker-compose.yml` et refaire §6.
+- Réseaux : retirer les trois lignes `internal: true` d'`ai-stack/docker-compose.yml` et refaire §7.
 
 ## Ce qui n'est pas vérifié
 
 - **Vérifié le 22 octobre 2026 sur la machine de référence** (Docker 29.9, iptables) : `lab isolation test` réussit
   pour OpenClaw et Hermes (Ollama joignable ; Internet par IP et par nom bloqué ; machine hôte bloquée ; machine de
-  test autorisée joignable en SSH). Le script du §6 est la version corrigée après le premier passage (sessions
+  test autorisée joignable en SSH). Le script du §7 est la version corrigée après le premier passage (sessions
   Hermes orphelines) : sa forme complète n'a pas été rejouée.
 - Le redémarrage de la machine (réapplication des règles par le service systemd) n'a pas encore été observé.
 - Le comportement de l'assistant d'installation d'OpenClaw (`setup.sh`) quand l'isolation est déjà active : s'il a
   besoin d'Internet, désactiver le temps de l'installation (`lab isolation remove`).
 - IPv6 n'est pas filtré : les réseaux Docker du lab n'ont pas d'IPv6 activé. Si tu l'actives, ces règles ne suffisent
   plus.
+- Machine de test : le script `Isoler-machine-de-test.ps1` a été vérifié pour sa syntaxe (PowerShell 7) et sa
+  modification de `sshd_config` (sur une copie) ; ses règles de pare-feu n'ont pas encore été appliquées sur la vraie
+  machine au moment de cette rédaction.
 - Les règles visent le pare-feu iptables de Docker (cas d'Ubuntu par défaut) ; avec le pare-feu nftables natif de
   Docker, elles ne s'appliqueraient pas.

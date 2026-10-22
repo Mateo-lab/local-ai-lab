@@ -27,11 +27,23 @@ fi
 CTX="$(docker exec ollama printenv OLLAMA_CONTEXT_LENGTH 2>/dev/null || echo '?')"
 echo "→ Contexte servi par Ollama : ${CTX} tokens (Hermes demande au moins 64000)."
 
+# Chaque session a un nom, et elle est arrêtée quand ce script se termine, y compris si le terminal ou la connexion SSH
+# se ferme (signal HUP). Sans cela, `docker compose run` laisse le conteneur tourner indéfiniment (il attend une saisie
+# qui ne viendra plus) : six sessions orphelines, avec accès réseau, ont été trouvées ainsi le 22 octobre 2026.
+SESSION="hermes-session-$(date +%Y%m%d-%H%M%S)-$$"
+fin_session() { docker rm -f "$SESSION" >/dev/null 2>&1 || true; }
+trap fin_session EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # HERMES_WORKDIR (posé par `lab dev start`) : dossier de travail DANS le conteneur, ex. /opt/data/workspace/projects/NOM
-RUN=(docker compose run --rm)
+RUN=(docker compose run --rm --name "$SESSION")
 [ -n "${HERMES_WORKDIR:-}" ] && RUN+=(-w "$HERMES_WORKDIR")
+rc=0
 if [ "$#" -gt 0 ]; then
-  "${RUN[@]}" hermes "$@"
+  "${RUN[@]}" hermes "$@" || rc=$?
 else
-  "${RUN[@]}" hermes chat
+  "${RUN[@]}" hermes chat || rc=$?
 fi
+exit "$rc"

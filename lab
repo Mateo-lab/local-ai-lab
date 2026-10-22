@@ -375,6 +375,13 @@ cmd_doctor() {
   [ "$nint" = 3 ] && ok "réseaux des agents internes (llm-net, hermes-net, obs-net)" || ko "réseaux des agents : $nint/3 internes (agents avec accès Internet ; voir docs/isolation-agents.md)"
   if systemctl is-active --quiet ai-lab-isolation.service; then ok "pare-feu des agents actif (lab isolation status)"
   else wa "pare-feu des agents inactif : Hermes et OpenClaw peuvent sortir (lab isolation install)"; fi
+  # Sessions Hermes restées en marche (terminal fermé avant la correction de 5-hermes.sh, ou session oubliée)
+  local vieux=() cn st; while read -r cn st; do
+    [ -n "$cn" ] || continue
+    [ $(( $(date +%s) - $(date -d "$st" +%s 2>/dev/null || date +%s) )) -gt 43200 ] && vieux+=("${cn#/}")
+  done < <(docker ps -q --filter 'name=^hermes-(session|hermes-run)-' | xargs -r docker inspect -f '{{.Name}} {{.State.StartedAt}}' 2>/dev/null)
+  if [ ${#vieux[@]} -gt 0 ]; then wa "${#vieux[@]} session(s) Hermes en marche depuis plus de 12 h : ${vieux[*]} (arrêter : docker rm -f NOM)"
+  else ok "aucune session Hermes oubliée"; fi
   if command -v restic >/dev/null && [ -f "${BACKUP_PASSWORD_FILE:-$HOME/.config/aibeast-backup/password}" ]; then
     local l; if l="$("$ROOT/scripts/backup.sh" last 2>/dev/null)"; then ok "dernière sauvegarde : $l"; else wa "dernière sauvegarde : ${l:-introuvable} (lab backup run)"; fi
   else wa "sauvegardes non configurées (lab backup init)"; fi

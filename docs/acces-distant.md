@@ -103,6 +103,11 @@ La commande lit `lab.conf` (`LAB_HOST`, `LAB_USER`, `LAB_SSH_PORT`, `LAB_SSH_KEY
 de configuration, l'écrit aussi dans `windows/ssh_config_aibeast.txt` (fichier propre à ta machine, ignoré par git),
 et rappelle la marche à suivre. Exemple de bloc : `windows/ssh_config_aibeast.example`.
 
+**Sous Windows, le plus simple** : copie `windows/ssh_config_aibeast.txt` dans le dossier `windows\` du PC (par exemple
+`scp aibeast:Documents/ai-lab/windows/ssh_config_aibeast.txt windows\` si l'ancien raccourci marche encore), puis
+double-clic sur `windows\outils\Installer-config-SSH.bat` : il sauvegarde ta configuration, remplace l'ancien bloc
+`aibeast` (ou l'ajoute) sans toucher aux autres. Sinon, à la main :
+
 Sur ton PC, **ajoute ce bloc à la fin** du fichier de configuration SSH (le créer s'il n'existe pas, sans extension) :
 - Windows : `C:\Users\TON_NOM\.ssh\config` (dans PowerShell : `notepad $env:USERPROFILE\.ssh\config`) ;
 - macOS / Linux : `~/.ssh/config`.

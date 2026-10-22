@@ -54,8 +54,11 @@ icacls $f /grant '*S-1-5-32-544:F'
 icacls $f /grant '@USER@:R'
 icacls $f   # doit lister seulement SYSTEM, Administrateurs et @USER@
 # 4. Pour cet utilisateur seulement : clé uniquement, pas de mot de passe
-Add-Content 'C:\ProgramData\ssh\sshd_config' "`nMatch User @USER@`n    AuthorizedKeysFile C:/ProgramData/ssh/@USER@_authorized_keys`n    PasswordAuthentication no"
+# (et aucun tunnel : ni redirection de port, ni SOCKS, ni agent, ni X11)
+Add-Content 'C:\ProgramData\ssh\sshd_config' "`nMatch User @USER@`n    AuthorizedKeysFile C:/ProgramData/ssh/@USER@_authorized_keys`n    PasswordAuthentication no`n    AllowTcpForwarding no`n    AllowStreamLocalForwarding no`n    PermitTunnel no`n    AllowAgentForwarding no`n    X11Forwarding no"
 Restart-Service sshd
+# 5. Couper Internet sur cette machine (sinon l'agent pourrait y lancer des commandes qui sortent) :
+#    windows\outils\Isoler-machine-de-test.ps1, en administrateur (docs/isolation-agents.md)
 PS
 )"
     t="${t//@USER@/$user}"; t="${t//@LINE@/$line}"
@@ -141,12 +144,20 @@ cmd_test() {
   command -v docker >/dev/null || die "il manque docker"
   [ -f "$HDIR/.env" ] || printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > "$HDIR/.env"
   echo "Connexion depuis le conteneur Hermes (c'est ce que verra l'agent)…"
+  # Test Internet/DNS lancé SUR la machine (Windows) ; encodé pour éviter tout problème de guillemets
+  local enc; enc="$(printf '%s' '$c=New-Object Net.Sockets.TcpClient;try{$o=$c.ConnectAsync("1.1.1.1",443).Wait(4000)}catch{$o=$false};$c.Close();$d=$true;try{[Net.Dns]::GetHostAddresses("example.com")|Out-Null}catch{$d=$false};"internet="+$o+" dns="+$d' | iconv -t UTF-16LE | base64 -w0)"
   local probe="command -v ssh >/dev/null || { echo 'ERREUR : pas de client ssh dans l image Hermes'; exit 3; }
 S='ssh -n -F $INSIDE/config $name'
 echo -n 'utilisateur : '; \$S whoami || exit 4
 echo -n 'machine     : '; \$S hostname
 if \$S 'whoami /groups' 2>/dev/null | grep -q 'S-1-5-32-544'; then echo 'ATTENTION : cet utilisateur est membre des administrateurs Windows'; fi
-if \$S 'sudo -n true' >/dev/null 2>&1; then echo 'ATTENTION : sudo possible sans mot de passe'; else echo 'pas de sudo sans mot de passe : bien'; fi"
+if \$S 'sudo -n true' >/dev/null 2>&1; then echo 'ATTENTION : sudo possible sans mot de passe'; else echo 'pas de sudo sans mot de passe : bien'; fi
+if timeout 15 ssh -F $INSIDE/config -W 127.0.0.1:22 $name < /dev/null 2>&1 | grep -q 'SSH-2.0'; then echo 'ATTENTION : tunnel SSH possible (redirection de port) : voir docs/isolation-agents.md'; else echo 'tunnel SSH refusé : bien'; fi
+if \$S ver 2>/dev/null | grep -qi windows; then
+  r=\$(\$S powershell -NoProfile -NonInteractive -EncodedCommand $enc 2>/dev/null | tr -d '\\r')
+  case \"\$r\" in *internet=False*) echo 'Internet depuis la machine : bloqué, bien';; *) echo \"ATTENTION : la machine a accès à Internet (\$r) : windows/outils/Isoler-machine-de-test.ps1\";; esac
+  case \"\$r\" in *dns=False*) echo 'DNS depuis la machine : bloqué, bien';; *dns=True*) echo 'DNS depuis la machine : résolu (canal de sortie possible ; sauf -GarderDns voulu)';; esac
+fi"
   # ssh refuse de tourner si l'identifiant numérique n'a pas d'entrée dans /etc/passwd (« No user exists for uid 1000 »).
   # Ici on contourne le démarrage normal de l'image, qui crée cet utilisateur : on ajoute donc l'entrée dans une copie de /etc/passwd.
   local pw; pw="$(mktemp)"; trap 'rm -f "$pw"' RETURN
