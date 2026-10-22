@@ -120,9 +120,10 @@ Ce que signifie chaque ligne :
 | `HostName`, `Port`, `User` | Adresse, port SSH et compte Linux de la machine IA |
 | `IdentityFile` | La clé privée **du PC** à utiliser |
 | `ServerAliveInterval 30`, `ServerAliveCountMax 3` | Détecte une connexion morte en ≈ 90 s au lieu de rester figé |
+| `GatewayPorts no` | Les tunnels n'écoutent que sur ton PC (`127.0.0.1`) : une autre machine de ton réseau ne peut pas s'en servir |
 | `ExitOnForwardFailure yes` | Si un port local est déjà pris, la connexion échoue avec un message clair au lieu d'ouvrir des tunnels à moitié |
-| `LocalForward 3000 127.0.0.1:3000` | Tunnel : le port 3000 **du PC** mène au port 3000 **de la machine IA** |
-| `LocalForward 13389 127.0.0.1:3389` | Tunnel du bureau à distance : port 13389 du PC → 3389 de la machine IA (voir §8) |
+| `LocalForward 127.0.0.1:3000 127.0.0.1:3000` | Tunnel : le port 3000 **du PC** (sur `127.0.0.1` seulement) mène au port 3000 **de la machine IA** |
+| `LocalForward 127.0.0.1:13389 127.0.0.1:3389` | Tunnel du bureau à distance : port 13389 du PC → 3389 de la machine IA (voir §8) |
 
 Test : `ssh aibeast` doit ouvrir un terminal sur la machine IA, sans mot de passe du compte.
 
@@ -135,6 +136,13 @@ aussi une clé sur un **second appareil** (§7). Puis, sur la machine IA :
 sudo tee /etc/ssh/sshd_config.d/10-durcissement.conf >/dev/null <<'EOF'
 PasswordAuthentication no
 PermitRootLogin no
+# Tes tunnels (LocalForward = ssh -L) restent permis ; les redirections inverses (ssh -R), les tunnels VPN,
+# l'agent et X11 ne servent pas ici : interdits. GatewayPorts no (défaut) : rien ne s'ouvre au réseau d'AiBeast.
+AllowTcpForwarding local
+GatewayPorts no
+PermitTunnel no
+AllowAgentForwarding no
+X11Forwarding no
 EOF
 sudo sshd -t && sudo systemctl reload ssh      # `sshd -t` vérifie la syntaxe avant de recharger
 ```
@@ -225,7 +233,7 @@ sudo grdctl --system status                     # vérifier
 ```
 
 **N'ouvre pas le port 3389 dans le pare-feu** : le bureau à distance passe par le tunnel SSH (ligne
-`LocalForward 13389 127.0.0.1:3389` de la configuration générée par `lab client`).
+`LocalForward 127.0.0.1:13389 127.0.0.1:3389` de la configuration générée par `lab client`).
 
 ### Se connecter depuis le PC
 

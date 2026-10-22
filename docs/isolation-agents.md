@@ -77,7 +77,7 @@ pourrait encore joindre Internet de deux façons ; les deux sont fermées :
 
 | Chemin | Protection |
 |---|---|
-| **Tunnel SSH** (redirection de port `-L`, proxy SOCKS `-D`, `-W`) à travers la machine de test | Option `restrict` sur la clé de Hermes (posée par `lab remote add`) **et**, côté serveur SSH, pour son compte : `AllowTcpForwarding no`, `AllowStreamLocalForwarding no`, `PermitTunnel no`, `AllowAgentForwarding no`, `X11Forwarding no` |
+| **Tunnel SSH** (redirection de port `-L`, proxy SOCKS `-D`, `-W`) à travers la machine de test | Option `restrict` sur la clé de Hermes (posée par `lab remote add`) **et**, côté serveur SSH, pour son compte : `AllowTcpForwarding no`, `AllowStreamLocalForwarding no`, `PermitTunnel no`, `AllowAgentForwarding no`, `X11Forwarding no`, `GatewayPorts no` (une redirection inverse `-R` ne peut pas s'ouvrir au réseau de la machine ; déjà exclue par `AllowTcpForwarding no`, gardée en double protection) |
 | **Commandes lancées sur la machine de test** (PowerShell, `curl`…) qui sortent par sa connexion | Internet coupé pour **toute** la machine par son pare-feu : règles de blocage sortant vers toutes les adresses publiques (IPv4 et IPv6) et du DNS (port 53, qui permettrait de faire sortir des données par des requêtes à la box). Le réseau local reste joignable |
 
 Pourquoi toute la machine ? Le pare-feu de Windows ne sait pas bloquer Internet pour un seul compte local

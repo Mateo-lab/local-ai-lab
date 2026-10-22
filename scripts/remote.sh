@@ -55,7 +55,7 @@ icacls $f /grant '@USER@:R'
 icacls $f   # doit lister seulement SYSTEM, Administrateurs et @USER@
 # 4. Pour cet utilisateur seulement : clé uniquement, pas de mot de passe
 # (et aucun tunnel : ni redirection de port, ni SOCKS, ni agent, ni X11)
-Add-Content 'C:\ProgramData\ssh\sshd_config' "`nMatch User @USER@`n    AuthorizedKeysFile C:/ProgramData/ssh/@USER@_authorized_keys`n    PasswordAuthentication no`n    AllowTcpForwarding no`n    AllowStreamLocalForwarding no`n    PermitTunnel no`n    AllowAgentForwarding no`n    X11Forwarding no"
+Add-Content 'C:\ProgramData\ssh\sshd_config' "`nMatch User @USER@`n    AuthorizedKeysFile C:/ProgramData/ssh/@USER@_authorized_keys`n    PasswordAuthentication no`n    AllowTcpForwarding no`n    AllowStreamLocalForwarding no`n    PermitTunnel no`n    AllowAgentForwarding no`n    X11Forwarding no`n    GatewayPorts no"
 Restart-Service sshd
 # 5. Couper Internet sur cette machine (sinon l'agent pourrait y lancer des commandes qui sortent) :
 #    windows\outils\Isoler-machine-de-test.ps1, en administrateur (docs/isolation-agents.md)
