@@ -1,0 +1,87 @@
+{
+  "name": "Gmail – créer les libellés IA",
+  "nodes": [
+    {
+      "id": "0e75cc65-c5ae-417d-b598-92f67ca1f5ae",
+      "name": "Lancer à la main",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fe303a41-4588-4656-bbcf-15c4954cee67",
+      "name": "Les libellés",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{\"json\": {\"nom\": \"IA/À répondre\"}}, {\"json\": {\"nom\": \"IA/Info\"}}, {\"json\": {\"nom\": \"IA/Notification\"}}, {\"json\": {\"nom\": \"IA/Marketing\"}}, {\"json\": {\"nom\": \"IA/Réunion\"}}, {\"json\": {\"nom\": \"IA/Commentaire\"}}, {\"json\": {\"nom\": \"IA/Voyage\"}}, {\"json\": {\"nom\": \"IA/Fait\"}}, {\"json\": {\"nom\": \"IA/Supprimer\"}}];"
+      }
+    },
+    {
+      "id": "37b1358f-e62a-443e-ae48-fc5a589ee37f",
+      "name": "Créer le libellé",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "resource": "label",
+        "operation": "create",
+        "name": "={{ $json.nom }}",
+        "options": {
+          "labelListVisibility": "labelShow",
+          "messageListVisibility": "show"
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Lancer à la main": {
+      "main": [
+        [
+          {
+            "node": "Les libellés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Les libellés": {
+      "main": [
+        [
+          {
+            "node": "Créer le libellé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

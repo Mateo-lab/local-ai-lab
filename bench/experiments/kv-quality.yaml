@@ -1,0 +1,10 @@
+# Qualité vs cache KV : 12 calculs (arithmétique) par mesure. Détecte une dégradation due à la quantification
+name: kv-quality
+repetitions: 10
+warmup: 1
+cooldown: {target_c: 65, max_wait_s: 300}
+request: {num_ctx: 8192, gen_tokens: 64, think: false}
+workload: arith
+baseline: {kv_cache_type: f16}
+factors:
+  kv_cache_type: [f16, q8_0, q4_0]

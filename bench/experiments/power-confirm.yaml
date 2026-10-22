@@ -1,0 +1,11 @@
+# Confirmation rapide et précise : 350 / 300 / 250 W avec 15 répétitions (~10 min), à lancer GPU au repos
+name: power-confirm
+repetitions: 15
+warmup: 2
+idle_s: 30
+cooldown: {target_c: 55, max_wait_s: 600}
+request: {num_ctx: 8192, ctx_depth: 2048, gen_tokens: 256}
+workload: mixed
+baseline: {power_limit_w: 350}
+factors:
+  power_limit_w: [350, 300, 250]

@@ -1,0 +1,35 @@
+# Secrets et clés
+.env
+**/.env
+!*.env.example
+!**/.env.example
+client_secret*
+**/client_secret*
+*.pem
+*.key
+id_*
+password*
+
+# État local de la machine
+.lab/
+*.tgz
+*.tar.gz
+ai-lab.avant-*
+
+# Données et dépôts imbriqués
+hermes/data/
+comfyui/data/
+langfuse/app/
+openclaw/.env
+
+# Benchmarks : environnement Python et résultats propres à une machine
+bench/.venv/
+bench/results/
+__pycache__/
+*.pyc
+node_modules/
+lab.conf
+
+# Fichiers générés propres à une installation
+windows/ssh_config_aibeast.txt
+portail/config/logs/

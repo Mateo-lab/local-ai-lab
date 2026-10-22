@@ -1,0 +1,25 @@
+:root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5a6572; --card:#fff; --line:#d5dae1; --accent:#1f6feb; --accent-fg:#fff; --warn:#9a5b00; --ok:#1a7f37; --ko:#cf222e; --pre:#0f1722; --pre-fg:#dbe4ef; }
+@media (prefers-color-scheme: dark) { :root { --bg:#12161b; --fg:#e6ebf1; --muted:#98a4b3; --card:#1a2028; --line:#2c3541; --accent:#4c8dff; --accent-fg:#06101f; --warn:#e3b341; --ok:#3fb950; --ko:#ff7b72; --pre:#0b0f14; --pre-fg:#dbe4ef; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+header, main { max-width: 56rem; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 20px; }
+h1 { margin:0 0 4px; font-size:1.5rem; }
+h2 { font-size:1.05rem; margin:24px 0 8px; }
+#statut { margin:0; color:var(--muted); }
+.boutons { display:grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap:10px; }
+button { font:inherit; text-align:left; padding:12px 14px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; display:flex; flex-direction:column; gap:2px; min-height:44px; }
+button small { color:var(--muted); font-size:.85rem; }
+button:hover:not(:disabled) { border-color:var(--accent); }
+button:focus-visible, pre:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+button:disabled { opacity:.55; cursor:not-allowed; }
+.liste { display:flex; flex-direction:column; gap:8px; }
+.ligne { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--card); }
+.ligne .nom { flex:1 1 14rem; word-break:break-word; }
+.ligne button { flex-direction:row; padding:8px 12px; min-height:40px; }
+.ligne button.danger { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+.note { color:var(--muted); font-size:.9rem; }
+pre { background:var(--pre); color:var(--pre-fg); padding:14px; border-radius:10px; overflow:auto; max-height:28rem; white-space:pre-wrap; word-break:break-word; font:.85rem/1.45 ui-monospace,Consolas,monospace; }
+#job { font-weight:400; color:var(--muted); font-size:.9rem; }
+.ok { color:var(--ok); } .ko { color:var(--ko); } .warn { color:var(--warn); }
+code { background:var(--card); border:1px solid var(--line); border-radius:4px; padding:0 4px; }

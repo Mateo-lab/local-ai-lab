@@ -1,0 +1,15 @@
+# Qualité vs cache KV, version fine : 150 calculs FACILES (2 chiffres x 1 chiffre + 2 chiffres), mêmes questions pour les 3 caches.
+# Pourquoi : kv-quality (12 calculs difficiles, 3 justes sur 12) ne pouvait pas montrer une perte. Ici le modèle doit réussir
+# presque tout ; une baisse de `q4_0` ou `q8_0` devient visible. Température 0 : les 2 répétitions donnent des réponses presque
+# identiques (un identifiant aléatoire en tête de prompt peut changer 1 ou 2 réponses) ; l'information utile est le taux
+# sur 150 questions. Attention : chaque question ne remplit que ≈ 65 tokens de cache KV, donc le test sollicite peu la quantification.
+name: kv-quality-easy
+repetitions: 2
+warmup: 1
+design: blocked
+cooldown: {target_c: 60, max_wait_s: 300}
+request: {num_ctx: 8192, gen_tokens: 16, think: false}
+workload: arith_easy
+baseline: {kv_cache_type: f16}
+factors:
+  kv_cache_type: [f16, q8_0, q4_0]

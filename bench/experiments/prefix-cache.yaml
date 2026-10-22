@@ -1,0 +1,10 @@
+# Cache de préfixe : gain de TTFT quand un long début de prompt est réutilisé (agents, RAG, system prompt)
+name: prefix-cache
+repetitions: 6
+warmup: 1
+cooldown: {target_c: 60, max_wait_s: 600}
+request: {num_ctx: 32768, gen_tokens: 32}
+workload: prefix_cache
+baseline: {ctx_depth: 1024}
+factors:
+  ctx_depth: [1024, 8192, 24000]

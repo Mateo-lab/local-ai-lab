@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Vérifications du projet : tests + contrôles de base. Code de sortie 0 = tout est bon.
+# Détecte Python, Node et shell ; échoue si RIEN n'a été testé (un projet sans test ne passe pas).
+set -uo pipefail
+cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.."
+ran=0; bad=0
+step() { echo "── $*"; }
+fail() { echo "ÉCHEC : $*" >&2; bad=1; }
+
+shopt -s nullglob
+py_files=(./*.py src/*.py tests/*.py)
+py_tests=(tests/test_*.py tests/*_test.py)
+
+# Python
+if [ ${#py_files[@]} -gt 0 ] || [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+  step "python : syntaxe"
+  python3 -m compileall -q . -x '(\.git|node_modules|\.venv)' || fail "syntaxe Python"
+  if [ ${#py_tests[@]} -gt 0 ]; then
+    if python3 -c 'import pytest' 2>/dev/null; then step "python : pytest"; python3 -m pytest -q || fail "pytest"
+    else
+      step "python : unittest (pytest absent : les tests doivent être des classes unittest.TestCase)"
+      python3 -m unittest discover -s tests -p 'test_*.py' -q || fail "unittest (0 test trouvé ? sans pytest, écris des classes unittest.TestCase)"
+    fi
+    ran=1
+  fi
+  if command -v ruff >/dev/null 2>&1; then step "python : ruff"; ruff check --isolated --select E4,E7,E9,F . || fail "ruff"; fi
+fi
+
+# Node
+if [ -f package.json ]; then
+  if node -e 'process.exit(require("./package.json").scripts?.test ? 0 : 1)' 2>/dev/null; then
+    step "node : npm test"; npm test --silent || fail "npm test"; ran=1
+  fi
+  node -e 'process.exit(require("./package.json").scripts?.lint ? 0 : 1)' 2>/dev/null && { step "node : npm run lint"; npm run lint --silent || fail "lint"; }
+fi
+
+# Shell
+sh_files=(scripts/*.sh ./*.sh src/*.sh)
+for f in "${sh_files[@]}"; do bash -n "$f" || fail "syntaxe shell : $f"; done
+command -v shellcheck >/dev/null 2>&1 && [ ${#sh_files[@]} -gt 0 ] && { step "shellcheck"; shellcheck "${sh_files[@]}" || fail "shellcheck"; }
+for t in tests/*.sh; do step "shell : $t"; bash "$t" || fail "$t"; ran=1; done
+
+
+if [ $ran -eq 0 ]; then echo "ÉCHEC : aucun test exécuté (ajoute des tests dans tests/ : test_*.py, npm test ou tests/*.sh)." >&2; exit 1; fi
+[ $bad -eq 0 ] && echo "check : tout est bon" || echo "check : des échecs" >&2
+exit $bad

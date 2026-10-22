@@ -1,0 +1,20 @@
+# Réglages SearXNG pour Open WebUI.
+# On part des réglages par défaut et on ne change que le nécessaire.
+# La clé secrète vient de la variable SEARXNG_SECRET (fichier .env).
+use_default_settings: true
+
+general:
+  instance_name: "Labo IA"
+
+search:
+  # "json" est INDISPENSABLE : sans lui, Open WebUI reçoit une erreur 403.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  default_lang: "fr-BE"
+
+server:
+  # Pas de limiteur : le service n'est joignable que par Open WebUI (réseau interne).
+  limiter: false
+  image_proxy: false

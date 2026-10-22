@@ -1,0 +1,35 @@
+# Hermes Agent (Nous Research) : agent avec sous-agents, mémoire et skills.
+# Image officielle : nousresearch/hermes-agent (tags : stable, latest, main, X.Y.Z).
+#
+# Isolation : réseau hermes-net partagé avec Ollama uniquement (ni n8n, ni Qdrant, ni OpenClaw).
+# Aucun port publié, et PAS de socket Docker monté : l'agent travaille DANS ce conteneur,
+# qui est son bac à sable. Il ne voit que ./data (sa mémoire ET son dossier de travail ./data/workspace,
+# vu comme /opt/data/workspace dans le conteneur : dépose tes fichiers là).
+
+name: hermes
+
+services:
+  hermes:
+    image: nousresearch/hermes-agent:${HERMES_TAG:-stable}
+    container_name: hermes
+    # Utilisé à la demande (voir ../5-hermes.sh) ; pas de service permanent.
+    restart: "no"
+    environment:
+      HERMES_UID: ${HERMES_UID:-1000}
+      HERMES_GID: ${HERMES_GID:-1000}
+    volumes:
+      - ./data:/opt/data
+    # Pour les outils navigateur de l'agent (si utilisés)
+    shm_size: 1g
+    mem_limit: 8g
+    networks:
+      - hermes-net
+      - obs-net # pour envoyer les traces à Langfuse (voir ../langfuse), optionnel
+
+networks:
+  hermes-net:
+    external: true
+    name: hermes-net
+  obs-net:
+    external: true
+    name: obs-net

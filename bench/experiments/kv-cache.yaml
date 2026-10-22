@@ -1,0 +1,12 @@
+# Cache KV (f16 / q8_0 / q4_0) × flash attention : VRAM, vitesse et qualité (retrouver une info dans un long contexte)
+name: kv-cache
+repetitions: 6
+warmup: 1
+cooldown: {target_c: 60, max_wait_s: 600}
+request: {num_ctx: 32768, ctx_depth: 24000, gen_tokens: 64, needle_depth: 0.5}
+workload: needle
+baseline: {kv_cache_type: f16, flash_attention: 1}
+factors:
+  kv_cache_type: [f16, q8_0, q4_0]
+  flash_attention: [1]
+  needle_depth: [0.1, 0.5, 0.9]

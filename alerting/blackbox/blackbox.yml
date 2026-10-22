@@ -1,0 +1,10 @@
+# Module "http_up" : le service répond en HTTP (un 401/403 compte : il est vivant, il demande juste un identifiant).
+modules:
+  http_up:
+    prober: http
+    timeout: 8s
+    http:
+      method: GET
+      follow_redirects: true
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200, 204, 301, 302, 303, 307, 308, 401, 403]

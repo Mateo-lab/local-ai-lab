@@ -1,0 +1,9 @@
+# Test rapide (~5 min) : vérifie que tout fonctionne, ne conclut rien
+name: quick-smoke
+repetitions: 3
+warmup: 1
+cooldown: {target_c: 75, max_wait_s: 60}
+idle_s: 10
+request: {num_ctx: 8192, ctx_depth: 1024, gen_tokens: 128}
+factors:
+  power_limit_w: [300, 200]

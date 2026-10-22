@@ -1,0 +1,14 @@
+# Copié dans hermes/data/config.yaml par ../5-hermes.sh (le modèle est remplacé).
+# Hermes exige au moins 64 000 tokens de contexte : Ollama doit les servir
+# (OLLAMA_CONTEXT_LENGTH=65536 dans ai-stack/.env), vérifie avec `docker exec ollama ollama ps`.
+model:
+  default: __MODELE__
+  provider: custom
+  base_url: http://ollama:11434/v1
+  context_length: 64000
+# Sous-agents un par un : Ollama ne traite qu'UNE requête à la fois (mesuré le 2026-10-19), des sous-agents en
+# parallèle feraient la queue et un sous-agent sans progrès pendant 450 s est abandonné par Hermes.
+delegation:
+  max_concurrent_children: 1
+  max_spawn_depth: 1
+  max_iterations: 60

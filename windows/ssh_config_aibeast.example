@@ -1,0 +1,30 @@
+# EXEMPLE : ne pas copier tel quel. Sur la machine IA, « lab client » génère ce bloc avec TES valeurs (lab.conf).
+# À AJOUTER à la fin de ton fichier de configuration SSH :
+#   Windows : %USERPROFILE%\.ssh\config      macOS / Linux : ~/.ssh/config
+# Le créer s'il n'existe pas. Puis : ssh aibeast
+Host aibeast
+  HostName ADRESSE_DE_LA_MACHINE_IA
+  Port 22
+  User utilisateur
+  IdentityFile ~/.ssh/id_ed25519
+  ServerAliveInterval 30
+  ServerAliveCountMax 3
+  ExitOnForwardFailure yes
+  # Portail (page d'accueil) et panneau de boutons
+  LocalForward 3010 127.0.0.1:3010
+  LocalForward 3011 127.0.0.1:3011
+  # Interfaces : Open WebUI, n8n, Qdrant, ComfyUI
+  LocalForward 3000 127.0.0.1:3000
+  LocalForward 5678 127.0.0.1:5678
+  LocalForward 6333 127.0.0.1:6333
+  LocalForward 8188 127.0.0.1:8188
+  # Observabilité : Grafana, Prometheus, Langfuse
+  LocalForward 3001 127.0.0.1:3001
+  LocalForward 9090 127.0.0.1:9090
+  LocalForward 3002 127.0.0.1:3002
+  # Notifications (ntfy), Alertmanager, OpenClaw
+  LocalForward 2586 127.0.0.1:2586
+  LocalForward 9093 127.0.0.1:9093
+  LocalForward 18789 127.0.0.1:18789
+  # Bureau à distance (RDP) : sur ton PC, connecte-toi à 127.0.0.1:13389
+  LocalForward 13389 127.0.0.1:3389

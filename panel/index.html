@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panneau AiBeast</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>Panneau AiBeast</h1>
+  <p id="statut" role="status">Chargement…</p>
+</header>
+<main>
+  <section aria-labelledby="t-modes">
+    <h2 id="t-modes">Modes</h2>
+    <div class="boutons">
+      <button data-action="mode-images">Mode images<small>décharge le modèle, démarre ComfyUI</small></button>
+      <button data-action="mode-normal">Mode normal<small>arrête ComfyUI, rétablit tout</small></button>
+      <button data-action="mode-agents">Mode agents<small>libère la VRAM pour Hermes</small></button>
+    </div>
+  </section>
+  <section aria-labelledby="t-controle">
+    <h2 id="t-controle">Contrôle</h2>
+    <div class="boutons">
+      <button data-action="etat">État<small>mode, VRAM, modèles chargés</small></button>
+      <button data-action="doctor">Santé<small>contrôle complet</small></button>
+    </div>
+  </section>
+  <section aria-labelledby="t-maint">
+    <h2 id="t-maint">Maintenance</h2>
+    <div class="boutons">
+      <button data-action="update">Mise à jour<small>sauvegarde puis images Docker</small></button>
+      <button data-action="backup">Sauvegarde<small>chiffrée, sur ce disque</small></button>
+    </div>
+  </section>
+  <section aria-labelledby="t-hermes">
+    <h2 id="t-hermes">Hermes : travail à relire</h2>
+    <div id="hermes" class="liste"><p>Chargement…</p></div>
+    <p class="note">Pour ouvrir Hermes dans un projet, utilise le terminal (<code>lab dev start NOM</code>) ou <code>AiBeast-Hermes.bat</code>.</p>
+  </section>
+  <section aria-labelledby="t-sortie">
+    <h2 id="t-sortie">Résultat <span id="job"></span></h2>
+    <pre id="sortie" tabindex="0" aria-live="polite">Aucune action lancée.</pre>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

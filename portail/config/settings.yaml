@@ -1,0 +1,25 @@
+title: AiBeast
+description: Labo IA local
+language: fr
+theme: dark
+color: slate
+headerStyle: boxed
+statusStyle: dot
+hideVersion: true
+target: _blank
+layout:
+  Interfaces:
+    style: row
+    columns: 4
+  Moteur et outils:
+    style: row
+    columns: 4
+  Observabilité:
+    style: row
+    columns: 3
+  Agents (à la demande):
+    style: row
+    columns: 2
+  Machine:
+    style: row
+    columns: 4

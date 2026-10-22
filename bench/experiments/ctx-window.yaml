@@ -1,0 +1,17 @@
+# Taille de la fenêtre de contexte (num_ctx) × type de cache KV : VRAM, vitesse et limite avant débordement sur le CPU.
+# Question : combien coûte de RÉSERVER une grande fenêtre, même quand on ne la remplit pas ? (le prompt reste court : 1 024 tokens)
+# Complète `context-scaling` (qui fait varier la quantité de texte à l'intérieur d'une fenêtre fixe de 65 536).
+# À lire : `peak_mem_used_mb` (VRAM de toute la carte : rien d'autre ne doit l'utiliser) et `gpu_frac` (doit rester à 100 %).
+# Le point 98 304 sert à trouver la limite : il peut déborder sur le CPU (gpu_frac < 100 %) ou être ramené au maximum du modèle
+# (voir `ctx_effective` dans runs.csv). Un débordement est un RÉSULTAT, pas une erreur.
+name: ctx-window
+repetitions: 4
+warmup: 1
+design: blocked        # conditions groupées par taille de fenêtre : le modèle n'est rechargé qu'à chaque changement de num_ctx
+cooldown: {target_c: 60, max_wait_s: 600}
+request: {ctx_depth: 1024, gen_tokens: 128}
+workload: mixed
+baseline: {num_ctx: 8192, kv_cache_type: f16}
+factors:
+  num_ctx: [8192, 16384, 32768, 65536, 98304]
+  kv_cache_type: [f16, q8_0]

@@ -1,0 +1,11 @@
+# Parallélisme : OLLAMA_NUM_PARALLEL × nombre de clients simultanés (débit agrégé vs latence par client)
+name: concurrency
+repetitions: 5
+warmup: 1
+cooldown: {target_c: 60, max_wait_s: 600}
+request: {num_ctx: 16384, ctx_depth: 1024, gen_tokens: 128}
+workload: concurrency
+baseline: {num_parallel: 1, clients: 1}
+factors:
+  num_parallel: [1, 2, 4]
+  clients: [1, 2, 4]

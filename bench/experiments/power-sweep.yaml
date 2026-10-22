@@ -1,0 +1,10 @@
+# Perte de performance selon la limite de puissance du GPU (tok/s, J/token, température, fréquence)
+name: power-sweep
+repetitions: 7
+warmup: 2
+cooldown: {target_c: 55, max_wait_s: 600}
+request: {num_ctx: 8192, ctx_depth: 2048, gen_tokens: 256}
+workload: mixed
+baseline: {power_limit_w: 350}
+factors:
+  power_limit_w: [350, 300, 250, 220, 200, 180, 150]

@@ -1,0 +1,42 @@
+# Portail : page d'accueil (Homepage) avec un voyant de santé par service et les mesures de la machine.
+# Interface : http://127.0.0.1:3010  (lié à 127.0.0.1 : visible uniquement depuis la machine, ou via tunnel SSH)
+#
+# Prérequis : ai-stack ET monitoring démarrés (ils créent les réseaux ci-dessous). `lab start` s'en charge.
+# Le portail n'a PAS accès au socket Docker (donc pas de droits root sur la machine) : l'état de chaque service
+# est testé par une requête HTTP (siteMonitor) sur les réseaux partagés.
+
+name: portail
+
+services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    environment:
+      # Obligatoire (Homepage refuse les autres noms d'hôte). Le port doit être celui utilisé dans le navigateur.
+      HOMEPAGE_ALLOWED_HOSTS: "127.0.0.1:3010,localhost:3010"
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: Europe/Brussels
+    volumes:
+      - ./config:/app/config
+    ports:
+      - "127.0.0.1:3010:3000"
+    networks:
+      - ai-net    # Open WebUI, n8n, Qdrant, Ollama, SearXNG, Kokoro, Tika, ComfyUI
+      - mon-net   # Prometheus, Grafana
+      - obs-net   # Langfuse
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  ai-net:
+    external: true
+    name: ai-stack_ai-net
+  mon-net:
+    external: true
+    name: mon-net
+  obs-net:
+    external: true
+    name: obs-net

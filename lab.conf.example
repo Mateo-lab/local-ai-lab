@@ -1,0 +1,43 @@
+# lab.conf : réglages propres à CETTE installation.
+#
+#   cp lab.conf.example lab.conf     puis adapter les lignes utiles (enlever le « # » devant).
+#
+# Règles :
+# - Fichier lu par bash : uniquement des lignes NOM=valeur, sans espace autour du « = ».
+# - Jamais de mot de passe ni de clé ici : les secrets sont dans les fichiers .env (créés par ./2-secrets.sh).
+# - lab.conf n'est jamais versionné (voir .gitignore) : chaque machine a le sien.
+# - Sans lab.conf, les valeurs par défaut indiquées s'appliquent.
+#
+# Qui lit quoi : docs/configuration.md.
+
+# ─── 1. La machine IA elle-même ────────────────────────────────────────────────
+
+# Grand disque pour Docker, sauvegardes et modèles volumineux.
+# Défaut : /data. Si tu n'as qu'un seul disque, mets un dossier du disque système,
+# par exemple LAB_DATA_DIR=/srv/ai-lab (les vérifications « disque monté » le signaleront).
+#LAB_DATA_DIR=/data
+
+# Modèle de langage principal (nom Ollama exact, voir `docker exec ollama ollama list`).
+# Laisser commenté pour choisir avec `lab config set MODEL NOM` ou laisser `lab` prendre le plus gros installé.
+#LAB_MODEL=qwen3:32b
+
+# ─── 2. L'accès depuis ton ordinateur (client) ─────────────────────────────────
+# Utilisé par `lab client` pour générer la configuration SSH à copier sur ton PC.
+# Voir docs/acces-distant.md.
+
+# Adresse de la machine IA, telle que ton PC la joint : IP du réseau local, IP de ton VPN,
+# nom Tailscale (ex. aibeast.tailnet-xxxx.ts.net)… OBLIGATOIRE pour `lab client`.
+#LAB_HOST=192.168.1.50
+
+# Compte Linux sur la machine IA. Défaut : l'utilisateur qui lance `lab client`.
+#LAB_USER=
+
+# Port SSH de la machine IA. Défaut : 22.
+#LAB_SSH_PORT=22
+
+# Clé privée SSH SUR TON PC (chemin vu par le PC ; ~ = ton dossier personnel). Défaut : ~/.ssh/id_ed25519
+#LAB_SSH_KEY=~/.ssh/id_ed25519
+
+# Port local (sur ton PC) du tunnel vers le bureau à distance (RDP, port 3389 de la machine IA).
+# 13389 plutôt que 3389 : sous Windows, 3389 peut déjà être pris par le bureau à distance du PC lui-même.
+#LAB_RDP_LOCAL_PORT=13389

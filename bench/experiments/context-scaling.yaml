@@ -1,0 +1,10 @@
+# Coût du contexte : prefill et génération selon la quantité de texte déjà dans le contexte
+name: context-scaling
+repetitions: 5
+warmup: 1
+cooldown: {target_c: 60, max_wait_s: 600}
+request: {num_ctx: 65536, gen_tokens: 128}
+workload: mixed
+baseline: {ctx_depth: 512}
+factors:
+  ctx_depth: [512, 4096, 16384, 32768, 56000]

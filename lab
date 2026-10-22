@@ -1,0 +1,437 @@
+#!/usr/bin/env bash
+# lab : une seule commande pour piloter AiBeast. Voir docs/lab.md.
+#
+#   lab install                    crée la commande `lab` (lien dans ~/.local/bin)
+#   lab status                     conteneurs, GPU, disques
+#   lab doctor                     contrôle de santé complet (à lancer après un redémarrage)
+#   lab start [projet]             démarre tout, dans l'ordre (ou un seul : ai-stack monitoring portail alerting comfyui langfuse)
+#   lab stop [projet]              arrête (ne supprime rien)
+#   lab logs SERVICE [n]           journaux d'un conteneur (suivi en direct)
+#   lab urls                       adresses des interfaces
+#   lab models                     modèles installés et chargés
+#   lab task-model NOM             installe un petit modèle pour les titres Open WebUI
+#   lab bench [expérience] [...]   banc d'essai (sans argument : liste)
+#   lab gpu-limit status|install [W]|remove    limite de puissance GPU permanente
+#   lab bureau on|off|status [--boot]          bureau à distance (≈ 100 W)
+#   lab client [--print]           génère la config SSH (tunnels + bureau à distance) du PC client depuis lab.conf : docs/acces-distant.md
+#   lab backup init|run|list|check|restore|schedule    sauvegardes chiffrées
+#   lab update [--no-backup]       met à jour les images, mémorise les anciennes
+#   lab rollback                   revient aux images d'avant la dernière mise à jour
+#   lab mode agents|images|normal|status   agents : libère la VRAM pour les agents (arrête ComfyUI, Kokoro, Tika)
+#                                          images : décharge les modèles Ollama et lance ComfyUI ; normal : rétablit
+#   lab config [list|set MODEL NOM]   modèle principal mémorisé ; `lab tmux update|backup|doctor` : action longue qui survit à une coupure
+#   lab panel install|token|status|logs|uninstall   panneau web à boutons (127.0.0.1:3011) : docs/panneau-web.md
+#   lab remote add|show|link|list|test|remove   accès SSH de Hermes à une machine de test (clé dédiée) : docs/hermes-ssh.md
+#   lab dev new|list|start|review|check|merge|setup|ctx64   développement avec Hermes (code → test → review) : docs/developpement-agents.md
+set -uo pipefail
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+ROOT="$(dirname "$SELF")"
+STATE="$ROOT/.lab"
+
+# Configuration propre à la machine (facultative) : voir lab.conf.example
+[ -f "$ROOT/lab.conf" ] && . "$ROOT/lab.conf"
+LAB_DATA_DIR="${LAB_DATA_DIR:-/data}"   # gros volumes : Docker, sauvegardes, modèles
+export LAB_DATA_DIR
+PROJECTS=(ai-stack monitoring portail alerting)           # ordre de démarrage
+[ -f "$ROOT/langfuse/app/docker-compose.yml" ] && PROJECTS+=(langfuse)   # seulement si installé (./6-langfuse.sh)
+AGENT_PAUSE=(comfyui kokoro tika)    # arrêtés par `lab mode agents` (aucun n'est utile aux agents ; ComfyUI prend de la VRAM)
+EXPECTED=(ollama open-webui n8n qdrant postgres-n8n searxng kokoro tika
+          prometheus grafana node-exporter gpu-exporter
+          homepage ntfy alertmanager alertmanager-ntfy blackbox-exporter)
+
+c_ok=$'\e[32m✓\e[0m'; c_ko=$'\e[31m✗\e[0m'; c_wa=$'\e[33m!\e[0m'
+die()  { echo "lab : $*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null 2>&1 || die "il manque '$1'"; }
+
+pdir() { # pdir PROJET -> dossier du compose
+  case "$1" in
+    langfuse) echo "$ROOT/langfuse/app" ;;
+    ai-stack|monitoring|portail|alerting|comfyui|hermes) echo "$ROOT/$1" ;;
+    *) die "projet inconnu : $1 (ai-stack monitoring portail alerting comfyui langfuse)" ;;
+  esac
+}
+dc() { local p="$1"; shift; local d; d="$(pdir "$p")"; [ -d "$d" ] || die "dossier absent : $d"; (cd "$d" && docker compose "$@"); }
+
+env_set() { # env_set FICHIER CLE VALEUR : remplace ou ajoute CLE=VALEUR sans toucher au reste
+  python3 - "$1" "$2" "$3" <<'PY'
+import sys,re
+f,k,v=sys.argv[1:4]
+try: lines=open(f).read().splitlines()
+except FileNotFoundError: lines=[]
+out=[];done=False
+for l in lines:
+    if re.match(rf"^\s*{re.escape(k)}\s*=",l): out.append(f"{k}={v}"); done=True
+    else: out.append(l)
+if not done: out.append(f"{k}={v}")
+open(f,"w").write("\n".join(out)+"\n")
+PY
+}
+
+cmd_install() {
+  mkdir -p "$HOME/.local/bin"; ln -sf "$SELF" "$HOME/.local/bin/lab"
+  echo "Lien créé : ~/.local/bin/lab -> $SELF"
+  case ":$PATH:" in *":$HOME/.local/bin:"*) echo "Tape : lab doctor" ;;
+    *) echo "~/.local/bin n'est pas dans ton PATH : ajoute  export PATH=\"\$HOME/.local/bin:\$PATH\"  à ~/.bashrc, puis ouvre un nouveau terminal." ;; esac
+}
+
+current_mode() { cat "$STATE/mode" 2>/dev/null || echo normal; }
+apply_mode() { # après un `up -d`, remet à l'arrêt ce que le mode « agents » doit garder arrêté
+  [ "$(current_mode)" = agents ] || return 0
+  local c; for c in "${AGENT_PAUSE[@]}"; do docker stop "$c" >/dev/null 2>&1 && echo "  (mode agents : $c reste arrêté)"; done
+}
+
+cmd_start() {
+  need docker
+  [ -f "$ROOT/ai-stack/.env" ] || die "ai-stack/.env manque : lance ./2-secrets.sh"
+  local list=("${PROJECTS[@]}"); [ $# -gt 0 ] && list=("$@")
+  for p in "${list[@]}"; do
+    echo "→ $p"; dc "$p" up -d || echo "$c_ko échec pour $p"
+  done
+  apply_mode
+  [ $# -eq 0 ] && echo "Ensuite : lab doctor"
+  return 0
+}
+cmd_stop() {
+  need docker
+  local list=("${PROJECTS[@]}")
+  if [ $# -gt 0 ]; then list=("$@")
+  else local r=(); for ((i=${#list[@]}-1;i>=0;i--)); do r+=("${list[i]}"); done; list=("${r[@]}"); fi
+  for p in "${list[@]}"; do echo "→ arrêt de $p"; dc "$p" stop; done
+}
+
+cmd_status() {
+  need docker
+  docker ps -a --format '{{.Names}}\t{{.Status}}' | sort | column -t -s $'\t'
+  echo
+  if command -v nvidia-smi >/dev/null; then
+    nvidia-smi --query-gpu=name,pstate,power.draw,power.limit,temperature.gpu,utilization.gpu,memory.used,memory.total \
+      --format=csv,noheader | sed 's/^/GPU : /'
+  fi
+  df -h --output=target,size,used,pcent / "$LAB_DATA_DIR" 2>/dev/null | sed 's/^/  /'
+}
+
+vram() { nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null | awk -F', ' '{printf "%.1f Go utilisés / %.1f Go (libres : %.1f Go)", $1/1024, $2/1024, ($2-$1)/1024}'; }
+
+cmd_mode() {
+  need docker; local m="${1:-status}"; mkdir -p "$STATE"
+  case "$m" in
+    agents)
+      echo "VRAM avant : $(vram)"
+      local c; for c in "${AGENT_PAUSE[@]}"; do
+        if [ -n "$(docker ps -q -f "name=^${c}$")" ]; then docker stop "$c" >/dev/null && echo "$c_ok $c arrêté"; else echo "· $c déjà arrêté"; fi
+      done
+      echo agents > "$STATE/mode"; sleep 3
+      echo "VRAM après : $(vram)"
+      echo "Mode agents actif. Ollama, Open WebUI, n8n, Qdrant, SearXNG, la supervision et Langfuse restent en marche (Langfuse observe les agents)."
+      echo "Pour tout rétablir : lab mode normal" ;;
+    images)
+      [ -d "$ROOT/comfyui" ] || die "ComfyUI n'est pas installé (./4-comfyui.sh)"
+      echo "VRAM avant : $(vram)"
+      # 1. décharger les modèles Ollama de la VRAM (ils se rechargent seuls à la prochaine requête)
+      local n unloaded=0
+      while read -r n; do
+        [ -n "$n" ] || continue
+        if docker exec ollama ollama stop "$n" >/dev/null 2>&1; then echo "$c_ok modèle $n déchargé"; unloaded=1; else echo "$c_wa impossible de décharger $n"; fi
+      done < <(docker exec ollama ollama ps 2>/dev/null | awk 'NR>1{print $1}')
+      [ "$unloaded" = 1 ] || echo "· aucun modèle Ollama en VRAM"
+      # 2. démarrer ComfyUI (kokoro et tika n'utilisent pas la VRAM : ils restent actifs)
+      echo images > "$STATE/mode"
+      echo "→ comfyui"; dc comfyui up -d || die "échec du démarrage de ComfyUI"
+      echo -n "  attente de l'interface (jusqu'à 3 min) "
+      local t=0 up=0
+      while [ "$t" -lt 180 ]; do
+        if curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8188/ 2>/dev/null; then up=1; break; fi
+        echo -n "."; sleep 5; t=$((t+5))
+      done; echo
+      if [ "$up" = 1 ]; then echo "$c_ok ComfyUI répond : http://127.0.0.1:8188"
+      else echo "$c_wa ComfyUI ne répond pas encore (le tout premier démarrage peut durer 10 min) : lab logs comfyui"; fi
+      sleep 2; echo "VRAM après : $(vram)"
+      echo "Mode images actif. Attention : toute requête à un modèle (Open WebUI, agent) le recharge dans la VRAM et prend la place de ComfyUI."
+      echo "Pour revenir : lab mode normal (arrête ComfyUI)" ;;
+    normal)
+      local prev; prev="$(current_mode)"
+      echo normal > "$STATE/mode"
+      local c; for c in kokoro tika; do docker start "$c" >/dev/null 2>&1 && echo "$c_ok $c redémarré"; done
+      if [ "$prev" = images ]; then
+        docker stop comfyui >/dev/null 2>&1 && echo "$c_ok comfyui arrêté (VRAM libérée pour les modèles Ollama)"
+        sleep 2; echo "VRAM : $(vram)"
+      else
+        echo "· ComfyUI reste dans son état actuel (lab start comfyui / lab stop comfyui)."
+      fi
+      echo "Mode normal." ;;
+    status)
+      echo "Mode : $(current_mode)"
+      echo "VRAM : $(vram)"
+      docker exec ollama ollama ps 2>/dev/null
+      echo; echo "Conteneurs les plus gourmands en RAM :"
+      printf '%-8s %-22s %-22s %s\n' "RAM %" "Conteneur" "Mémoire" "CPU"
+      docker stats --no-stream --format '{{.MemPerc}}\t{{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}' | sort -rn | head -8 | awk -F'\t' '{printf "%-8s %-22s %-22s %s\n",$1,$2,$3,$4}' ;;
+    *) die "usage : lab mode agents|images|normal|status" ;;
+  esac
+}
+
+cmd_urls() {
+  cat <<'URLS'
+Portail         http://127.0.0.1:3010   (point d'entrée : tout part de là)
+Open WebUI      http://127.0.0.1:3000
+n8n             http://127.0.0.1:5678
+Qdrant          http://127.0.0.1:6333/dashboard
+ComfyUI         http://127.0.0.1:8188   (lab start comfyui)
+Grafana         http://127.0.0.1:3001
+Prometheus      http://127.0.0.1:9090
+Langfuse        http://127.0.0.1:3002   (lab start langfuse)
+Alertes (ntfy)  http://127.0.0.1:2586/aibeast-alertes
+Alertmanager    http://127.0.0.1:9093
+Depuis Windows : double-clic sur Ouvrir-AiBeast.bat (tunnels SSH), voir docs/acces-distant.md
+URLS
+}
+
+cmd_logs() { need docker; local s="${1:?usage : lab logs SERVICE [lignes]}"; docker logs -f --tail "${2:-100}" "$s"; }
+
+cmd_models() { need docker; echo "Installés :"; docker exec ollama ollama list; echo; echo "Chargés en VRAM :"; docker exec ollama ollama ps; }
+
+cmd_task_model() {
+  need docker; local m="${1:?usage : lab task-model NOM   (un modèle de 1 à 4 milliards de paramètres)}"
+  echo "→ téléchargement de $m"; docker exec ollama ollama pull "$m" || die "téléchargement impossible : nom de modèle exact ?"
+  env_set "$ROOT/ai-stack/.env" OLLAMA_MAX_LOADED_MODELS 2
+  env_set "$ROOT/ai-stack/.env" OWUI_TASK_MODEL "$m"
+  echo "→ redémarrage d'Ollama et d'Open WebUI (le modèle en mémoire sera rechargé au prochain message)"
+  dc ai-stack up -d ollama open-webui
+  cat <<MSG
+$c_ok ai-stack/.env mis à jour (OLLAMA_MAX_LOADED_MODELS=2, OWUI_TASK_MODEL=$m).
+À FAIRE dans Open WebUI (les réglages existants sont gardés en base) :
+  Admin → Paramètres → Interface → Modèle de tâches → $m
+Vérifier ensuite : docker exec ollama ollama ps   (deux lignes, tout en 100% GPU)
+MSG
+}
+
+cfg_get() { [ -f "$STATE/config" ] && awk -F= -v k="$1" '$1==k{sub(/^[^=]*=/,""); print; exit}' "$STATE/config"; }
+cfg_set() { mkdir -p "$STATE"; env_set "$STATE/config" "$1" "$2"; }
+
+# Modèle principal : LAB_MODEL, sinon `lab config set MODEL …`, sinon le PLUS GROS modèle installé (hors embeddings et hors
+# petit modèle de tâches d'Open WebUI). Le premier de `ollama list` est souvent ce petit modèle : ne pas s'y fier.
+main_model() {
+  [ -n "${LAB_MODEL:-}" ] && { echo "$LAB_MODEL"; return; }
+  local c; c="$(cfg_get MODEL)"; [ -n "$c" ] && { echo "$c"; return; }
+  local task; task="$(awk -F= '$1=="OWUI_TASK_MODEL"{print $2}' "$ROOT/ai-stack/.env" 2>/dev/null)"
+  docker exec ollama ollama list 2>/dev/null | awk -v task="${task:-__aucun__}" 'NR>1 && $1 !~ /embed|nomic/ && $1 != task {
+      u=$4; v=$3+0; if (u=="GB") v*=1024; else if (u=="KB") v/=1024; else if (u!="MB") next; print v, ($1 ~ /-64k$/ ? 1 : 0), $1 }' \
+    | sort -k1,1nr -k2,2nr | head -1 | awk '{print $3}'
+}
+default_model() { main_model; }
+
+cmd_config() { # lab config [list | get CLE | set CLE VALEUR | unset CLE]
+  local a="${1:-list}"; mkdir -p "$STATE"
+  case "$a" in
+    list) echo "Réglages mémorisés (.lab/config) :"; [ -s "$STATE/config" ] && sed 's/^/  /' "$STATE/config" || echo "  (aucun)"
+          echo "Modèle principal utilisé aujourd'hui : $(main_model)  (LAB_MODEL puis réglage MODEL puis plus gros modèle installé)" ;;
+    get)  cfg_get "${2:?usage : lab config get CLE}" ;;
+    set)  local k="${2:?usage : lab config set MODEL NOM_DU_MODELE}" v="${3:?valeur manquante}"
+          case "$k" in MODEL) docker exec ollama ollama list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$v" \
+                               || die "modèle « $v » absent d'Ollama (lab models)";; *) die "réglage inconnu : $k (MODEL)";; esac
+          cfg_set "$k" "$v"; echo "$c_ok $k=$v mémorisé. Utilisé par lab bench, lab dev start… (Open WebUI garde son propre modèle par défaut : à régler dans son interface)" ;;
+    unset) [ -f "$STATE/config" ] && sed -i "/^${2:?usage : lab config unset CLE}=/d" "$STATE/config"; echo "$c_ok ${2} retiré" ;;
+    *) die "usage : lab config list|get CLE|set MODEL NOM|unset CLE" ;;
+  esac
+}
+
+# Lance une action longue dans une session tmux nommée (survit à une coupure SSH ; se rattache si elle existe déjà).
+cmd_tmux() {
+  local a="${1:?usage : lab tmux update|backup|doctor}"; need tmux
+  case "$a" in update|backup|doctor) ;; *) die "action inconnue : $a (update backup doctor)";; esac
+  local arg="" ; [ "$a" = backup ] && arg=" run"
+  exec tmux new-session -A -s "lab-$a" "$SELF $a$arg; echo; read -r -p 'Terminé. Appuie sur Entrée pour fermer. ' _"
+}
+
+cmd_bench() {
+  if [ $# -eq 0 ]; then exec "$ROOT/7-bench.sh" list; fi
+  local name="$1"; shift
+  case "$name" in check|list|report) exec "$ROOT/7-bench.sh" "$name" "$@" ;; esac
+  local has=""; for a in "$@"; do [ "$a" = "--model" ] && has=set; done
+  if [ -z "$has" ]; then
+    local m; m="$(default_model)"; [ -n "$m" ] || die "aucun modèle trouvé : précise --model NOM ou exporte LAB_MODEL"
+    echo "Modèle : $m  (change avec --model NOM ou LAB_MODEL=NOM)"
+    set -- --model "$m" "$@"
+  fi
+  exec "$ROOT/7-bench.sh" run "$name" "$@"
+}
+
+# Panneau web (boutons) : service systemd utilisateur, écoute 127.0.0.1:3011 seulement.
+cmd_panel() {
+  local unit="$HOME/.config/systemd/user/aibeast-panel.service" tokf="$HOME/.config/aibeast-panel/token"
+  case "${1:-status}" in
+    install)
+      need systemctl; need python3
+      mkdir -p "$(dirname "$unit")"
+      cat > "$unit" <<UNIT
+[Unit]
+Description=Panneau AiBeast (boutons)
+
+[Service]
+ExecStart=/usr/bin/env python3 $ROOT/panel/panel.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+UNIT
+      systemctl --user daemon-reload && systemctl --user enable --now aibeast-panel.service
+      loginctl enable-linger "$USER" 2>/dev/null || echo "$c_wa linger non activé : le panneau ne démarrera qu'après ta première connexion (sudo loginctl enable-linger $USER)"
+      sleep 1; cmd_panel token ;;
+    token)
+      [ -f "$tokf" ] || die "pas de jeton : lab panel install"
+      echo "Ouvre cette adresse une fois dans le navigateur de ton PC (tunnel SSH actif) :"
+      echo "  http://127.0.0.1:3011/login?t=$(cat "$tokf")" ;;
+    status) systemctl --user is-active aibeast-panel.service 2>&1 || true ;;
+    logs) exec journalctl --user -u aibeast-panel.service -n "${2:-50}" --no-pager ;;
+    restart) systemctl --user restart aibeast-panel.service && echo "$c_ok redémarré" ;;
+    uninstall) systemctl --user disable --now aibeast-panel.service 2>/dev/null; rm -f "$unit"; systemctl --user daemon-reload; echo "$c_ok désinstallé (le jeton reste dans $tokf)" ;;
+    *) die "usage : lab panel install|token|status|logs|restart|uninstall" ;;
+  esac
+}
+
+cmd_dev() { exec "$ROOT/scripts/dev.sh" "$@"; }
+cmd_remote() { exec "$ROOT/scripts/remote.sh" "$@"; }
+cmd_gpu_limit() { [ $# -eq 0 ] && set -- status; exec "$ROOT/scripts/gpu-power-limit.sh" "$@"; }
+cmd_backup()    { exec "$ROOT/scripts/backup.sh" "$@"; }
+cmd_client()    { exec "$ROOT/scripts/client-config.sh" "$@"; }
+
+cmd_bureau() {
+  local act="${1:-status}"; shift || true; local boot=0; [ "${1:-}" = "--boot" ] && boot=1
+  local U=gnome-remote-desktop.service
+  case "$act" in
+    status)
+      echo "service système : $(systemctl is-active $U 2>/dev/null)  (au démarrage : $(systemctl is-enabled $U 2>/dev/null))"
+      echo "service utilisateur : $(systemctl --user is-active $U 2>/dev/null)"
+      command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu=pstate,power.draw --format=csv,noheader | sed 's/^/GPU : /' ;;
+    off)
+      if [ -z "${SSH_CONNECTION:-}" ]; then
+        echo "$c_wa Tu ne sembles pas être dans une session SSH. Si tu es DANS le bureau à distance, il va se couper."
+        read -r -p "Continuer ? [o/N] " r; [[ "$r" =~ ^[oOyY]$ ]] || exit 1
+      fi
+      sudo systemctl stop $U && echo "$c_ok bureau à distance arrêté (le GPU redescend en P8 en ≈ 20 s)"
+      if [ $boot = 1 ]; then sudo systemctl disable $U && echo "$c_ok ne démarrera plus au boot"; fi ;;
+    on)
+      sudo systemctl start $U && echo "$c_ok bureau à distance démarré (≈ +100 W au repos)"
+      if [ $boot = 1 ]; then sudo systemctl enable $U && echo "$c_ok démarrera au boot"; fi ;;
+    *) die "usage : lab bureau on|off|status [--boot]" ;;
+  esac
+}
+
+cmd_doctor() {
+  need docker; local bad=0 warn=0
+  ok() { echo "$c_ok $*"; }
+  ko() { echo "$c_ko $*"; bad=$((bad+1)); }
+  wa() { echo "$c_wa $*"; warn=$((warn+1)); }
+
+  systemctl is-active --quiet docker && ok "Docker actif" || ko "Docker inactif (sudo systemctl start docker)"
+  local root; root="$(docker info -f '{{.DockerRootDir}}' 2>/dev/null)"
+  case "$root" in "$LAB_DATA_DIR"/*) ok "Docker stocke ses données sur $root" ;; *) wa "Docker stocke sur $root (attendu : $LAB_DATA_DIR/docker, voir ./8-stockage.sh)" ;; esac
+  if mountpoint -q "$LAB_DATA_DIR"; then ok "$LAB_DATA_DIR monté"
+  elif [ -d "$LAB_DATA_DIR" ] && [ "${LAB_DATA_DIR}" != /data ]; then wa "$LAB_DATA_DIR n'est pas un disque séparé (normal sur une machine à un seul disque)"
+  else ko "$LAB_DATA_DIR NON monté (disque de données absent ? voir LAB_DATA_DIR dans lab.conf)"; fi
+
+  local missing=() running expected=() mode; running="$(docker ps --format '{{.Names}}')"; mode="$(current_mode)"
+  for c in "${EXPECTED[@]}"; do
+    if [ "$mode" = agents ] && [[ " ${AGENT_PAUSE[*]} " == *" $c "* ]]; then continue; fi
+    expected+=("$c")
+  done
+  for c in "${expected[@]}"; do grep -qx "$c" <<<"$running" || missing+=("$c"); done
+  if [ ${#missing[@]} -eq 0 ]; then ok "${#expected[@]} conteneurs attendus en marche (mode : $mode)"; else ko "arrêtés ou absents : ${missing[*]}"; fi
+  if [ -f "$ROOT/langfuse/app/docker-compose.yml" ]; then
+    if [ -n "$(docker ps -q --filter label=com.docker.compose.service=langfuse-web)" ]; then ok "Langfuse en marche"; else ko "Langfuse installé mais arrêté (lab start langfuse)"; fi
+  fi
+  local unh; unh="$(docker ps --filter health=unhealthy --format '{{.Names}}')"
+  if [ -z "$unh" ]; then ok "aucun conteneur « unhealthy »"; else ko "unhealthy : $unh"; fi
+
+  if command -v nvidia-smi >/dev/null; then
+    local pl ps pw tp
+    IFS=, read -r pl ps pw tp < <(nvidia-smi --query-gpu=power.limit,pstate,power.draw,temperature.gpu --format=csv,noheader,nounits)
+    ps="${ps// /}"; pw="${pw// /}"
+    ok "GPU : limite ${pl} W, $ps, $pw W, ${tp// /} °C"
+    if [ "$ps" = P2 ] && awk "BEGIN{exit !($pw>80)}"; then
+      # pas d'alerte si ComfyUI tourne : une génération d'image explique P2 et la consommation
+      [ -n "$(docker ps -q -f 'name=^comfyui$')" ] || docker exec ollama ollama ps 2>/dev/null | awk 'NR>1' | grep -q . || wa "GPU en P2 à $pw W sans modèle chargé : bureau à distance actif ? (lab bureau off)"
+    fi
+  else wa "nvidia-smi introuvable"; fi
+  if systemctl is-active --quiet gnome-remote-desktop.service; then wa "bureau à distance actif (≈ +100 W au repos)"; else ok "bureau à distance éteint"; fi
+
+  for m in / "$LAB_DATA_DIR"; do
+    local u; u="$(df --output=pcent "$m" 2>/dev/null | tail -1 | tr -dc 0-9)"
+    [ -z "$u" ] && continue
+    if [ "$u" -lt 85 ]; then ok "disque $m : $u %"; else wa "disque $m : $u % (> 85 %)"; fi
+  done
+
+  local op; op="$(docker exec ollama ollama ps 2>/dev/null | awk 'NR>1')"
+  if [ -n "$op" ]; then
+    if grep -q 'CPU' <<<"$op"; then wa "un modèle déborde sur le CPU (voir : docker exec ollama ollama ps)"; else ok "modèle(s) chargé(s) 100 % GPU"; fi
+  fi
+
+  if command -v restic >/dev/null && [ -f "${BACKUP_PASSWORD_FILE:-$HOME/.config/aibeast-backup/password}" ]; then
+    local l; if l="$("$ROOT/scripts/backup.sh" last 2>/dev/null)"; then ok "dernière sauvegarde : $l"; else wa "dernière sauvegarde : ${l:-introuvable} (lab backup run)"; fi
+  else wa "sauvegardes non configurées (lab backup init)"; fi
+
+  echo
+  if [ $bad -eq 0 ]; then echo "Résultat : tout est bon ($warn remarque(s))."; else echo "Résultat : $bad problème(s), $warn remarque(s)."; fi
+  [ $bad -eq 0 ]
+}
+
+snapshot_images() { # écrit « projet<TAB>référence<TAB>id » pour chaque conteneur en marche
+  local f="$1"; : > "$f"
+  for p in "${PROJECTS[@]}"; do
+    docker ps --filter "label=com.docker.compose.project=$(basename "$(pdir "$p")")" --format '{{.Names}}' | while read -r n; do
+      docker inspect -f '{{.Config.Image}}{{"\t"}}{{.Image}}' "$n" | awk -v p="$p" '{print p"\t"$0}'
+    done
+  done >> "$f"
+}
+
+cmd_update() {
+  need docker; local nobackup=0; [ "${1:-}" = "--no-backup" ] && nobackup=1
+  mkdir -p "$STATE"; local snap; snap="$STATE/images-$(date +%Y%m%d-%H%M%S).tsv"
+  if [ $nobackup = 0 ] && command -v restic >/dev/null && [ -f "${BACKUP_PASSWORD_FILE:-$HOME/.config/aibeast-backup/password}" ]; then
+    echo "→ sauvegarde avant mise à jour"; "$ROOT/scripts/backup.sh" run || die "sauvegarde en échec : mise à jour annulée (--no-backup pour passer outre)"
+  else echo "$c_wa pas de sauvegarde avant mise à jour (non configurée ou --no-backup)"; fi
+  snapshot_images "$snap"; ln -sf "$snap" "$STATE/latest.tsv"
+  echo "$c_ok images actuelles mémorisées : $snap ($(wc -l <"$snap") conteneurs)"
+  for p in "${PROJECTS[@]}"; do echo "→ pull $p"; dc "$p" pull --quiet || echo "$c_wa pull partiel pour $p"; done
+  for p in "${PROJECTS[@]}"; do echo "→ up $p"; dc "$p" up -d; done
+  apply_mode
+  echo "→ attente 30 s puis contrôle"; sleep 30
+  local changed=0 p ref old now
+  while IFS=$'\t' read -r p ref old; do
+    now="$(docker image inspect -f '{{.Id}}' "$ref" 2>/dev/null)"
+    if [ -n "$now" ] && [ "$now" != "$old" ]; then echo "  mis à jour : $ref"; changed=$((changed+1)); fi
+  done < "$snap"
+  echo "$changed image(s) changée(s)."
+  if ! cmd_doctor; then echo; echo "Problème détecté. Pour revenir en arrière : lab rollback"; exit 1; fi
+  echo "Garde les anciennes images jusqu'à être sûr : ne lance pas « docker image prune » avant."
+}
+
+cmd_rollback() {
+  need docker; local snap="$STATE/latest.tsv"; [ -f "$snap" ] || die "aucune mise à jour mémorisée ($STATE/latest.tsv)"
+  echo "Retour aux images de : $(readlink -f "$snap")"
+  local lost=0 p ref id
+  while IFS=$'\t' read -r p ref id; do
+    if docker image inspect "$id" >/dev/null 2>&1; then docker tag "$id" "$ref"; echo "  $ref ← ${id:7:12}"
+    else echo "  $c_ko image $ref ${id:7:12} supprimée : impossible de revenir"; lost=$((lost+1)); fi
+  done < "$snap"
+  for p in "${PROJECTS[@]}"; do dc "$p" up -d; done
+  apply_mode
+  [ $lost -gt 0 ] && echo "$c_wa $lost image(s) introuvable(s) (prune ?) : voir docs/lab.md"
+  echo "Les données (volumes) ne sont pas touchées par un retour d'image. Si une base a migré vers un format plus récent, restaure-la : docs/sauvegardes.md"
+  cmd_doctor
+}
+
+c="${1:-help}"; shift || true
+case "$c" in
+  install) cmd_install ;;    start) cmd_start "$@" ;;      stop) cmd_stop "$@" ;;
+  status) cmd_status ;;      doctor) cmd_doctor ;;         logs) cmd_logs "$@" ;;
+  urls) cmd_urls ;;          models) cmd_models ;;         task-model) cmd_task_model "$@" ;;
+  bench) cmd_bench "$@" ;;   gpu-limit) cmd_gpu_limit "$@" ;;  bureau) cmd_bureau "$@" ;;
+  backup) cmd_backup "$@" ;; update) cmd_update "$@" ;;    rollback) cmd_rollback ;;
+  mode) cmd_mode "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     config) cmd_config "$@" ;;
+  tmux) cmd_tmux "$@" ;;     main-model) main_model ;;  client) cmd_client "$@" ;;
+  help|-h|--help|"") sed -n '2,25p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  *) echo "lab : commande inconnue « $c »" >&2; sed -n '2,25p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
+esac

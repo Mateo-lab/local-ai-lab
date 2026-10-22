@@ -1,0 +1,94 @@
+# Alertes : surveille les services et la machine, et envoie une notification quand quelque chose ne va pas.
+#
+#   blackbox-exporter   teste en HTTP que chaque service répond (sondes lues par Prometheus)
+#   alertmanager        regroupe les alertes de Prometheus (règles : ../monitoring/prometheus/rules/)
+#   alertmanager-ntfy   pont : transforme les alertes en notifications ntfy
+#   ntfy                serveur de notifications (page web + application téléphone)
+#
+# Tous les ports sont liés à 127.0.0.1. Prérequis : ai-stack ET monitoring démarrés (réseaux partagés) : `lab start`.
+# Après le premier démarrage, relance Prometheus pour qu'il lise les règles : `lab start monitoring` (recrée si besoin)
+# ou `docker restart prometheus`.
+
+name: alerting
+
+services:
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    restart: unless-stopped
+    command: serve
+    environment:
+      TZ: Europe/Brussels
+      # Adresse publique vue par tes appareils. Localement : http://127.0.0.1:2586 (voir docs/alertes.md pour le téléphone)
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://127.0.0.1:2586}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
+      NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
+      # read-write = ouvert à qui joint le port ; reste sans danger tant que le port est lié à 127.0.0.1.
+      # Si tu l'exposes sur le réseau/VPN : mets deny-all (voir docs/alertes.md).
+      NTFY_AUTH_DEFAULT_ACCESS: ${NTFY_AUTH_DEFAULT_ACCESS:-read-write}
+    volumes:
+      - ntfy_data:/var/lib/ntfy
+    ports:
+      - "${NTFY_BIND:-127.0.0.1}:2586:80"
+    logging: &logs
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  alertmanager-ntfy:
+    # Pont communautaire (github.com/alexbakker/alertmanager-ntfy). Non vérifié ici : voir docs/alertes.md si le conteneur
+    # ne démarre pas (nom d'image, commande).
+    image: ghcr.io/alexbakker/alertmanager-ntfy:latest
+    container_name: alertmanager-ntfy
+    restart: unless-stopped
+    command: ["--configs", "/etc/alertmanager-ntfy/config.yml"]
+    volumes:
+      - ./alertmanager-ntfy/config.yml:/etc/alertmanager-ntfy/config.yml:ro
+    depends_on:
+      - ntfy
+    logging: *logs
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    depends_on:
+      - alertmanager-ntfy
+    networks:
+      - default
+      - mon-net   # Prometheus l'y joint
+    logging: *logs
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: blackbox-exporter
+    restart: unless-stopped
+    command:
+      - --config.file=/config/blackbox.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/config/blackbox.yml:ro
+    networks:
+      - mon-net   # Prometheus l'interroge ici
+      - ai-net    # pour joindre Open WebUI, n8n, Qdrant, Ollama, SearXNG
+    logging: *logs
+
+volumes:
+  ntfy_data:
+  alertmanager_data:
+
+networks:
+  default:
+  ai-net:
+    external: true
+    name: ai-stack_ai-net
+  mon-net:
+    external: true
+    name: mon-net
