@@ -60,6 +60,7 @@ OpenClaw est un agent (interface web + passerelle) qui parle à ton Ollama local
   ```
   Contrôle : `$G config get tools`, `$G config get agents.defaults.modelPolicy`, `$G sandbox explain`.
   Retour arrière : `cp ~/.openclaw/openclaw.json.avant-restrictions ~/.openclaw/openclaw.json && docker restart openclaw-openclaw-gateway-1`.
+  Constaté le 22 octobre 2026 : OpenClaw répond, et son sélecteur ne propose plus que les modèles Ollama.
 - **Bac à sable : `off`, volontairement.** Le bac à sable d'OpenClaw (`mode: all`) lance des conteneurs Docker : il faudrait donner à la passerelle l'accès au démon Docker, ce qui lui ouvrirait toute la machine. La passerelle tourne déjà dans son propre conteneur, sans accès réseau (isolation). Risque restant : une commande `exec` peut lire ou modifier ce que le conteneur voit, dont `~/.openclaw` (configuration, jeton de la passerelle, réglages ci-dessus).
 - **Aucun canal de messagerie** n'est configuré (volontaire) : tout ce qui arrive de l'extérieur peut donner des instructions à un agent.
 - Le message de test parti vers OpenAI (refusé) montre qu'un mauvais réglage du modèle peut envoyer ce que tu écris à un service extérieur : après toute modification, vérifier le modèle actif.
@@ -74,6 +75,5 @@ OpenClaw est un agent (interface web + passerelle) qui parle à ton Ollama local
 - **La qualité des réponses** d'OpenClaw avec ce modèle n'a pas été jugée ; seul le fonctionnement (`chat.send`, réponse en ≈ 11 s au premier message) a été constaté dans les journaux.
 - **`contextTokens`** : l'interprétation (plafond envoyé à Ollama) est une déduction ; elle est confortée par `ollama ps` (65536 après modification) mais pas par la documentation d'OpenClaw. La modification a été faite directement dans `openclaw.json` ; je ne sais pas si une mise à jour ou la redécouverte des modèles la remet à 32768. Si c'est le cas, passer par la commande `config` de la CLI (non explorée).
 - La **mémoire sémantique** est dégradée (`memory_index_chunks_vec not updated — semantic vector embeddings unavailable`) : aucun modèle d'embeddings n'est configuré. Non traité.
-- **Effet des restrictions dans l'interface** : le refus d'un modèle non-Ollama et l'absence des outils retirés n'ont pas encore été constatés dans l'interface ; seule la configuration effective (`config get`, `sandbox explain`) a été vérifiée.
 - Le correctif de `install.sh` (rattachement automatique à `llm-net`) a été écrit mais **pas exécuté** ; la syntaxe a été contrôlée (`bash -n`).
 - Le dossier `~/openclaw` et `~/.openclaw` contiennent des identifiants (jeton de la passerelle) : ils ne sont pas inclus dans les sauvegardes décrites par `docs/sauvegardes.md` (non vérifié).
