@@ -291,8 +291,9 @@ The `ahmia` / `torch` (Tor engines) and `missing config file: limiter.toml` mess
 ### Voice and documents (Kokoro, Tika)
 
 - **Read aloud**: service `kokoro` (CPU version, no VRAM). Admin → Audio → Text-to-Speech: engine OpenAI, URL
-  `http://kokoro:8880/v1`, key `not-needed` (any value), model `kokoro`, voice `af_bella`. This Kokoro version only has
-  **English voices** (`af_*`, `am_*`, `bf_*`, `bm_*`): other languages are read with an English accent.
+  `http://kokoro:8880/v1`, key `not-needed` (any value), model `kokoro`, voice `af_bella`. Kokoro mostly has
+  **English voices** (`af_*`, `am_*`, `bf_*`, `bm_*`), plus a few other languages (French: `ff_siwis`); see
+  [docs/open-webui.md](docs/open-webui.md) §4.
 - **Dictation**: microphone button, Open WebUI's local Whisper. In Admin → Audio → **Speech-to-Text**, the engine must
   stay the default (local Whisper): Kokoro only does synthesis, and setting it as STT gives a 404 error.
 - **Documents**: service `tika` (PDF/Office extraction for RAG). Admin → Settings → Documents: engine Tika, URL

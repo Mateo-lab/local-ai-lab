@@ -1,54 +1,54 @@
-# Installer le lab sur une nouvelle machine
+# Installing the lab on a new machine
 
-Ce guide part d'une machine Linux neuve et va jusqu'à l'accès depuis ton ordinateur habituel. Compte 1 à 2 heures,
-surtout pour les téléchargements (images Docker et modèles).
+This guide starts from a fresh Linux machine and goes all the way to access from your usual computer. Count 1 to 2
+hours, mostly for the downloads (Docker images and models).
 
-Vocabulaire utilisé partout :
+Vocabulary used everywhere:
 
-- **la machine IA** : le PC Linux avec la carte graphique NVIDIA, où tourne tout le lab. Les scripts et la
-  documentation l'appellent aussi **AiBeast** (nom de la machine d'origine du projet).
-- **ton PC** (ou **le client**) : l'ordinateur depuis lequel tu travailles (Windows, macOS ou Linux). Il ne fait
-  tourner aucun modèle : il se connecte à la machine IA par SSH.
+- **the AI machine**: the Linux PC with the NVIDIA graphics card, where the whole lab runs. The scripts and the
+  documentation also call it **AiBeast** (the name of the project's original machine).
+- **your PC** (or **the client**): the computer you work from (Windows, macOS or Linux). It runs no model: it connects
+  to the AI machine over SSH.
 
-## 1. Prérequis
+## 1. Prerequisites
 
-### Matériel
+### Hardware
 
-| Élément | Minimum raisonnable | Machine de référence du projet |
+| Item | Reasonable minimum | Project's reference machine |
 |---|---|---|
-| Carte graphique | NVIDIA avec 8 Go de VRAM ou plus | RTX 3090, 24 Go |
-| Mémoire vive | 32 Go | 64 Go |
-| Disque | 500 Go SSD (un seul disque suffit) | 480 Go système + 4 To données (`/data`) |
-| Réseau | Ethernet conseillé | Ethernet, accès depuis l'extérieur par VPN |
+| Graphics card | NVIDIA with 8 GB of VRAM or more | RTX 3090, 24 GB |
+| RAM | 32 GB | 64 GB |
+| Disk | 500 GB SSD (a single disk is enough) | 480 GB system + 4 TB data (`/data`) |
+| Network | Ethernet recommended | Ethernet, access from outside through a VPN |
 
-Seules les cartes **NVIDIA** sont prises en charge par ces scripts (pilote propriétaire + NVIDIA Container Toolkit).
+Only **NVIDIA** cards are supported by these scripts (proprietary driver + NVIDIA Container Toolkit).
 
-**Quelle taille de modèle pour ta carte ?** Ordre de grandeur, pour un modèle quantifié en 4 bits (format courant
-dans Ollama) : environ 0,6 Go de VRAM par milliard de paramètres, plus 1 à 4 Go pour le contexte. À vérifier
-ensuite avec `docker exec ollama ollama ps` : la colonne PROCESSOR doit afficher `100% GPU`.
+**Which model size for your card?** Order of magnitude, for a model quantised to 4 bits (a common format in Ollama):
+about 0.6 GB of VRAM per billion parameters, plus 1 to 4 GB for the context. Check it afterwards with
+`docker exec ollama ollama ps`: the PROCESSOR column must show `100% GPU`.
 
-| VRAM | Taille de modèle visée (4 bits) | Contexte de départ (`OLLAMA_CONTEXT_LENGTH`) |
+| VRAM | Target model size (4 bits) | Starting context (`OLLAMA_CONTEXT_LENGTH`) |
 |---|---|---|
-| 8 Go | 7 à 8 milliards de paramètres | 8192 |
-| 12 à 16 Go | 12 à 14 milliards | 16384 |
-| 24 Go | 27 à 32 milliards | 32768 (65536 possible avec cache KV `q8_0`, mesuré sur la 3090) |
+| 8 GB | 7 to 8 billion parameters | 8192 |
+| 12 to 16 GB | 12 to 14 billion | 16384 |
+| 24 GB | 27 to 32 billion | 32768 (65536 possible with a `q8_0` KV cache, measured on the 3090) |
 
-Ces chiffres sont indicatifs : seule la ligne 24 Go a été mesurée sur la machine de référence
-(`docs/performance.md`). Les agents Hermes exigent 64 000 tokens de contexte, ce qui demande en pratique 24 Go.
+These numbers are indicative: only the 24 GB line was measured on the reference machine (`docs/performance.md`). The
+Hermes agents require a 64,000-token context, which in practice needs 24 GB.
 
-### Logiciel
+### Software
 
-- **Ubuntu** (24.04 ou plus récent) ou Debian, ou un dérivé d'Ubuntu (Mint, Pop!_OS). La machine de référence est
-  sous Ubuntu 26.04. Le script `1-prerequis.sh` installe Docker et le NVIDIA Container Toolkit depuis les dépôts
-  officiels ; il ne gère pas Fedora, Arch, etc.
-- **Le pilote NVIDIA déjà installé et actif** : `nvidia-smi` doit afficher ta carte. Sur Ubuntu :
-  `sudo ubuntu-drivers install`, puis redémarrer.
-- **Un compte utilisateur normal** avec le droit `sudo`. Ne lance jamais les scripts du lab avec `sudo` devant.
-- **git** : `sudo apt install git`.
+- **Ubuntu** (24.04 or newer) or Debian, or an Ubuntu derivative (Mint, Pop!_OS). The reference machine runs Ubuntu
+  26.04. The `1-prerequis.sh` script installs Docker and the NVIDIA Container Toolkit from the official repositories; it
+  does not handle Fedora, Arch, etc.
+- **The NVIDIA driver already installed and active**: `nvidia-smi` must show your card. On Ubuntu:
+  `sudo ubuntu-drivers install`, then reboot.
+- **A normal user account** with `sudo` rights. Never run the lab's scripts with `sudo` in front.
+- **git**: `sudo apt install git`.
 
-## 2. Récupérer le projet
+## 2. Getting the project
 
-Sur la machine IA :
+On the AI machine:
 
 ```bash
 mkdir -p ~/Documents && cd ~/Documents
@@ -56,126 +56,128 @@ git clone https://github.com/Mateo-lab/local-ai-lab.git ai-lab
 cd ai-lab
 ```
 
-(Ou l'adresse de ta copie du dépôt, si tu en as fait une.) Le dossier peut être ailleurs ; la documentation suppose
-`~/Documents/ai-lab`.
+(Or the address of your copy of the repository, if you made one.) The folder can be elsewhere; the documentation
+assumes `~/Documents/ai-lab`.
 
-## 3. Régler l'installation : `lab.conf`
+## 3. Configuring the installation: `lab.conf`
 
 ```bash
 cp lab.conf.example lab.conf
 nano lab.conf
 ```
 
-C'est **le seul fichier à adapter**. Il ne contient aucun secret et n'est jamais versionné. Chaque ligne est commentée
-dans le fichier ; détail complet dans [configuration.md](configuration.md). Les réglages à regarder :
+This is **the only file to adapt**. It contains no secret and is never versioned. Every line is commented in the file;
+full details in [configuration.md](configuration.md). The settings to look at:
 
-| Réglage | Quand le changer |
+| Setting | When to change it |
 |---|---|
-| `LAB_DATA_DIR` | Tu n'as **pas** de second disque monté sur `/data` : mets un dossier existant du disque système, par exemple `/srv/ai-lab` (créé avec `sudo mkdir -p /srv/ai-lab && sudo chown "$USER": /srv/ai-lab`) |
-| `LAB_MODEL` | Pour fixer le modèle principal (sinon `lab` prend le plus gros modèle installé) |
-| `LAB_HOST` | **Obligatoire pour l'accès à distance** : l'adresse par laquelle ton PC joindra la machine IA (voir étape 8) |
-| `LAB_USER`, `LAB_SSH_PORT`, `LAB_SSH_KEY`, `LAB_RDP_LOCAL_PORT` | Seulement si tes valeurs diffèrent des défauts indiqués |
+| `LAB_DATA_DIR` | You do **not** have a second disk mounted on `/data`: set an existing folder on the system disk, for example `/srv/ai-lab` (created with `sudo mkdir -p /srv/ai-lab && sudo chown "$USER": /srv/ai-lab`) |
+| `LAB_MODEL` | To set the main model (otherwise `lab` takes the largest installed model) |
+| `LAB_HOST` | **Required for remote access**: the address your PC will use to reach the AI machine (see step 8) |
+| `LAB_USER`, `LAB_SSH_PORT`, `LAB_SSH_KEY`, `LAB_RDP_LOCAL_PORT` | Only if your values differ from the defaults shown |
 
-## 4. Installer Docker et le toolkit NVIDIA
+## 4. Installing Docker and the NVIDIA toolkit
 
 ```bash
 ./1-prerequis.sh
 sudo reboot
 ```
 
-Après le redémarrage : `docker run --rm --gpus all ubuntu nvidia-smi` doit afficher ta carte.
+After the reboot: `docker run --rm --gpus all ubuntu nvidia-smi` must show your card.
 
-## 5. Créer les secrets et démarrer le cœur du lab
+## 5. Creating the secrets and starting the core of the lab
 
 ```bash
 cd ~/Documents/ai-lab
-./2-secrets.sh                  # crée les .env avec des mots de passe aléatoires (n'écrase jamais rien)
-./3-demarrer.sh NOM_DU_MODELE   # démarre ai-stack et monitoring, et télécharge ce modèle
-./lab install                   # crée la commande « lab » (lien dans ~/.local/bin)
-lab start                       # démarre aussi le portail et les alertes
-lab doctor                      # contrôle de santé complet
+./2-secrets.sh                  # creates the .env files with random passwords (never overwrites anything)
+./3-demarrer.sh MODEL_NAME      # starts ai-stack and monitoring, and downloads this model
+./lab install                   # creates the "lab" command (link in ~/.local/bin)
+lab start                       # also starts the portal and the alerts
+lab doctor                      # full health check
 ```
 
-- `NOM_DU_MODELE` : un nom de la bibliothèque Ollama adapté à ta VRAM (tableau §1). Sans argument,
-  `3-demarrer.sh` utilise `LAB_MODEL` de `lab.conf`, sinon ne télécharge rien.
-- Ajuste ensuite le contexte dans `ai-stack/.env` (`OLLAMA_CONTEXT_LENGTH`, tableau §1), puis `lab start ai-stack`.
-- `lab doctor` doit finir sans ✗. Un `!` est une remarque (par exemple « bureau à distance actif »).
+- `MODEL_NAME`: a name from the Ollama library suited to your VRAM (table in §1). Without an argument, `3-demarrer.sh`
+  uses `LAB_MODEL` from `lab.conf`, otherwise downloads nothing.
+- Then adjust the context in `ai-stack/.env` (`OLLAMA_CONTEXT_LENGTH`, table in §1), then `lab start ai-stack`.
+- `lab doctor` must finish without ✗. A `!` is a remark (for example "remote desktop active").
 
-## 6. Second disque (facultatif)
+The numbered scripts keep their original names (`prerequis` = prerequisites, `secrets`, `demarrer` = start,
+`stockage` = storage).
 
-Si tu as un second disque **vide** pour les données :
+## 6. Second disk (optional)
+
+If you have an **empty** second disk for the data:
 
 ```bash
-./8-stockage.sh etat      # lister les disques : repère le bon nom (/dev/nvme1n1, /dev/sdb…)
-./8-stockage.sh disque /dev/NOM_DU_DISQUE    # EFFACE ce disque, le formate et le monte sur LAB_DATA_DIR
-./8-stockage.sh docker    # déplace les données de Docker sur ce disque
+./8-stockage.sh status    # list the disks: find the right name (/dev/nvme1n1, /dev/sdb…)
+./8-stockage.sh disk /dev/DISK_NAME    # ERASES this disk, formats it and mounts it on LAB_DATA_DIR
+./8-stockage.sh docker    # moves Docker's data to this disk
 ./3-demarrer.sh
 ```
 
-`disque` **efface tout le disque indiqué** : vérifie trois fois le nom. Sans second disque, saute cette étape et
-règle `LAB_DATA_DIR` (§3).
+`disk` **erases the whole disk given**: check the name three times. Without a second disk, skip this step and set
+`LAB_DATA_DIR` (§3).
 
-## 7. Modules facultatifs
+## 7. Optional modules
 
-À installer quand tu en as besoin, dans n'importe quel ordre :
+To install when you need them, in any order:
 
-| Module | Commande | Documentation |
+| Module | Command | Documentation |
 |---|---|---|
-| Génération d'images (ComfyUI) | `lab mode images` | [image-generation.md](image-generation.md) |
-| Agent Hermes | `./5-hermes.sh NOM_DU_MODELE` | [agent-development.md](agent-development.md) |
-| Suivi des agents (Langfuse) | `./6-langfuse.sh` | [agents-langfuse.md](agents-langfuse.md) |
-| Banc d'essai | `./7-bench.sh check` | `bench/README.md` |
-| Sauvegardes chiffrées | `lab backup init` puis `lab backup schedule` | [backups.md](backups.md) |
-| Limite de puissance du GPU | `lab gpu-limit install 300` (valeur à adapter à ta carte) | [performance.md](performance.md) |
-| Tri des mails Gmail (n8n) | voir la doc | [n8n-gmail.md](n8n-gmail.md) |
-| OpenClaw | `./openclaw/install.sh` | `README.md` |
+| Image generation (ComfyUI) | `lab mode images` | [image-generation.md](image-generation.md) |
+| Hermes agent | `./5-hermes.sh MODEL_NAME` | [agent-development.md](agent-development.md) |
+| Agent tracing (Langfuse) | `./6-langfuse.sh` | [agents-langfuse.md](agents-langfuse.md) |
+| Benchmark bench | `./7-bench.sh check` | `bench/README.md` |
+| Encrypted backups | `lab backup init` then `lab backup schedule` | [backups.md](backups.md) |
+| GPU power limit | `lab gpu-limit install 300` (value to adapt to your card) | [performance.md](performance.md) |
+| Gmail sorting (n8n) | see the doc | [n8n-gmail.md](n8n-gmail.md) |
+| OpenClaw | `./openclaw/install.sh` | [openclaw.md](openclaw.md) |
 
-**Avant d'utiliser Hermes ou OpenClaw**, coupe-leur Internet : `lab isolation install` puis `lab isolation test`
+**Before using Hermes or OpenClaw**, cut them off from the Internet: `lab isolation install` then `lab isolation test`
 ([agent-isolation.md](agent-isolation.md)).
 
-**Fais au moins les sauvegardes** : `lab backup init` affiche un mot de passe à garder **hors de la machine**
-(gestionnaire de mots de passe).
+**At least set up the backups**: `lab backup init` shows a password to keep **off the machine** (password manager).
 
-## 8. Accès depuis ton PC
+## 8. Access from your PC
 
-Tout est expliqué pas à pas dans [remote-access.md](remote-access.md). En résumé :
+Everything is explained step by step in [remote-access.md](remote-access.md). In short:
 
-1. Sur la machine IA : `sudo apt install openssh-server`, puis renseigner `LAB_HOST` dans `lab.conf`.
-2. Sur la machine IA : `lab client` génère la configuration SSH de ton PC et affiche la marche à suivre.
-3. Sur ton PC : créer une clé SSH, la copier sur la machine IA, coller la configuration générée.
-4. Sur ton PC : `ssh aibeast` doit répondre sans mot de passe ; `ssh -N aibeast` ouvre les tunnels, puis
-   http://127.0.0.1:3010 affiche le portail.
-5. Seulement ensuite : interdire la connexion SSH par mot de passe (durcissement).
+1. On the AI machine: `sudo apt install openssh-server`, then fill in `LAB_HOST` in `lab.conf`.
+2. On the AI machine: `lab client` generates your PC's SSH configuration and shows the steps to follow.
+3. On your PC: create an SSH key, copy it to the AI machine, paste the generated configuration.
+4. On your PC: `ssh aibeast` must answer without a password; `ssh -N aibeast` opens the tunnels, then
+   http://127.0.0.1:3010 shows the portal.
+5. Only then: forbid SSH login by password (hardening).
 
-Sous Windows, le dossier `windows/` du projet contient des raccourcis à double-cliquer (console à boutons, tunnels,
-déploiement, copie des sauvegardes) : [windows-shortcuts.md](windows-shortcuts.md).
+On Windows, the project's `windows/` folder contains shortcuts to double-click (button console, tunnels, deployment,
+backup copy): [windows-shortcuts.md](windows-shortcuts.md).
 
-## 9. Vérifier l'exposition réseau
+## 9. Checking network exposure
 
 ```bash
 ss -tlnp | grep -vE '127\.0\.0\.1|\[::1\]|127\.0\.0\.53'
 ```
 
-Ne doivent apparaître que **SSH (22)** et, s'il est activé, le **bureau à distance (3389)**. Toutes les interfaces
-du lab écoutent sur `127.0.0.1` et ne sont joignables que par les tunnels SSH. Exception connue : OpenClaw publie
-les ports 18789 et 3978 sur toutes les interfaces (compose officiel) : voir [openclaw.md](openclaw.md), section Sécurité.
+Only **SSH (22)** and, if enabled, the **remote desktop (3389)** may appear. All the lab's interfaces listen on
+`127.0.0.1` and are only reachable through the SSH tunnels. OpenClaw's official compose publishes its ports on all
+interfaces; `./openclaw/install.sh` binds them to `127.0.0.1` (see [openclaw.md](openclaw.md), Security section).
 
-## 10. Tenir à jour
+## 10. Keeping up to date
 
-| Je veux | Commande |
+| I want to | Command |
 |---|---|
-| Mettre à jour les images Docker (avec sauvegarde) | `lab update` (retour arrière : `lab rollback`) |
-| Récupérer une nouvelle version du lab | `cd ~/Documents/ai-lab && git pull` puis `./2-secrets.sh` (complète les nouvelles variables) et `lab start` |
-| Vérifier après un redémarrage | `lab doctor` |
+| Update the Docker images (with a backup) | `lab update` (rollback: `lab rollback`) |
+| Get a new version of the lab | `cd ~/Documents/ai-lab && git pull` then `./2-secrets.sh` (fills in new variables) and `lab start` |
+| Check after a reboot | `lab doctor` |
 
-ComfyUI est figé sur une version précise de son image : sa mise à jour se fait à la main
-([image-generation.md](image-generation.md), « Installation durable »).
+ComfyUI is pinned to a precise version of its image: it is updated by hand ([image-generation.md](image-generation.md),
+"Durable installation").
 
-## Ce qui n'est pas vérifié
+## What is not verified
 
-- Une installation complète sur une autre machine que la machine de référence (RTX 3090, Ubuntu 26.04) n'a jamais
-  été faite : ce guide est écrit à partir des scripts et de l'installation d'origine.
-- Le tableau des tailles de modèle par quantité de VRAM est indicatif, sauf la ligne 24 Go.
-- `lab doctor` sur une machine à un seul disque (`LAB_DATA_DIR` sur le disque système) : la vérification a été adaptée,
-  pas testée sur une vraie machine.
-- `8-stockage.sh disque` n'a été utilisé que sur la machine de référence.
+- A full installation on a machine other than the reference machine (RTX 3090, Ubuntu 26.04) has never been done: this
+  guide is written from the scripts and the original installation.
+- The table of model sizes per amount of VRAM is indicative, except the 24 GB line.
+- `lab doctor` on a single-disk machine (`LAB_DATA_DIR` on the system disk): the check was adapted, not tested on a real
+  machine.
+- `8-stockage.sh disk` has only been used on the reference machine.
