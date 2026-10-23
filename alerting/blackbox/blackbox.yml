@@ -1,4 +1,4 @@
-# Module "http_up" : le service répond en HTTP (un 401/403 compte : il est vivant, il demande juste un identifiant).
+# "http_up" module: the service answers over HTTP (a 401/403 counts: it is alive, it just asks for credentials).
 modules:
   http_up:
     prober: http

@@ -1,6 +1,6 @@
 {
   "uid": "labo-ia",
-  "title": "Labo IA",
+  "title": "AI Lab",
   "tags": ["labo", "gpu"],
   "timezone": "browser",
   "schemaVersion": 39,
@@ -11,7 +11,7 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Cibles Prometheus (1 = joignable)",
+      "title": "Prometheus targets (1 = reachable)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
       "options": {
@@ -40,7 +40,7 @@
     {
       "id": 2,
       "type": "timeseries",
-      "title": "GPU : utilisation",
+      "title": "GPU: utilisation",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
       "fieldConfig": {
@@ -54,7 +54,7 @@
     {
       "id": 3,
       "type": "timeseries",
-      "title": "GPU : VRAM utilisée",
+      "title": "GPU: VRAM used",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 4 },
       "fieldConfig": {
@@ -68,7 +68,7 @@
     {
       "id": 4,
       "type": "gauge",
-      "title": "GPU : VRAM (sur 24 Go)",
+      "title": "GPU: VRAM (gauge sized for a 24 GB card)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 4 },
       "options": {
@@ -99,7 +99,7 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "GPU : température",
+      "title": "GPU: temperature",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
       "fieldConfig": {
@@ -124,7 +124,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "GPU : consommation",
+      "title": "GPU: power draw",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
       "fieldConfig": {
@@ -138,7 +138,7 @@
     {
       "id": 7,
       "type": "timeseries",
-      "title": "CPU : utilisation",
+      "title": "CPU: utilisation",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
       "fieldConfig": {
@@ -156,7 +156,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "RAM : utilisée",
+      "title": "RAM: used",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 },
       "fieldConfig": {
@@ -166,12 +166,12 @@
       "targets": [
         {
           "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
-          "legendFormat": "utilisée",
+          "legendFormat": "used",
           "refId": "A"
         },
         {
           "expr": "node_memory_MemTotal_bytes",
-          "legendFormat": "totale",
+          "legendFormat": "total",
           "refId": "B"
         }
       ]
@@ -179,7 +179,7 @@
     {
       "id": 9,
       "type": "gauge",
-      "title": "Disque : espace utilisé (/)",
+      "title": "Disk: space used (/)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 20 },
       "options": {

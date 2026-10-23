@@ -1,12 +1,12 @@
 route:
   receiver: ntfy
   group_by: [alertname, instance]
-  group_wait: 30s        # attend 30 s pour regrouper plusieurs alertes simultanées
+  group_wait: 30s        # waits 30 s to group several simultaneous alerts
   group_interval: 5m
-  repeat_interval: 6h    # rappelle toutes les 6 h tant que le problème dure
+  repeat_interval: 6h    # reminds every 6 h while the problem lasts
 
 receivers:
   - name: ntfy
     webhook_configs:
       - url: http://alertmanager-ntfy:8000/hook
-        send_resolved: true   # prévient aussi quand le problème disparaît
+        send_resolved: true   # also notifies when the problem goes away

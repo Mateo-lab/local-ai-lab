@@ -1,6 +1,6 @@
-# Monitoring : Prometheus + Grafana + node-exporter + exporter GPU (nvidia-smi)
-# Tous les ports sont liés à 127.0.0.1. Grafana : http://127.0.0.1:3001
-# (3000 est déjà pris par Open WebUI dans ../ai-stack).
+# Monitoring: Prometheus + Grafana + node-exporter + GPU exporter (nvidia-smi)
+# Every port is bound to 127.0.0.1. Grafana: http://127.0.0.1:3001
+# (3000 is already taken by Open WebUI in ../ai-stack).
 
 name: monitoring
 
@@ -19,7 +19,7 @@ services:
       - prometheus_data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
-    # Uniquement utile pour le job OpenClaw (commenté dans prometheus.yml)
+    # Only useful for the OpenClaw job (commented out in prometheus.yml)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -33,7 +33,7 @@ services:
       - prometheus
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Définir GRAFANA_ADMIN_PASSWORD dans .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
@@ -55,9 +55,9 @@ services:
     pid: host
     volumes:
       - /:/host:ro,rslave
-    # Pas de port publié : seul Prometheus l'interroge, via mon-net.
-    # Limite : en réseau bridge, les stats réseau sont celles du conteneur,
-    # pas de la machine (CPU, RAM et disque sont corrects).
+    # No published port: only Prometheus queries it, through mon-net.
+    # Limit: in bridge networking, the network statistics are the container's,
+    # not the machine's (CPU, RAM and disk are correct).
     networks:
       - mon-net
 
@@ -82,6 +82,6 @@ volumes:
   grafana_data:
 
 networks:
-  # Nom fixe : portail/ et alerting/ rejoignent ce réseau en tant que réseau externe « mon-net »
+  # Fixed name: portail/ and alerting/ join this network as the external network "mon-net"
   mon-net:
     name: mon-net

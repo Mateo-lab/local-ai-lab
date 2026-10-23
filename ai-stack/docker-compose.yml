@@ -1,8 +1,8 @@
-# Stack IA locale : Ollama + Open WebUI + n8n + Qdrant + SearXNG (recherche web) + Kokoro (voix) + Tika (extraction de documents)
-# Cible : Ubuntu + Docker Engine + NVIDIA Container Toolkit, RTX 3090 (24 Go)
+# Local AI stack: Ollama + Open WebUI + n8n + Qdrant + SearXNG (web search) + Kokoro (voice) + Tika (document extraction)
+# Target: Ubuntu + Docker Engine + NVIDIA Container Toolkit, RTX 3090 (24 GB)
 #
-# Tous les ports sont liés à 127.0.0.1 : rien n'est exposé sur le réseau local.
-# Accès à distance : Tailscale (tailscale serve) ou tunnel SSH, jamais de port ouvert.
+# Every port is bound to 127.0.0.1: nothing is exposed on the local network.
+# Remote access: SSH tunnel (lab client) or Tailscale, never an open port.
 
 name: ai-stack
 
@@ -13,15 +13,15 @@ services:
     restart: unless-stopped
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
-      # Économise de la VRAM : attention + cache KV quantifié
+      # Saves VRAM: flash attention + quantised KV cache
       OLLAMA_FLASH_ATTENTION: "1"
       OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-q8_0}
-      # Fenêtre de contexte par défaut (OpenClaw recommande >= 64k, voir README)
+      # Default context window (OpenClaw recommends >= 64k, see README)
       OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-32768}
-      # Garde le modèle en VRAM entre deux requêtes (évite les rechargements)
+      # Keeps the model in VRAM between two requests (avoids reloads)
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
-      # 1 = un seul modèle en VRAM. Passe à 2 pour y garder aussi un petit « modèle de tâches »
-      # (titres de conversations, etc.) sans décharger le gros modèle : voir docs/open-webui.md
+      # 1 = a single model in VRAM. Set 2 to also keep a small "task model" there
+      # (conversation titles, etc.) without unloading the big model: see docs/open-webui.md
       OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
       OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
     volumes:
@@ -43,8 +43,8 @@ services:
       start_period: 20s
     networks:
       - ai-net
-      - llm-net # réseau partagé avec le conteneur OpenClaw (voir ../openclaw)
-      - hermes-net # réseau partagé avec Hermes (voir ../hermes) : il ne voit que Ollama
+      - llm-net # network shared with the OpenClaw container (see ../openclaw)
+      - hermes-net # network shared with Hermes (see ../hermes): it only sees Ollama
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
@@ -52,24 +52,24 @@ services:
     restart: unless-stopped
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Définir WEBUI_SECRET_KEY dans .env}
-      # Le premier compte créé devient admin ; passer à "false" ensuite
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?Set WEBUI_SECRET_KEY in .env}
+      # The first account created becomes admin; set to "false" afterwards
       ENABLE_SIGNUP: ${ENABLE_SIGNUP:-true}
-      # Confort (valeurs lues au 1er démarrage seulement ; ensuite : Admin > Paramètres). Voir docs/open-webui.md
-      DEFAULT_LOCALE: fr
-      # Petit modèle pour les titres/étiquettes : laisse vide tant que tu n'en as pas (voir `lab task-model`)
+      # Comfort (values read at the 1st start only; afterwards: Admin > Settings). See docs/open-webui.md
+      DEFAULT_LOCALE: ${OPEN_WEBUI_LOCALE:-en}
+      # Small model for titles/tags: leave empty until you have one (see `lab task-model`)
       TASK_MODEL: ${OWUI_TASK_MODEL:-}
-      # Recherche web via SearXNG (valeurs lues au 1er démarrage ; ensuite : Admin > Paramètres > Recherche web)
+      # Web search through SearXNG (values read at the 1st start; afterwards: Admin > Settings > Web Search)
       ENABLE_WEB_SEARCH: "true"
       WEB_SEARCH_ENGINE: searxng
       SEARXNG_QUERY_URL: http://searxng:8080/search
-      # Lecture à voix haute via Kokoro (voir service kokoro)
+      # Read aloud through Kokoro (see the kokoro service)
       AUDIO_TTS_ENGINE: openai
       AUDIO_TTS_OPENAI_API_BASE_URL: http://kokoro:8880/v1
       AUDIO_TTS_OPENAI_API_KEY: not-needed
       AUDIO_TTS_MODEL: kokoro
       AUDIO_TTS_VOICE: ${KOKORO_VOICE:-af_bella}
-      # Extraction des documents (PDF, Office...) via Tika
+      # Document extraction (PDF, Office...) through Tika
       CONTENT_EXTRACTION_ENGINE: tika
       TIKA_SERVER_URL: http://tika:9998
     depends_on:
@@ -87,15 +87,15 @@ services:
       - "127.0.0.1:3000:8080"
     networks:
       - ai-net
-      - obs-net # joint Langfuse (suivi des conversations), voir ../langfuse
+      - obs-net # reaches Langfuse (conversation tracing), see ../langfuse
 
-  # Moteur de recherche web privé. Aucun port publié : seul Open WebUI le joint (ai-net).
+  # Private web search engine. No published port: only Open WebUI reaches it (ai-net).
   searxng:
     image: searxng/searxng:latest
     container_name: searxng
     restart: unless-stopped
     environment:
-      SEARXNG_SECRET: ${SEARXNG_SECRET:?Définir SEARXNG_SECRET dans .env (relance ./2-secrets.sh)}
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set SEARXNG_SECRET in .env (run ./2-secrets.sh again)}
     volumes:
       - ./searxng/settings.yml:/etc/searxng/settings.yml
     cap_drop:
@@ -107,8 +107,8 @@ services:
     networks:
       - ai-net
 
-  # Synthèse vocale (TTS). Version CPU : ne consomme pas de VRAM, donc ne gêne pas le modèle.
-  # Pour le GPU : image ghcr.io/remsky/kokoro-fastapi-gpu + réservation GPU (comme ollama).
+  # Text-to-speech (TTS). CPU version: uses no VRAM, so it does not get in the model's way.
+  # For the GPU: image ghcr.io/remsky/kokoro-fastapi-gpu + GPU reservation (like ollama).
   kokoro:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
     container_name: kokoro
@@ -116,7 +116,7 @@ services:
     networks:
       - ai-net
 
-  # Extraction de texte des documents pour le RAG. Aucun port publié.
+  # Text extraction from documents for RAG. No published port.
   tika:
     image: apache/tika:latest-full
     container_name: tika
@@ -140,25 +140,25 @@ services:
     container_name: n8n
     restart: unless-stopped
     environment:
-      GENERIC_TIMEZONE: Europe/Brussels
-      TZ: Europe/Brussels
-      # Clé qui chiffre les identifiants stockés : à sauvegarder avec le volume
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Définir N8N_ENCRYPTION_KEY dans .env}
+      GENERIC_TIMEZONE: ${N8N_TIMEZONE:-Europe/Brussels}
+      TZ: ${N8N_TIMEZONE:-Europe/Brussels}
+      # Key that encrypts the stored credentials: back it up with the volume
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in .env}
       N8N_HOST: localhost
       N8N_PORT: "5678"
       N8N_PROTOCOL: http
       WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
-      # Nécessaire si tu accèdes à n8n en http via Tailscale/IP (pas en localhost)
+      # Needed if you reach n8n over http through Tailscale/IP (not localhost)
       N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
       N8N_RUNNERS_ENABLED: "true"
       N8N_DIAGNOSTICS_ENABLED: "false"
-      # Base PostgreSQL dédiée (au lieu de SQLite) : historique d'exécutions plus robuste
+      # Dedicated PostgreSQL database (instead of SQLite): more robust execution history
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres-n8n
       DB_POSTGRESDB_PORT: "5432"
       DB_POSTGRESDB_DATABASE: n8n
       DB_POSTGRESDB_USER: n8n
-      DB_POSTGRESDB_PASSWORD: ${POSTGRES_N8N_PASSWORD:?Définir POSTGRES_N8N_PASSWORD dans .env}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_N8N_PASSWORD:?Set POSTGRES_N8N_PASSWORD in .env}
     volumes:
       - n8n_data:/home/node/.n8n
     ports:
@@ -173,8 +173,8 @@ services:
     networks:
       - ai-net
 
-  # Base de données de n8n. Aucun port publié : joignable uniquement depuis ai-net.
-  # Ne pas la partager avec Langfuse (qui embarque sa propre base).
+  # n8n's database. No published port: only reachable from ai-net.
+  # Do not share it with Langfuse (which ships its own database).
   postgres-n8n:
     image: postgres:16-alpine
     container_name: postgres-n8n
@@ -182,7 +182,7 @@ services:
     environment:
       POSTGRES_DB: n8n
       POSTGRES_USER: n8n
-      POSTGRES_PASSWORD: ${POSTGRES_N8N_PASSWORD:?Définir POSTGRES_N8N_PASSWORD dans .env}
+      POSTGRES_PASSWORD: ${POSTGRES_N8N_PASSWORD:?Set POSTGRES_N8N_PASSWORD in .env}
     volumes:
       - postgres_n8n_data:/var/lib/postgresql/data
     healthcheck:
@@ -202,18 +202,18 @@ volumes:
 
 networks:
   ai-net:
-  # Les trois réseaux suivants sont « internes » : Docker ne leur donne aucune sortie (ni Internet, ni réseau local).
-  # Les agents qui y sont reliés ne joignent que les conteneurs du même réseau. Ollama et Open WebUI sortent par ai-net.
-  # Voir docs/agent-isolation.md.
-  # Nom fixe pour que le projet OpenClaw puisse le rejoindre
+  # The next three networks are "internal": Docker gives them no exit (neither Internet nor local network).
+  # The agents connected to them only reach containers on the same network. Ollama and Open WebUI go out through ai-net.
+  # See docs/agent-isolation.md.
+  # Fixed name so that the OpenClaw project can join it
   llm-net:
     name: llm-net
     internal: true
-  # Idem pour Hermes : réseau séparé de celui d'OpenClaw, ils ne se voient pas
+  # Same for Hermes: a network separate from OpenClaw's, they do not see each other
   hermes-net:
     name: hermes-net
     internal: true
-  # Réseau d'observabilité : Open WebUI et Hermes y joignent Langfuse, et rien d'autre
+  # Observability network: Open WebUI and Hermes reach Langfuse there, and nothing else
   obs-net:
     name: obs-net
     internal: true

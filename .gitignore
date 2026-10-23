@@ -1,4 +1,4 @@
-# Secrets et clés
+# Secrets and keys
 .env
 **/.env
 !*.env.example
@@ -10,19 +10,19 @@ client_secret*
 id_*
 password*
 
-# État local de la machine
+# Local state of the machine
 .lab/
 *.tgz
 *.tar.gz
 ai-lab.avant-*
 
-# Données et dépôts imbriqués
+# Data and nested repositories
 hermes/data/
 comfyui/data/
 langfuse/app/
 openclaw/.env
 
-# Benchmarks : environnement Python et résultats propres à une machine
+# Benchmarks: Python environment and machine-specific results
 bench/.venv/
 bench/results/
 __pycache__/
@@ -30,6 +30,6 @@ __pycache__/
 node_modules/
 lab.conf
 
-# Fichiers générés propres à une installation
+# Generated files specific to an installation
 windows/ssh_config_aibeast.txt
 portail/config/logs/

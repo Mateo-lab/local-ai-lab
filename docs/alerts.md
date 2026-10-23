@@ -25,7 +25,7 @@ The last rule detects a problem seen on the reference machine (GPU at ≈ 124 W 
 `monitoring/prometheus/rules/alerts.yml` (then `docker restart prometheus`).
 
 Not watched: Langfuse, ComfyUI, Hermes (no probe added; ComfyUI and Hermes are off by default, an alert would be a
-permanent false positive). To add a probe: one line in `targets` of the `sondes` (probes) job in
+permanent false positive). To add a probe: one line in `targets` of the `probes` job in
 `monitoring/prometheus/prometheus.yml`.
 
 ## 2. Start
@@ -37,7 +37,7 @@ docker restart prometheus # once, if monitoring was already running: it reloads 
 
 Checks:
 1. `http://127.0.0.1:9090/rules`: the three groups (services, machine, gpu) must appear.
-2. `http://127.0.0.1:9090/targets`: jobs `sondes` and `blackbox` `UP`.
+2. `http://127.0.0.1:9090/targets`: jobs `probes` and `blackbox` `UP`.
 3. `http://127.0.0.1:9093`: Alertmanager answers.
 
 ## 3. Receiving notifications

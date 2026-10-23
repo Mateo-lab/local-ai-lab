@@ -1,49 +1,49 @@
-# lab.conf : réglages propres à CETTE installation.
+# lab.conf: settings specific to THIS installation.
 #
-#   cp lab.conf.example lab.conf     puis adapter les lignes utiles (enlever le « # » devant).
+#   cp lab.conf.example lab.conf     then adapt the useful lines (remove the "#" in front).
 #
-# Règles :
-# - Fichier lu par bash : uniquement des lignes NOM=valeur, sans espace autour du « = ».
-# - Jamais de mot de passe ni de clé ici : les secrets sont dans les fichiers .env (créés par ./2-secrets.sh).
-# - lab.conf n'est jamais versionné (voir .gitignore) : chaque machine a le sien.
-# - Sans lab.conf, les valeurs par défaut indiquées s'appliquent.
+# Rules:
+# - File read by bash: only NAME=value lines, without spaces around the "=".
+# - Never a password or a key here: secrets are in the .env files (created by ./2-secrets.sh).
+# - lab.conf is never versioned (see .gitignore): each machine has its own.
+# - Without lab.conf, the default values shown apply.
 #
-# Qui lit quoi : docs/configuration.md.
+# Who reads what: docs/configuration.md.
 
-# ─── 1. La machine IA elle-même ────────────────────────────────────────────────
+# ─── 1. The AI machine itself ──────────────────────────────────────────────────
 
-# Grand disque pour Docker, sauvegardes et modèles volumineux.
-# Défaut : /data. Si tu n'as qu'un seul disque, mets un dossier du disque système,
-# par exemple LAB_DATA_DIR=/srv/ai-lab (les vérifications « disque monté » le signaleront).
+# Large disk for Docker, backups and big models.
+# Default: /data. If you only have one disk, set a folder on the system disk,
+# for example LAB_DATA_DIR=/srv/ai-lab (the "disk mounted" checks will flag it).
 #LAB_DATA_DIR=/data
 
-# Modèle de langage principal (nom Ollama exact, voir `docker exec ollama ollama list`).
-# Laisser commenté pour choisir avec `lab config set MODEL NOM` ou laisser `lab` prendre le plus gros installé.
+# Main language model (exact Ollama name, see `docker exec ollama ollama list`).
+# Leave commented out to choose with `lab config set MODEL NAME` or let `lab` take the largest installed one.
 #LAB_MODEL=qwen3:32b
 
-# ─── 2. L'accès depuis ton ordinateur (client) ─────────────────────────────────
-# Utilisé par `lab client` pour générer la configuration SSH à copier sur ton PC.
-# Voir docs/remote-access.md.
+# ─── 2. Access from your computer (client) ─────────────────────────────────────
+# Used by `lab client` to generate the SSH configuration to copy to your PC.
+# See docs/remote-access.md.
 
-# Adresse de la machine IA, telle que ton PC la joint : IP du réseau local, IP de ton VPN,
-# nom Tailscale (ex. aibeast.tailnet-xxxx.ts.net)… OBLIGATOIRE pour `lab client`.
+# Address of the AI machine, as your PC reaches it: local network IP, VPN IP,
+# Tailscale name (e.g. aibeast.tailnet-xxxx.ts.net)… REQUIRED for `lab client`.
 #LAB_HOST=192.168.1.50
 
-# Compte Linux sur la machine IA. Défaut : l'utilisateur qui lance `lab client`.
+# Linux account on the AI machine. Default: the user running `lab client`.
 #LAB_USER=
 
-# Port SSH de la machine IA. Défaut : 22.
+# SSH port of the AI machine. Default: 22.
 #LAB_SSH_PORT=22
 
-# Clé privée SSH SUR TON PC (chemin vu par le PC ; ~ = ton dossier personnel). Défaut : ~/.ssh/id_ed25519
+# SSH private key ON YOUR PC (path as seen by the PC; ~ = your home folder). Default: ~/.ssh/id_ed25519
 #LAB_SSH_KEY=~/.ssh/id_ed25519
 
-# Port local (sur ton PC) du tunnel vers le bureau à distance (RDP, port 3389 de la machine IA).
-# 13389 plutôt que 3389 : sous Windows, 3389 peut déjà être pris par le bureau à distance du PC lui-même.
+# Local port (on your PC) of the tunnel to the remote desktop (RDP, port 3389 of the AI machine).
+# 13389 rather than 3389: on Windows, 3389 may already be taken by the PC's own remote desktop.
 #LAB_RDP_LOCAL_PORT=13389
 
-# ─── 3. Isolation des agents (lab isolation) ───────────────────────────────────
-# Hermes et OpenClaw n'ont accès ni à Internet, ni au réseau local, ni à cette machine.
-# Exceptions : machines de test que Hermes peut joindre en SSH (lab remote), séparées par des espaces,
-# sous la forme IP ou IP:PORT (port 22 par défaut). Vide = aucune exception. Voir docs/agent-isolation.md.
+# ─── 3. Agent isolation (lab isolation) ────────────────────────────────────────
+# Hermes and OpenClaw have no access to the Internet, the local network or this machine.
+# Exceptions: test machines Hermes may reach over SSH (lab remote), separated by spaces,
+# as IP or IP:PORT (port 22 by default). Empty = no exception. See docs/agent-isolation.md.
 #LAB_AGENT_SSH_ALLOW="192.168.1.60"

@@ -1,13 +1,13 @@
-# Alertes : surveille les services et la machine, et envoie une notification quand quelque chose ne va pas.
+# Alerts: watches the services and the machine, and sends a notification when something goes wrong.
 #
-#   blackbox-exporter   teste en HTTP que chaque service répond (sondes lues par Prometheus)
-#   alertmanager        regroupe les alertes de Prometheus (règles : ../monitoring/prometheus/rules/)
-#   alertmanager-ntfy   pont : transforme les alertes en notifications ntfy
-#   ntfy                serveur de notifications (page web + application téléphone)
+#   blackbox-exporter   checks over HTTP that each service answers (probes read by Prometheus)
+#   alertmanager        groups Prometheus's alerts (rules: ../monitoring/prometheus/rules/)
+#   alertmanager-ntfy   bridge: turns the alerts into ntfy notifications
+#   ntfy                notification server (web page + phone app)
 #
-# Tous les ports sont liés à 127.0.0.1. Prérequis : ai-stack ET monitoring démarrés (réseaux partagés) : `lab start`.
-# Après le premier démarrage, relance Prometheus pour qu'il lise les règles : `lab start monitoring` (recrée si besoin)
-# ou `docker restart prometheus`.
+# Every port is bound to 127.0.0.1. Prerequisite: ai-stack AND monitoring started (shared networks): `lab start`.
+# After the first start, restart Prometheus so that it reads the rules: `lab start monitoring` (recreates if needed)
+# or `docker restart prometheus`.
 
 name: alerting
 
@@ -19,13 +19,13 @@ services:
     command: serve
     environment:
       TZ: Europe/Brussels
-      # Adresse publique vue par tes appareils. Localement : http://127.0.0.1:2586 (voir docs/alerts.md pour le téléphone)
+      # Public address seen by your devices. Locally: http://127.0.0.1:2586 (see docs/alerts.md for the phone)
       NTFY_BASE_URL: ${NTFY_BASE_URL:-http://127.0.0.1:2586}
       NTFY_LISTEN_HTTP: ":80"
       NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
       NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
-      # read-write = ouvert à qui joint le port ; reste sans danger tant que le port est lié à 127.0.0.1.
-      # Si tu l'exposes sur le réseau/VPN : mets deny-all (voir docs/alerts.md).
+      # read-write = open to whoever reaches the port; harmless as long as the port is bound to 127.0.0.1.
+      # If you expose it on the network/VPN: set deny-all (see docs/alerts.md).
       NTFY_AUTH_DEFAULT_ACCESS: ${NTFY_AUTH_DEFAULT_ACCESS:-read-write}
     volumes:
       - ntfy_data:/var/lib/ntfy
@@ -36,8 +36,8 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   alertmanager-ntfy:
-    # Pont communautaire (github.com/alexbakker/alertmanager-ntfy). Non vérifié ici : voir docs/alerts.md si le conteneur
-    # ne démarre pas (nom d'image, commande).
+    # Community bridge (github.com/alexbakker/alertmanager-ntfy). Verified on the reference machine; see docs/alerts.md
+    # if the container does not start (image name, command).
     image: ghcr.io/alexbakker/alertmanager-ntfy:latest
     container_name: alertmanager-ntfy
     restart: unless-stopped
@@ -64,7 +64,7 @@ services:
       - alertmanager-ntfy
     networks:
       - default
-      - mon-net   # Prometheus l'y joint
+      - mon-net   # Prometheus reaches it there
     logging: *logs
 
   blackbox-exporter:
@@ -76,8 +76,8 @@ services:
     volumes:
       - ./blackbox/blackbox.yml:/config/blackbox.yml:ro
     networks:
-      - mon-net   # Prometheus l'interroge ici
-      - ai-net    # pour joindre Open WebUI, n8n, Qdrant, Ollama, SearXNG
+      - mon-net   # Prometheus queries it here
+      - ai-net    # to reach Open WebUI, n8n, Qdrant, Ollama, SearXNG
     logging: *logs
 
 volumes:

@@ -1,15 +1,16 @@
-# Pont Alertmanager -> ntfy (github.com/alexbakker/alertmanager-ntfy).
-# Les clés viennent de son config.example.yml. Une configuration trop courte (seulement `topic`) fait planter le pont
-# (nil pointer dans forwardAlert) : priorité, étiquettes et modèles doivent être définis.
+# Alertmanager -> ntfy bridge (github.com/alexbakker/alertmanager-ntfy).
+# The keys come from its config.example.yml. A configuration that is too short (only `topic`) crashes the bridge
+# (nil pointer in forwardAlert): priority, tags and templates must be defined.
 http:
   addr: ":8000"
 
 ntfy:
-  # Serveur ntfy joint depuis le réseau Docker (pas l'adresse vue par ton navigateur).
+  # ntfy server as reached from the Docker network (not the address seen by your browser).
   baseurl: http://ntfy:80
   notification:
+    # Topic name kept as is so that existing subscriptions keep working.
     topic: aibeast-alertes
-    # Expression : urgent tant que le problème dure, normal quand il est résolu.
+    # Expression: urgent while the problem lasts, normal when it is resolved.
     priority: 'status == "firing" ? "urgent" : "default"'
     tags:
       - tag: rotating_light
@@ -17,5 +18,5 @@ ntfy:
       - tag: white_check_mark
         condition: 'status == "resolved"'
     templates:
-      title: '{{ if eq .Status "resolved" }}Résolu : {{ end }}{{ index .Annotations "summary" }}'
+      title: '{{ if eq .Status "resolved" }}Resolved: {{ end }}{{ index .Annotations "summary" }}'
       description: '{{ index .Annotations "description" }}'
