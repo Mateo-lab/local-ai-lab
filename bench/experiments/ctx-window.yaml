@@ -1,13 +1,13 @@
-# Taille de la fenêtre de contexte (num_ctx) × type de cache KV : VRAM, vitesse et limite avant débordement sur le CPU.
-# Question : combien coûte de RÉSERVER une grande fenêtre, même quand on ne la remplit pas ? (le prompt reste court : 1 024 tokens)
-# Complète `context-scaling` (qui fait varier la quantité de texte à l'intérieur d'une fenêtre fixe de 65 536).
-# À lire : `peak_mem_used_mb` (VRAM de toute la carte : rien d'autre ne doit l'utiliser) et `gpu_frac` (doit rester à 100 %).
-# Le point 98 304 sert à trouver la limite : il peut déborder sur le CPU (gpu_frac < 100 %) ou être ramené au maximum du modèle
-# (voir `ctx_effective` dans runs.csv). Un débordement est un RÉSULTAT, pas une erreur.
+# Context window size (num_ctx) × KV cache type: VRAM, speed and limit before spilling over to the CPU.
+# Question: how much does it cost to RESERVE a large window, even when it is not filled? (the prompt stays short: 1,024 tokens)
+# Complements `context-scaling` (which varies the amount of text inside a fixed 65,536 window).
+# To read: `peak_mem_used_mb` (VRAM of the whole card: nothing else may use it) and `gpu_frac` (must stay at 100 %).
+# The 98,304 point is there to find the limit: it may spill over to the CPU (gpu_frac < 100 %) or be capped at the model's
+# maximum (see `ctx_effective` in runs.csv). A spill-over is a RESULT, not an error.
 name: ctx-window
 repetitions: 4
 warmup: 1
-design: blocked        # conditions groupées par taille de fenêtre : le modèle n'est rechargé qu'à chaque changement de num_ctx
+design: blocked        # conditions grouped by window size: the model is only reloaded when num_ctx changes
 cooldown: {target_c: 60, max_wait_s: 600}
 request: {ctx_depth: 1024, gen_tokens: 128}
 workload: mixed

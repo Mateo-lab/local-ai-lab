@@ -1,4 +1,4 @@
-# Confirmation rapide et précise : 350 / 300 / 250 W avec 15 répétitions (~10 min), à lancer GPU au repos
+# Quick, precise confirmation: 350 / 300 / 250 W with 15 repetitions (~10 min), to run with the GPU idle
 name: power-confirm
 repetitions: 15
 warmup: 2

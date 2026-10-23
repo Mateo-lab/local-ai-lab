@@ -1,6 +1,6 @@
-"""Accès au GPU : mesures (NVML) et réglage de la limite de puissance.
+"""GPU access: measurements (NVML) and setting the power limit.
 
-Mode simulé (LABBENCH_FAKE_GPU=1) uniquement pour les tests automatiques sans carte graphique.
+Simulated mode (LABBENCH_FAKE_GPU=1) only for automated tests without a graphics card.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-# Bits de "clocks throttle reasons" (valeurs fixées par NVML)
+# "clocks throttle reasons" bits (values set by NVML)
 THR_IDLE = 0x1
 THR_SW_POWER_CAP = 0x4
 THR_HW_SLOWDOWN = 0x8
@@ -59,7 +59,7 @@ class RealGpu:
         )
 
     def energy_mj(self) -> float:
-        """Compteur d'énergie cumulée (mJ) depuis le chargement du pilote : mesure exacte, pas une intégrale d'échantillons."""
+        """Cumulative energy counter (mJ) since the driver was loaded: exact measurement, not an integral of samples."""
         try:
             return float(self.nv.nvmlDeviceGetTotalEnergyConsumption(self.h))
         except Exception:
@@ -97,29 +97,29 @@ class RealGpu:
         return self.nv.nvmlDeviceGetPowerManagementLimit(self.h) / 1000.0
 
     def set_power_limit(self, watts: float, settle_s: float = 3.0) -> None:
-        """Nécessite les droits root : 'sudo -n nvidia-smi -pl'. Le script 7-bench.sh prépare 'sudo -v'."""
+        """Needs root rights: 'sudo -n nvidia-smi -pl'. The 7-bench.sh script prepares 'sudo -v'."""
         info = self.info()
         if not (info.power_min_w - 0.5 <= watts <= info.power_max_w + 0.5):
-            raise ValueError(f"{watts} W hors bornes du GPU [{info.power_min_w}, {info.power_max_w}] W")
+            raise ValueError(f"{watts} W outside the GPU's bounds [{info.power_min_w}, {info.power_max_w}] W")
         r = subprocess.run(["sudo", "-n", "nvidia-smi", "-i", str(self.index), "-pl", str(int(round(watts)))],
                            capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError(
-                "Impossible de régler la limite de puissance (droits sudo ?).\n"
-                f"stderr: {r.stderr.strip()}\nLance d'abord 'sudo -v' dans ce terminal, puis relance.")
+                "Cannot set the power limit (sudo rights?).\n"
+                f"stderr: {r.stderr.strip()}\nRun 'sudo -v' in this terminal first, then run again.")
         time.sleep(settle_s)
         got = self.power_limit_w()
         if abs(got - round(watts)) > 1.5:
-            raise RuntimeError(f"Limite demandée {watts} W mais le GPU rapporte {got} W.")
+            raise RuntimeError(f"Limit requested {watts} W but the GPU reports {got} W.")
 
 
 class FakeGpu:
-    """GPU simulé pour tester la chaîne complète sans matériel. Pas utilisé en production."""
+    """Simulated GPU to test the whole chain without hardware. Not used in production."""
 
     def __init__(self, index: int = 0):
         self.index = index
         self.limit = 350.0
-        self.activity = 0.0       # 0..1, piloté par le faux serveur Ollama
+        self.activity = 0.0       # 0..1, driven by the fake Ollama server
         self._e = 0.0
         self._t = time.time()
         self._temp = 40.0

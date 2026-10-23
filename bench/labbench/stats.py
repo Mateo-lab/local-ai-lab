@@ -1,4 +1,4 @@
-"""Statistiques utilisées par le banc d'essai (intervalles de confiance, bootstrap, Wilson)."""
+"""Statistics used by the benchmark bench (confidence intervals, bootstrap, Wilson)."""
 from __future__ import annotations
 
 import math
@@ -9,7 +9,7 @@ from scipy import stats as sps
 
 
 def mean_ci(x: Sequence[float], conf: float = 0.95) -> tuple[float, float, float, float]:
-    """Retourne (moyenne, écart-type, demi-largeur de l'IC, n) — IC de Student."""
+    """Returns (mean, standard deviation, CI half-width, n) — Student CI."""
     a = np.asarray([v for v in x if v is not None and not (isinstance(v, float) and math.isnan(v))], float)
     n = len(a)
     if n == 0:
@@ -23,7 +23,7 @@ def mean_ci(x: Sequence[float], conf: float = 0.95) -> tuple[float, float, float
 
 
 def cv_percent(x: Sequence[float]) -> float:
-    """Coefficient de variation (%) = écart-type / moyenne."""
+    """Coefficient of variation (%) = standard deviation / mean."""
     m, sd, _, n = mean_ci(x)
     if n < 2 or not m:
         return math.nan
@@ -32,9 +32,9 @@ def cv_percent(x: Sequence[float]) -> float:
 
 def bootstrap_ratio_ci(a: Sequence[float], b: Sequence[float], conf: float = 0.95,
                        n_boot: int = 4000, seed: int = 0) -> tuple[float, float, float]:
-    """Variation relative (b/a - 1) en % avec IC bootstrap percentile.
+    """Relative variation (b/a - 1) in % with a percentile bootstrap CI.
 
-    a = référence, b = condition testée. Rééchantillonne chaque groupe indépendamment.
+    a = baseline, b = tested condition. Resamples each group independently.
     """
     a = np.asarray(a, float)
     b = np.asarray(b, float)
@@ -55,7 +55,7 @@ def bootstrap_ratio_ci(a: Sequence[float], b: Sequence[float], conf: float = 0.9
 
 
 def wilson_ci(k: int, n: int, conf: float = 0.95) -> tuple[float, float, float]:
-    """Proportion k/n avec intervalle de Wilson (adapté aux petits échantillons)."""
+    """Proportion k/n with a Wilson interval (suited to small samples)."""
     if n == 0:
         return (math.nan, math.nan, math.nan)
     z = sps.norm.ppf(0.5 + conf / 2)
@@ -67,9 +67,9 @@ def wilson_ci(k: int, n: int, conf: float = 0.95) -> tuple[float, float, float]:
 
 
 def min_detectable_diff_percent(x: Sequence[float], conf: float = 0.95) -> float:
-    """Plus petit écart relatif (%) distinguable du bruit entre deux groupes de même taille n et même variance.
+    """Smallest relative difference (%) distinguishable from noise between two groups of the same size n and variance.
 
-    Approximation : t * sd * sqrt(2/n) / moyenne. Sert à juger si une différence observée est plausiblement du bruit.
+    Approximation: t * sd * sqrt(2/n) / mean. Used to judge whether an observed difference is plausibly noise.
     """
     m, sd, _, n = mean_ci(x, conf)
     if n < 2 or not m:
@@ -79,7 +79,7 @@ def min_detectable_diff_percent(x: Sequence[float], conf: float = 0.95) -> float
 
 
 def drift_spearman(order: Sequence[float], values: Sequence[float]) -> tuple[float, float]:
-    """Corrélation de Spearman entre l'ordre d'exécution et la mesure (détecte une dérive thermique/temporelle)."""
+    """Spearman correlation between run order and measurement (detects a thermal/temporal drift)."""
     o = np.asarray(order, float)
     v = np.asarray(values, float)
     ok = ~np.isnan(v)

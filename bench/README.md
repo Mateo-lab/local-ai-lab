@@ -77,6 +77,8 @@ is **factorial** (all combinations of the lists). Workloads (`workload`): `mixed
 - **Ollama** does not expose every llama.cpp setting (e.g. `-ctv` separate from `-ctk`): the K and V cache type is
   shared.
 - The numbers hold for **this machine, this model, this version of Ollama** (recorded in `meta.json`).
+- The prompts (filler text, questions) were written in French in the first versions of the bench; they are now in
+  English. Token counts and answers differ slightly: do not mix results from the two versions in one comparison.
 
 ## Tests of the bench itself
 

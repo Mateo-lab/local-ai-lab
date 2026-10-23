@@ -1,4 +1,4 @@
-"""Analyse statistique + rapport HTML (tableaux, IC, comparaisons à la référence, graphiques, avertissements)."""
+"""Statistical analysis + HTML report (tables, CIs, comparisons with the baseline, charts, warnings)."""
 from __future__ import annotations
 
 import base64
@@ -16,24 +16,24 @@ import pandas as pd
 
 from . import stats as S
 
-METRICS = [  # (colonne, libellé, "plus haut = mieux" ?)
-    ("decode_tps", "Génération (tok/s)", True),
+METRICS = [  # (column, label, "higher = better"?)
+    ("decode_tps", "Generation (tok/s)", True),
     ("prefill_tps", "Prefill (tok/s)", True),
     ("ttft_s", "TTFT (s)", False),
-    ("itl_p95_ms", "Latence inter-token p95 (ms)", False),
-    ("agg_tps", "Débit agrégé (tok/s)", True),
-    ("avg_power_w", "Puissance moyenne (W)", None),
-    ("j_per_token", "Énergie (J/token)", False),
-    ("tokens_per_j", "Efficacité (tok/J)", True),
-    ("avg_sm_mhz", "Fréquence SM (MHz)", None),
-    ("max_temp_c", "Température max (°C)", None),
-    ("thr_power_frac", "Part du temps bridé par la limite de puissance", None),
-    ("thr_thermal_frac", "Part du temps bridé thermiquement", None),
-    ("quality", "Qualité (taux de réussite)", True),
-    ("cache_ttft_speedup", "Accélération TTFT (cache de préfixe)", True),
-    ("cache_reuse_frac", "Part du préfixe réutilisée", True),
-    ("gpu_frac", "Part du modèle en VRAM", True),
-    ("peak_mem_used_mb", "VRAM utilisée sur la carte, pic (Mo)", None),
+    ("itl_p95_ms", "Inter-token latency p95 (ms)", False),
+    ("agg_tps", "Aggregate throughput (tok/s)", True),
+    ("avg_power_w", "Mean power (W)", None),
+    ("j_per_token", "Energy (J/token)", False),
+    ("tokens_per_j", "Efficiency (tok/J)", True),
+    ("avg_sm_mhz", "SM clock (MHz)", None),
+    ("max_temp_c", "Max temperature (°C)", None),
+    ("thr_power_frac", "Share of time capped by the power limit", None),
+    ("thr_thermal_frac", "Share of time thermally throttled", None),
+    ("quality", "Quality (success rate)", True),
+    ("cache_ttft_speedup", "TTFT speed-up (prefix cache)", True),
+    ("cache_reuse_frac", "Share of the prefix reused", True),
+    ("gpu_frac", "Share of the model in VRAM", True),
+    ("peak_mem_used_mb", "VRAM used on the card, peak (MB)", None),
 ]
 KEY = ["decode_tps", "prefill_tps", "ttft_s", "avg_power_w", "j_per_token"]
 
@@ -73,7 +73,7 @@ def summary_table(df: pd.DataFrame, factors: list[str]) -> pd.DataFrame:
 
 
 def baseline_mask(df: pd.DataFrame, exp: dict, factors: list[str]) -> pd.Series:
-    """Condition de référence : valeurs données dans 'baseline:', sinon 1re valeur listée de chaque facteur."""
+    """Baseline condition: values given in 'baseline:', otherwise the 1st listed value of each factor."""
     m = pd.Series(True, index=df.index)
     for f in factors:
         ref = exp.get("baseline", {}).get(f, exp["factors"][f][0])
@@ -101,16 +101,16 @@ def comparisons(df: pd.DataFrame, exp: dict, factors: list[str]) -> pd.DataFrame
 
 
 def diagnostics(df: pd.DataFrame, exp: dict, meta: dict, factors: list[str]) -> list[tuple[str, str]]:
-    """Avertissements de validité (niveau, texte)."""
+    """Validity warnings (level, text)."""
     w: list[tuple[str, str]] = []
     good = df[df.n_ok > 0]
     n_fail = int((df.n_err > 0).sum()) if "n_err" in df else 0
     if n_fail:
-        w.append(("warn", f"{n_fail} mesure(s) avec erreur — voir la colonne 'error' de runs.csv."))
+        w.append(("warn", f"{n_fail} measurement(s) with an error — see the 'error' column of runs.csv."))
     reps = good.groupby("cid").size()
     if len(reps) and reps.min() < 5:
-        w.append(("warn", f"Seulement {int(reps.min())} répétition(s) par condition : les intervalles de confiance sont larges. "
-                          "Vise ≥ 5 (≥ 10 pour distinguer des écarts < 3 %)."))
+        w.append(("warn", f"Only {int(reps.min())} repetition(s) per condition: the confidence intervals are wide. "
+                          "Aim for ≥ 5 (≥ 10 to tell apart differences < 3 %)."))
     # bruit
     for col in ("decode_tps",):
         if col in good and len(good):
@@ -119,34 +119,34 @@ def diagnostics(df: pd.DataFrame, exp: dict, meta: dict, factors: list[str]) -> 
             if cvs:
                 mdds = [S.min_detectable_diff_percent(g[col].tolist()) for _, g in good.groupby("cid")]
                 mdds = [x for x in mdds if not math.isnan(x)]
-                w.append(("info", f"Bruit de mesure sur {col} : CV médian {np.median(cvs):.1f} %, "
-                                   f"plus petit écart détectable ≈ {np.median(mdds):.1f} % (95 %). "
-                                   "Une différence inférieure à cette valeur ne peut pas être distinguée du bruit."))
+                w.append(("info", f"Measurement noise on {col}: median CV {np.median(cvs):.1f} %, "
+                                   f"smallest detectable difference ≈ {np.median(mdds):.1f} % (95 %). "
+                                   "A difference below this value cannot be told apart from noise."))
                 if max(cvs) > 5:
-                    w.append(("warn", f"CV > 5 % sur au moins une condition ({max(cvs):.1f} %) : machine pas isolée "
-                                       "(autre charge GPU ? Open WebUI/Hermes actifs ?) ou température instable."))
-    # dérive
+                    w.append(("warn", f"CV > 5 % on at least one condition ({max(cvs):.1f} %): machine not isolated "
+                                       "(other GPU load? Open WebUI/Hermes active?) or unstable temperature."))
+    # drift
     if "decode_tps" in good and len(good) >= 8:
         rho, p = S.drift_spearman(good.seq.tolist(), good.decode_tps.tolist())
         if not math.isnan(p) and p < 0.05 and abs(rho) > 0.3:
-            w.append(("warn", f"Dérive temporelle détectée (Spearman ρ={rho:.2f}, p={p:.3f}) entre l'ordre d'exécution et la vitesse : "
-                              "risque de confusion thermique. Le plan randomisé limite l'effet, mais augmente le refroidissement."))
+            w.append(("warn", f"Temporal drift detected (Spearman ρ={rho:.2f}, p={p:.3f}) between run order and speed: "
+                              "risk of thermal confounding. The randomised plan limits the effect, but increase the cool-down."))
     # thermique / throttling
     if "thr_thermal_frac" in good and good.thr_thermal_frac.max() > 0.05:
-        w.append(("warn", f"Bridage thermique observé (jusqu'à {good.thr_thermal_frac.max() * 100:.0f} % du temps). "
-                          "Les écarts mélangent alors limite de puissance et chaleur."))
+        w.append(("warn", f"Thermal throttling observed (up to {good.thr_thermal_frac.max() * 100:.0f} % of the time). "
+                          "The differences then mix power limit and heat."))
     if "thr_hw_frac" in good and good.thr_hw_frac.max() > 0.01:
-        w.append(("bad", "Ralentissement matériel (HW slowdown / power brake) détecté : alimentation ou refroidissement à vérifier."))
+        w.append(("bad", "Hardware slowdown (HW slowdown / power brake) detected: check the power supply or the cooling."))
     if "gpu_frac" in good and good.gpu_frac.min() < 0.99:
-        w.append(("warn", f"Le modèle n'est pas à 100 % en VRAM dans certaines conditions (min {good.gpu_frac.min() * 100:.0f} %) : "
-                          "débordement CPU, les écarts reflètent surtout ce débordement."))
+        w.append(("warn", f"The model is not 100 % in VRAM in some conditions (min {good.gpu_frac.min() * 100:.0f} %): "
+                          "CPU spill-over, the differences mostly reflect that spill-over."))
     if exp.get("workload") in ("needle", "arith", "arith_easy") and "quality" in good:
         n_q = int(good.groupby("cid").size().min())
-        w.append(("info", f"Qualité : proportions avec intervalle de Wilson ; avec {n_q} essais par condition, "
-                          "seuls des écarts importants (≳ 30 points) sont détectables."))
+        w.append(("info", f"Quality: proportions with a Wilson interval; with {n_q} trials per condition, "
+                          "only large differences (≳ 30 points) are detectable."))
     if meta.get("idle"):
-        w.append(("info", f"Puissance au repos mesurée : {_f(meta['idle'].get('avg_power_w'), 1)} W "
-                          "(non soustraite des J/token : ils incluent le coût du GPU au repos)."))
+        w.append(("info", f"Measured idle power: {_f(meta['idle'].get('avg_power_w'), 1)} W "
+                          "(not subtracted from J/token: they include the GPU's idle cost)."))
     return w
 
 
@@ -172,7 +172,7 @@ def _plot_pareto(df):
         ax.errorbar(s.j_per_token.mean(), s.decode_tps.mean(), yerr=S.mean_ci(s.decode_tps.tolist())[2] or 0,
                     xerr=S.mean_ci(s.j_per_token.tolist())[2] or 0, marker="o", capsize=3)
         ax.annotate(f"{pl:.0f} W", (s.j_per_token.mean(), s.decode_tps.mean()), textcoords="offset points", xytext=(5, 5), fontsize=8)
-    ax.set_xlabel("Énergie (J/token) — plus bas = mieux"); ax.set_ylabel("Génération (tok/s)"); ax.grid(alpha=.3)
+    ax.set_xlabel("Energy (J/token) — lower = better"); ax.set_ylabel("Generation (tok/s)"); ax.grid(alpha=.3)
     return _png(fig)
 
 
@@ -213,8 +213,8 @@ def _table_html(df: pd.DataFrame, cols: list[tuple[str, str]], ci: bool = True) 
 
 
 def _cmp_html(cmp: pd.DataFrame, factors: list[str]) -> str:
-    cols = [("decode_tps", "Génération"), ("prefill_tps", "Prefill"), ("ttft_s", "TTFT"),
-            ("avg_power_w", "Puissance"), ("j_per_token", "J/token"), ("quality", "Qualité")]
+    cols = [("decode_tps", "Generation"), ("prefill_tps", "Prefill"), ("ttft_s", "TTFT"),
+            ("avg_power_w", "Power"), ("j_per_token", "J/token"), ("quality", "Quality")]
     h = "<table><tr>" + "".join(f"<th>{html.escape(f)}</th>" for f in factors) + "<th>n</th>" + \
         "".join(f"<th>{l} (Δ%, IC95)</th>" for c, l in cols if c + "_pct" in cmp) + "</tr>"
     for _, r in cmp.iterrows():
@@ -243,36 +243,36 @@ img{max-width:100%}.grid{display:flex;flex-wrap:wrap;gap:1rem}small{color:#666}"
 def build_report(outdir: Path) -> Path:
     df, exp, meta = load(outdir)
     factors = list(exp["factors"])
-    out = ["<html><head><meta charset='utf-8'><title>Rapport banc d'essai</title><style>" + CSS + "</style></head><body>"]
+    out = ["<html><head><meta charset='utf-8'><title>Benchmark report</title><style>" + CSS + "</style></head><body>"]
     out.append(f"<h1>{html.escape(exp['name'])}</h1>")
     g = meta.get("gpu", {})
-    out.append(f"<p><b>Modèle</b> : {html.escape(str(exp['model']))} · <b>GPU</b> : {html.escape(str(g.get('name', '?')))} "
-               f"(pilote {g.get('driver', '?')}, limite d'origine {_f(meta.get('original_power_limit_w'), 0)} W) · "
-               f"<b>Ollama</b> {meta.get('ollama_version', '?')} · charge : {exp['workload']} · "
-               f"{len(df)} mesures · début {meta.get('started', '?')}</p>")
-    out.append("<h2>Validité de l'expérience</h2>")
+    out.append(f"<p><b>Model</b>: {html.escape(str(exp['model']))} · <b>GPU</b>: {html.escape(str(g.get('name', '?')))} "
+               f"(driver {g.get('driver', '?')}, original limit {_f(meta.get('original_power_limit_w'), 0)} W) · "
+               f"<b>Ollama</b> {meta.get('ollama_version', '?')} · workload: {exp['workload']} · "
+               f"{len(df)} measurements · started {meta.get('started', '?')}</p>")
+    out.append("<h2>Validity of the experiment</h2>")
     for lvl, txt in diagnostics(df, exp, meta, factors):
         out.append(f"<div class='{lvl}'>{html.escape(txt)}</div>")
 
     good = df[df.n_ok > 0].copy()
     if good.empty:
-        out.append("<div class='bad'>Aucune mesure valide.</div></body></html>")
+        out.append("<div class='bad'>No valid measurement.</div></body></html>")
         p = outdir / "report.html"; p.write_text("".join(out)); return p
     summ = summary_table(good, factors)
     summ.to_csv(outdir / "summary.csv", index=False)
     cols = [(f, f) for f in factors] + [("n", "n")] + [(c, l) for c, l, _ in METRICS if c in summ and c in
                                                        ("decode_tps", "prefill_tps", "ttft_s", "itl_p95_ms", "agg_tps", "avg_power_w", "j_per_token",
                                                         "avg_sm_mhz", "max_temp_c", "thr_power_frac", "quality", "cache_ttft_speedup", "gpu_frac")]
-    out.append("<h2>Résultats par condition</h2><small>moyenne ± demi-largeur de l'IC 95 % (Student)</small>")
+    out.append("<h2>Results per condition</h2><small>mean ± half-width of the 95 % CI (Student)</small>")
     out.append(_table_html(summ, cols))
     if factors:
         cmp = comparisons(good, exp, factors)
         cmp.to_csv(outdir / "comparisons.csv", index=False)
         ref = {f: exp.get("baseline", {}).get(f, exp["factors"][f][0]) for f in factors}
-        out.append(f"<h2>Variation par rapport à la référence</h2><small>référence = {html.escape(str(ref))} · "
-                   "Δ% avec IC95 bootstrap · fond vert/* = l'IC exclut 0 (différence statistiquement distincte du bruit)</small>")
+        out.append(f"<h2>Variation from the baseline</h2><small>baseline = {html.escape(str(ref))} · "
+                   "Δ% with bootstrap 95% CI · green background/* = the CI excludes 0 (difference statistically distinct from noise)</small>")
         out.append(_cmp_html(cmp, factors))
-    # graphiques
+    # charts
     imgs = []
     num = [f for f in factors if pd.api.types.is_numeric_dtype(good[f]) and good[f].nunique() > 1]
     x = exp.get("report", {}).get("x") or (num[0] if num else (factors[0] if factors else None))
@@ -288,11 +288,11 @@ def build_report(outdir: Path) -> Path:
     if tl:
         imgs.append(tl)
     if imgs:
-        out.append("<h2>Graphiques</h2><div class='grid'>" + "".join(f"<img src='{i}'>" for i in imgs) + "</div>")
-    out.append("<h2>Méthode</h2><small>Plan " + html.escape(str(exp["design"])) + f", graine {exp['seed']}, {exp['repetitions']} répétitions, "
-               f"{exp['warmup']} échauffement(s) par bloc, refroidissement jusqu'à {exp['cooldown']['target_c']} °C avant chaque mesure. "
-               "Énergie = compteur matériel NVML (pas une intégrale d'échantillons). Les prompts portent un nonce : pas de réutilisation "
-               "du cache de préfixe sauf pour la charge prefix_cache. Les valeurs brutes sont dans runs.csv et telemetry.csv.</small>")
+        out.append("<h2>Charts</h2><div class='grid'>" + "".join(f"<img src='{i}'>" for i in imgs) + "</div>")
+    out.append("<h2>Method</h2><small>Plan " + html.escape(str(exp["design"])) + f", seed {exp['seed']}, {exp['repetitions']} repetitions, "
+               f"{exp['warmup']} warm-up(s) per block, cool-down to {exp['cooldown']['target_c']} °C before each measurement. "
+               "Energy = NVML hardware counter (not an integral of samples). The prompts carry a nonce: no reuse "
+               "of the prefix cache except for the prefix_cache workload. Raw values are in runs.csv and telemetry.csv.</small>")
     out.append("</body></html>")
     p = outdir / "report.html"
     p.write_text("".join(out), encoding="utf-8")

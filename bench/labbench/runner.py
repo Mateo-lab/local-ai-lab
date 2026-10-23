@@ -1,4 +1,4 @@
-"""Exécution d'une expérience : plan randomisé, échauffement, refroidissement, télémétrie, reprise après interruption."""
+"""Running an experiment: randomised plan, warm-up, cool-down, telemetry, resume after interruption."""
 from __future__ import annotations
 
 import csv
@@ -31,7 +31,7 @@ def _read_done(path: Path) -> set[str]:
 
 def _append(path: Path, row: dict) -> None:
     new = not path.exists()
-    if not new:  # garder les colonnes cohérentes : on relit l'en-tête existant
+    if not new:  # keep the columns consistent: read the existing header back
         with open(path, newline="") as f:
             header = next(csv.reader(f))
     else:
@@ -77,8 +77,8 @@ def run_experiment(exp: Experiment, gpu, outdir: Path, *, mode: str = "managed",
         [{"seq": i, "cid": c.cid, "rep": r, "factors": c.factor_values} for i, (c, r) in enumerate(plan)], indent=2, default=str))
     done = _read_done(runs_csv)
     todo = [(i, c, r) for i, (c, r) in enumerate(plan) if f"{c.cid}_{r}" not in done]
-    log(f"Plan : {len(plan)} mesures ({len(exp.conditions)} conditions × {raw['repetitions']} répétitions), "
-        f"{len(done)} déjà faites, {len(todo)} restantes.")
+    log(f"Plan: {len(plan)} measurements ({len(exp.conditions)} conditions × {raw['repetitions']} repetitions), "
+        f"{len(done)} already done, {len(todo)} remaining.")
     for c in exp.conditions:
         problem = check_fits(c.values) if raw["workload"] not in ("arith", "arith_easy") else None
         if problem:
@@ -91,14 +91,14 @@ def run_experiment(exp: Experiment, gpu, outdir: Path, *, mode: str = "managed",
     if mode == "external":
         varied = [k for k in raw["factors"] if k in ("kv_cache_type", "flash_attention", "num_parallel")]
         if varied:
-            raise ValueError(f"Mode externe : impossible de faire varier {varied} (redémarrage serveur requis).")
+            raise ValueError(f"External mode: cannot vary {varied} (server restart required).")
 
     meta = {"labbench": __version__, "started": dt.datetime.now().isoformat(timespec="seconds"),
             "host": platform.node(), "gpu": info.__dict__, "mode": mode, "original_power_limit_w": original_limit}
     sampler = Sampler(gpu, 0.1).start()
     idle_s = float(raw.get("idle_s", 0))
     if idle_s > 0 and not done:
-        log(f"Puissance au repos ({idle_s:.0f} s)…")
+        log(f"Idle power ({idle_s:.0f} s)…")
         meta["idle"] = measure_idle(gpu, idle_s)
         log(f"  repos : {meta['idle'].get('avg_power_w', math.nan):.1f} W, {meta['idle'].get('max_temp_c', math.nan):.0f} °C")
     elif (outdir / "meta.json").exists():
@@ -118,33 +118,33 @@ def run_experiment(exp: Experiment, gpu, outdir: Path, *, mode: str = "managed",
                 client = server.start(server_env(v))
                 meta["ollama_version"] = client.version()
                 current_skey, last_ctx = cond.server_key, None
-                client.generate(model, "ok", num_ctx=int(v["num_ctx"]), num_predict=1)   # chargement du modèle
-                try:    # trace de ce qu'Ollama a réellement appliqué (parallélisme, couches sur GPU…)
+                client.generate(model, "ok", num_ctx=int(v["num_ctx"]), num_predict=1)   # loading the model
+                try:    # record of what Ollama really applied (parallelism, layers on GPU…)
                     with open(outdir / "server-logs.txt", "a", encoding="utf-8") as f:
                         f.write(f"=== bloc serveur {dict(zip(('kv_cache_type', 'flash_attention', 'num_parallel'), cond.server_key))} ===\n"
                                 f"{server.log_excerpt()}\n\n")
                 except Exception as e:      # jamais bloquant
-                    log(f"  (journal du serveur non enregistré : {e})")
+                    log(f"  (server log not recorded: {e})")
                 cpt = calibrate(client, model, int(v["num_ctx"]))
                 meta.setdefault("chars_per_token", cpt)
                 for w in range(int(raw["warmup"])):
-                    log(f"  échauffement {w + 1}/{raw['warmup']}")
+                    log(f"  warm-up {w + 1}/{raw['warmup']}")
                     WORKLOADS[raw["workload"]](client, model, v, 999 + w, cpt)
-            elif client and current_skey is None:       # mode externe : première fois
+            elif client and current_skey is None:       # external mode: first time
                 current_skey = cond.server_key
                 meta["ollama_version"] = client.version()
                 client.generate(model, "ok", num_ctx=int(v["num_ctx"]), num_predict=1)
                 cpt = calibrate(client, model, int(v["num_ctx"]))
                 meta.setdefault("chars_per_token", cpt)
                 for w in range(int(raw["warmup"])):
-                    log(f"  échauffement {w + 1}/{raw['warmup']}")
+                    log(f"  warm-up {w + 1}/{raw['warmup']}")
                     WORKLOADS[raw["workload"]](client, model, v, 999 + w, cpt)
             assert client is not None
 
             if "power_limit_w" in v and v["power_limit_w"] is not None and abs(gpu.power_limit_w() - float(v["power_limit_w"])) > 0.5:
                 gpu.set_power_limit(float(v["power_limit_w"]))
                 log(f"  limite de puissance → {v['power_limit_w']} W")
-            # recharger le modèle si le contexte change (sinon Ollama le fait pendant la mesure)
+            # reload the model if the context changes (otherwise Ollama does it during the measurement)
             if last_ctx != int(v["num_ctx"]):
                 client.generate(model, "ok", num_ctx=int(v["num_ctx"]), num_predict=1)
                 last_ctx = int(v["num_ctx"])
@@ -156,7 +156,7 @@ def run_experiment(exp: Experiment, gpu, outdir: Path, *, mode: str = "managed",
             e0, t0 = gpu.energy_mj(), time.time()
             try:
                 m = wl(client, model, v, int(raw["seed"]) * 1000 + seq, cpt)
-            except Exception as e:  # une mesure ratée ne doit pas tuer toute l'expérience
+            except Exception as e:  # a failed measurement must not kill the whole experiment
                 m = {"n_ok": 0, "n_err": 1, "error": f"{type(e).__name__}: {e}"}
             e1, t1 = gpu.energy_mj(), time.time()
             sampler.current_run = ""
@@ -174,9 +174,9 @@ def run_experiment(exp: Experiment, gpu, outdir: Path, *, mode: str = "managed",
             _append(runs_csv, row)
             if m.get("n_err", 0) and not m.get("n_ok", 0):
                 consecutive_fail += 1
-                log(f"  [{n}/{len(todo)}] ÉCHEC {run_id}: {m.get('error', '')[:150]}")
+                log(f"  [{n}/{len(todo)}] FAILED {run_id}: {m.get('error', '')[:150]}")
                 if consecutive_fail >= 3:
-                    raise RuntimeError("3 échecs consécutifs : arrêt (relance la même commande pour reprendre).")
+                    raise RuntimeError("3 consecutive failures: stopping (run the same command again to resume).")
             else:
                 consecutive_fail = 0
                 log(f"  [{n}/{len(todo)}] {run_id} {cond.factor_values} → decode {m.get('decode_tps', math.nan):.1f} tok/s, "
@@ -189,9 +189,9 @@ def run_experiment(exp: Experiment, gpu, outdir: Path, *, mode: str = "managed",
         try:
             if abs(gpu.power_limit_w() - original_limit) > 0.5:
                 gpu.set_power_limit(original_limit)
-                log(f"Limite de puissance restaurée : {original_limit:.0f} W")
+                log(f"Power limit restored: {original_limit:.0f} W")
         except Exception as e:
-            log(f"!! Impossible de restaurer la limite de puissance ({original_limit:.0f} W) : {e}")
+            log(f"!! Could not restore the power limit ({original_limit:.0f} W): {e}")
         if server:
             server.restore()
         meta["finished"] = dt.datetime.now().isoformat(timespec="seconds")

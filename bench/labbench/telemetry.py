@@ -1,4 +1,4 @@
-"""Échantillonneur de télémétrie GPU en arrière-plan (10 Hz par défaut) + résumés par fenêtre."""
+"""Background GPU telemetry sampler (10 Hz by default) + per-window summaries."""
 from __future__ import annotations
 
 import csv
@@ -71,7 +71,7 @@ class Sampler:
             "avg_mem_mhz": float(a("mem_mhz").mean()),
             "avg_util_gpu": float(a("util_gpu").mean()),
             "peak_mem_used_mb": float(a("mem_used_mb").max()),
-            # parts du temps (parmi les échantillons "GPU occupé") où une limitation est active
+            # shares of time (among "GPU busy" samples) where a throttling reason is active
             "thr_power_frac": float(((thr & g.THR_SW_POWER_CAP) > 0)[busy].sum() / busy_n) if busy.any() else 0.0,
             "thr_thermal_frac": float((((thr & (g.THR_SW_THERMAL | g.THR_HW_THERMAL)) > 0))[busy].sum() / busy_n) if busy.any() else 0.0,
             "thr_hw_frac": float((((thr & (g.THR_HW_SLOWDOWN | g.THR_HW_POWER_BRAKE)) > 0))[busy].sum() / busy_n) if busy.any() else 0.0,

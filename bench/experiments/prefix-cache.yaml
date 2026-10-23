@@ -1,4 +1,4 @@
-# Cache de préfixe : gain de TTFT quand un long début de prompt est réutilisé (agents, RAG, system prompt)
+# Prefix cache: TTFT gain when a long prompt start is reused (agents, RAG, system prompt)
 name: prefix-cache
 repetitions: 6
 warmup: 1

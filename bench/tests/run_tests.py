@@ -1,4 +1,4 @@
-"""Lance les tests sans pytest : python tests/run_tests.py"""
+"""Runs the tests without pytest: python tests/run_tests.py"""
 import sys, traceback
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))

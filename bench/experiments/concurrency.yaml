@@ -1,4 +1,4 @@
-# Parallélisme : OLLAMA_NUM_PARALLEL × nombre de clients simultanés (débit agrégé vs latence par client)
+# Parallelism: OLLAMA_NUM_PARALLEL × number of simultaneous clients (aggregate throughput vs per-client latency)
 name: concurrency
 repetitions: 5
 warmup: 1

@@ -1,8 +1,8 @@
-# Qualité vs cache KV, version fine : 150 calculs FACILES (2 chiffres x 1 chiffre + 2 chiffres), mêmes questions pour les 3 caches.
-# Pourquoi : kv-quality (12 calculs difficiles, 3 justes sur 12) ne pouvait pas montrer une perte. Ici le modèle doit réussir
-# presque tout ; une baisse de `q4_0` ou `q8_0` devient visible. Température 0 : les 2 répétitions donnent des réponses presque
-# identiques (un identifiant aléatoire en tête de prompt peut changer 1 ou 2 réponses) ; l'information utile est le taux
-# sur 150 questions. Attention : chaque question ne remplit que ≈ 65 tokens de cache KV, donc le test sollicite peu la quantification.
+# Quality vs KV cache, finer version: 150 EASY calculations (2 digits x 1 digit + 2 digits), same questions for the 3 caches.
+# Why: kv-quality (12 hard calculations, 3 correct out of 12) could not show a loss. Here the model must get almost
+# everything right; a drop for `q4_0` or `q8_0` becomes visible. Temperature 0: the 2 repetitions give almost identical
+# answers (a random identifier at the start of the prompt can change 1 or 2 answers); the useful information is the rate
+# over 150 questions. Careful: each question only fills ≈ 65 tokens of KV cache, so the test puts little load on quantisation.
 name: kv-quality-easy
 repetitions: 2
 warmup: 1

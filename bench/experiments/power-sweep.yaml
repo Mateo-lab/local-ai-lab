@@ -1,4 +1,4 @@
-# Perte de performance selon la limite de puissance du GPU (tok/s, J/token, température, fréquence)
+# Performance loss depending on the GPU power limit (tok/s, J/token, temperature, clock)
 name: power-sweep
 repetitions: 7
 warmup: 2

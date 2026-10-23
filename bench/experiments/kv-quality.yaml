@@ -1,4 +1,4 @@
-# Qualité vs cache KV : 12 calculs (arithmétique) par mesure. Détecte une dégradation due à la quantification
+# Quality vs KV cache: 12 (arithmetic) calculations per measurement. Detects a degradation due to quantisation
 name: kv-quality
 repetitions: 10
 warmup: 1

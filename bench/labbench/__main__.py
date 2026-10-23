@@ -1,4 +1,4 @@
-"""CLI : python -m labbench {check,list,run,report}"""
+"""CLI: python -m labbench {check,list,run,report}"""
 from __future__ import annotations
 
 import argparse
@@ -24,27 +24,27 @@ def cmd_check(a):
     try:
         g = open_gpu()
         i = g.info()
-        print(f"GPU            : {i.name} (pilote {i.driver})")
-        print(f"Limite         : {i.power_limit_w:.0f} W actuelle · défaut {i.power_default_w:.0f} W · bornes [{i.power_min_w:.0f} ; {i.power_max_w:.0f}] W")
+        print(f"GPU            : {i.name} (driver {i.driver})")
+        print(f"Limit          : {i.power_limit_w:.0f} W current · default {i.power_default_w:.0f} W · bounds [{i.power_min_w:.0f}; {i.power_max_w:.0f}] W")
         s = g.sample()
-        print(f"État           : {s['temp_c']:.0f} °C · {s['power_w']:.0f} W · VRAM utilisée {s['mem_used_mb']:.0f}/{i.mem_total_mb:.0f} Mo · "
-              f"compteur d'énergie {'OK' if s['energy_mj'] == s['energy_mj'] else 'INDISPONIBLE (mesure par intégration impossible)'}")
+        print(f"State          : {s['temp_c']:.0f} °C · {s['power_w']:.0f} W · VRAM used {s['mem_used_mb']:.0f}/{i.mem_total_mb:.0f} MB · "
+              f"energy counter {'OK' if s['energy_mj'] == s['energy_mj'] else 'UNAVAILABLE (measurement by integration impossible)'}")
     except Exception as e:
-        print("GPU            : ERREUR", e); return 1
+        print("GPU            : ERROR", e); return 1
     r = subprocess.run(["sudo", "-n", "true"], capture_output=True)
     if r.returncode == 0:
-        print("sudo           : OK (réglage de la limite de puissance possible)")
+        print("sudo           : OK (power limit can be set)")
     else:
-        print("sudo           : pas de droits en cache → lance 'sudo -v' avant un test avec power_limit_w"); ok = False
+        print("sudo           : no cached rights → run 'sudo -v' before a test with power_limit_w"); ok = False
     r = subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True)
     if r.returncode == 0:
         names = r.stdout.split()
-        print(f"Docker         : OK · conteneurs actifs : {', '.join(names) or 'aucun'}")
+        print(f"Docker         : OK · running containers: {', '.join(names) or 'none'}")
         busy = [n for n in names if n in ("comfyui", "hermes", "open-webui", "ollama-bench")]
         if busy:
-            print(f"  ⚠ à arrêter/éviter pendant un test (ils peuvent utiliser le GPU) : {', '.join(busy)}")
+            print(f"  ⚠ to stop/avoid during a test (they may use the GPU): {', '.join(busy)}")
     else:
-        print("Docker         : inaccessible", r.stderr.strip()); ok = False
+        print("Docker         : unreachable", r.stderr.strip()); ok = False
     return 0 if ok else 1
 
 
@@ -64,7 +64,7 @@ def cmd_run(a):
     if not a.dry_run:
         from .report import build_report
         p = build_report(out)
-        print(f"\nRésultats : {out}\nRapport   : {p}")
+        print(f"\nResults: {out}\nReport : {p}")
     return 0
 
 
@@ -75,19 +75,19 @@ def cmd_report(a):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="labbench", description="Banc d'essai LLM local (Ollama + télémétrie GPU)")
+    ap = argparse.ArgumentParser(prog="labbench", description="Local LLM benchmark bench (Ollama + GPU telemetry)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list").set_defaults(f=cmd_list)
     sub.add_parser("check").set_defaults(f=cmd_check)
     r = sub.add_parser("run")
     r.add_argument("experiment")
     r.add_argument("--model")
-    r.add_argument("--reps", type=int, help="remplace 'repetitions' du YAML")
-    r.add_argument("--url", help="mode externe : mesure cet Ollama tel quel (pas de redémarrage)")
-    r.add_argument("--volume", default="ai-stack_ollama_data", help="volume Docker contenant les modèles")
+    r.add_argument("--reps", type=int, help="replaces 'repetitions' from the YAML")
+    r.add_argument("--url", help="external mode: measures this Ollama as is (no restart)")
+    r.add_argument("--volume", default="ai-stack_ollama_data", help="Docker volume containing the models")
     r.add_argument("--port", type=int, default=11435)
-    r.add_argument("--resume", help="dossier de résultats à reprendre")
-    r.add_argument("--dry-run", action="store_true", help="affiche le plan sans rien exécuter")
+    r.add_argument("--resume", help="results folder to resume")
+    r.add_argument("--dry-run", action="store_true", help="shows the plan without running anything")
     r.set_defaults(f=cmd_run)
     p = sub.add_parser("report"); p.add_argument("dir"); p.set_defaults(f=cmd_report)
     a = ap.parse_args(argv)

@@ -1,7 +1,7 @@
-# Vitesse de DÉCODAGE par type de cache KV, à contexte profond (~24 000 caractères remplis).
-# Pourquoi : dans kv-cache, le modèle ne répondait qu'en 4 à 7 tokens (un code de 6 caractères), donc la vitesse de
-# décodage y est invalide. Ici la charge "mixed" demande un long texte : jusqu'à 128 tokens générés.
-# Mesure aussi la VRAM (colonne peak_mem_used_mb de runs.csv). Pas de test de justesse : voir kv-quality.
+# DECODING speed per KV cache type, with a deep context (~24,000 characters filled).
+# Why: in kv-cache, the model only answered with 4 to 7 tokens (a 6-character code), so the decoding speed is
+# invalid there. Here the "mixed" workload asks for a long text: up to 128 generated tokens.
+# Also measures VRAM (peak_mem_used_mb column of runs.csv). No accuracy test: see kv-quality.
 name: kv-decode
 repetitions: 6
 warmup: 1

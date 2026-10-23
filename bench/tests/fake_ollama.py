@@ -1,4 +1,4 @@
-"""Faux serveur Ollama pour tester le banc sans GPU ni modèle. La vitesse dépend de la limite de puissance du FakeGpu."""
+"""Fake Ollama server to test the bench without a GPU or a model. The speed depends on the FakeGpu's power limit."""
 import json
 import re
 import threading
@@ -31,7 +31,7 @@ def make_server(gpu, port=0):
             n_pred = body.get("options", {}).get("num_predict", 16)
             if not prompt or body.get("keep_alive") == 0:
                 return self._json({"done": True})
-            speed = max(0.2, (gpu.limit - 80) / 270)          # 1.0 à 350 W
+            speed = max(0.2, (gpu.limit - 80) / 270)          # 1.0 at 350 W
             ptoks = max(1, len(prompt) // 4)
             common = 0
             for a, b in zip(prompt, state["last_prompt"]):
@@ -44,7 +44,7 @@ def make_server(gpu, port=0):
             t0 = time.time()
             time.sleep(max(0.0, (ptoks - cached) / (20000 * speed)))
             pe = time.time() - t0
-            m = re.search(r"code secret est ([A-Z0-9]{6})", prompt)
+            m = re.search(r"secret code is ([A-Z0-9]{6})", prompt)
             text = (m.group(1) if m else "42") + " lorem" * 5
             self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.end_headers()
             toks = text.split(" ") * 1

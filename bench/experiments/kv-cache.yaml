@@ -1,4 +1,4 @@
-# Cache KV (f16 / q8_0 / q4_0) × flash attention : VRAM, vitesse et qualité (retrouver une info dans un long contexte)
+# KV cache (f16 / q8_0 / q4_0) × flash attention: VRAM, speed and quality (finding a fact in a long context)
 name: kv-cache
 repetitions: 6
 warmup: 1

@@ -1,10 +1,10 @@
-"""Client Ollama (streaming, mesures fines) + gestion du serveur de test.
+"""Ollama client (streaming, fine-grained measurements) + management of the test server.
 
-Deux modes :
-  - managed  : le banc démarre son propre conteneur 'ollama-bench' (port 127.0.0.1:11435), avec les
-               variables d'environnement du bloc en cours (cache KV, flash attention, parallélisme).
-               L'Ollama de production ('ollama') est arrêté pendant le test, puis relancé à la fin.
-  - external : on mesure un Ollama existant tel quel (les facteurs "serveur" ne peuvent pas varier).
+Two modes:
+  - managed  : the bench starts its own 'ollama-bench' container (port 127.0.0.1:11435), with the
+               environment variables of the current block (KV cache, flash attention, parallelism).
+               The production Ollama ('ollama') is stopped during the test, then restarted at the end.
+  - external : an existing Ollama is measured as is (the "server" factors cannot vary).
 """
 from __future__ import annotations
 
@@ -24,11 +24,11 @@ PROD_CONTAINER = "ollama"
 class GenResult:
     ok: bool
     error: str = ""
-    ttft_s: float = float("nan")          # délai avant le 1er token (réponse ou "thinking")
-    total_s: float = float("nan")         # durée client totale
+    ttft_s: float = float("nan")          # time to the 1st token (answer or "thinking")
+    total_s: float = float("nan")         # total client-side duration
     prompt_tokens: int = 0
     gen_tokens: int = 0
-    prompt_eval_s: float = float("nan")   # mesuré par Ollama
+    prompt_eval_s: float = float("nan")   # measured by Ollama
     eval_s: float = float("nan")
     load_s: float = float("nan")
     itl_ms: list = field(default_factory=list)   # latences inter-chunks (ms)
@@ -57,7 +57,7 @@ class OllamaClient:
             except requests.RequestException:
                 pass
             time.sleep(1)
-        raise RuntimeError(f"Ollama ne répond pas sur {self.url}")
+        raise RuntimeError(f"Ollama does not answer on {self.url}")
 
     def version(self) -> str:
         return requests.get(f"{self.url}/api/version", timeout=10).json().get("version", "?")
@@ -77,7 +77,7 @@ class OllamaClient:
             pass
 
     def placement(self, model: str) -> dict:
-        """Part du modèle en VRAM + contexte effectif, d'après /api/ps."""
+        """Share of the model in VRAM + effective context, according to /api/ps."""
         for m in self.ps():
             if m.get("name") == model or m.get("model") == model:
                 size, vram = m.get("size", 0), m.get("size_vram", 0)
@@ -138,7 +138,7 @@ def _sh(cmd: list[str], check=True) -> subprocess.CompletedProcess:
 
 
 class ManagedServer:
-    """Conteneur Ollama dédié au banc, redémarré avec l'environnement de chaque bloc."""
+    """Ollama container dedicated to the bench, restarted with each block's environment."""
 
     def __init__(self, image: str, volume: str, port: int = 11435, gpu_index: int = 0):
         self.image, self.volume, self.port, self.gpu_index = image, volume, port, gpu_index
@@ -150,10 +150,10 @@ class ManagedServer:
     def prepare(self) -> None:
         r = _sh(["docker", "ps", "--format", "{{.Names}}"], check=False)
         if r.returncode != 0:
-            raise RuntimeError("Docker inaccessible : " + r.stderr.strip())
+            raise RuntimeError("Docker unreachable: " + r.stderr.strip())
         self.prod_was_running = PROD_CONTAINER in r.stdout.split()
         if self.prod_was_running:
-            print("  - arrêt temporaire de l'Ollama de production (relancé en fin de test)")
+            print("  - temporarily stopping the production Ollama (restarted at the end of the test)")
             _sh(["docker", "stop", PROD_CONTAINER])
         self.stop()
 
@@ -171,8 +171,8 @@ class ManagedServer:
         return cli
 
     def log_excerpt(self, max_lines: int = 80) -> str:
-        """Lignes utiles du journal du serveur (parallélisme, contexte, couches sur GPU, mémoire) : permet de vérifier
-        que les réglages demandés (ex. OLLAMA_NUM_PARALLEL) ont vraiment été appliqués par Ollama."""
+        """Useful lines of the server log (parallelism, context, layers on GPU, memory): makes it possible to check
+        that the requested settings (e.g. OLLAMA_NUM_PARALLEL) were really applied by Ollama."""
         r = _sh(["docker", "logs", "--tail", "800", BENCH_CONTAINER], check=False)
         text = (r.stdout or "") + (r.stderr or "")
         keep = re.compile(r"(?i)parallel|num_ctx|n_ctx|kvsize|kv cache|offload|layers|memory|--ctx-size|runner|flash|cache_type")
@@ -184,12 +184,12 @@ class ManagedServer:
     def restore(self) -> None:
         self.stop()
         if self.prod_was_running:
-            print("  - relance de l'Ollama de production")
+            print("  - restarting the production Ollama")
             _sh(["docker", "start", PROD_CONTAINER], check=False)
 
 
 def server_env(values: dict) -> dict[str, str]:
-    """Traduit les facteurs "serveur" en variables d'environnement Ollama."""
+    """Translates the "server" factors into Ollama environment variables."""
     return {
         "OLLAMA_KV_CACHE_TYPE": str(values.get("kv_cache_type", "f16")),
         "OLLAMA_FLASH_ATTENTION": str(int(values.get("flash_attention", 1))),

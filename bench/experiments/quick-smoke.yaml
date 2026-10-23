@@ -1,4 +1,4 @@
-# Test rapide (~5 min) : vérifie que tout fonctionne, ne conclut rien
+# Quick test (~5 min): checks that everything works, concludes nothing
 name: quick-smoke
 repetitions: 3
 warmup: 1

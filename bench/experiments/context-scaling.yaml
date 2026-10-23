@@ -1,4 +1,4 @@
-# Coût du contexte : prefill et génération selon la quantité de texte déjà dans le contexte
+# Cost of the context: prefill and generation depending on the amount of text already in the context
 name: context-scaling
 repetitions: 5
 warmup: 1

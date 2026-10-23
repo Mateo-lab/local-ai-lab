@@ -1,6 +1,7 @@
-"""Charges de travail. Chaque prompt commence par un nonce unique : sans lui, Ollama réutilise le cache de
-préfixe (KV) d'une exécution précédente et la mesure du prefill serait faussée (sauf pour 'prefix_cache', où
-c'est justement l'objet de la mesure)."""
+"""Workloads. Every prompt starts with a unique nonce: without it, Ollama reuses the prefix (KV) cache
+of a previous run and the prefill measurement would be skewed (except for 'prefix_cache', where that is
+precisely what is measured).
+The prompts were in French in the first versions: results from those runs are not strictly comparable."""
 from __future__ import annotations
 
 import math
@@ -14,13 +15,13 @@ import numpy as np
 
 from .ollama import GenResult, OllamaClient
 
-_WORDS = ("cadre signal fenêtre moteur rivière tableau lumière chapitre horizon vitesse matrice courbe "
-          "mémoire réseau capteur batterie tension fréquence couche modèle entrée sortie segment tampon "
-          "latence débit jeton vecteur noyau registre canal phase seuil mesure erreur balance").split()
+_WORDS = ("frame signal window engine river table light chapter horizon speed matrix curve "
+          "memory network sensor battery voltage frequency layer model input output segment buffer "
+          "latency throughput token vector kernel register channel phase threshold measure error balance").split()
 
 
 def filler(n_tokens: int, rng: random.Random, chars_per_token: float) -> str:
-    """Texte pseudo-aléatoire reproductible d'environ n_tokens tokens."""
+    """Reproducible pseudo-random text of about n_tokens tokens."""
     target = int(max(0, n_tokens) * chars_per_token)
     out, size = [], 0
     while size < target:
@@ -31,7 +32,7 @@ def filler(n_tokens: int, rng: random.Random, chars_per_token: float) -> str:
 
 
 def calibrate(client: OllamaClient, model: str, num_ctx: int) -> float:
-    """Estime caractères/token pour ce modèle avec une requête courte (num_predict=1)."""
+    """Estimates characters/token for this model with a short request (num_predict=1)."""
     rng = random.Random(7)
     text = filler(400, rng, 4.0)
     r = client.generate(model, f"[{uuid.uuid4().hex}] {text}\nOK ?", num_ctx=max(num_ctx, 2048), num_predict=1)
@@ -73,14 +74,14 @@ def _gen_kwargs(v: dict, num_predict: int | None = None) -> dict:
 def check_fits(v: dict) -> str | None:
     need = int(v["ctx_depth"]) + int(v["gen_tokens"]) + 64
     if need > int(v["num_ctx"]):
-        return f"ctx_depth({v['ctx_depth']}) + gen_tokens({v['gen_tokens']}) dépasse num_ctx({v['num_ctx']})"
+        return f"ctx_depth({v['ctx_depth']}) + gen_tokens({v['gen_tokens']}) exceeds num_ctx({v['num_ctx']})"
     return None
 
 
 def run_mixed(c: OllamaClient, model: str, v: dict, seed: int, cpt: float) -> dict:
     rng = random.Random(seed)
-    prompt = (f"{_nonce()}\nVoici un texte de remplissage :\n{filler(int(v['ctx_depth']), rng, cpt)}\n\n"
-              "Écris maintenant un long texte descriptif et détaillé sur le fonctionnement d'un processeur graphique.")
+    prompt = (f"{_nonce()}\nHere is some filler text:\n{filler(int(v['ctx_depth']), rng, cpt)}\n\n"
+              "Now write a long, detailed descriptive text about how a graphics processor works.")
     r = c.generate(model, prompt, seed=seed, **_gen_kwargs(v))
     return _common([r])
 
@@ -92,9 +93,9 @@ def run_needle(c: OllamaClient, model: str, v: dict, seed: int, cpt: float) -> d
     total = int(v["ctx_depth"])
     before = filler(int(total * depth), rng, cpt)
     after = filler(int(total * (1 - depth)), rng, cpt)
-    prompt = (f"{_nonce()}\nLis le texte suivant.\n\n{before}\nINFORMATION IMPORTANTE : le code secret est {code}.\n"
-              f"{after}\n\nQuestion : quel est le code secret ? Réponds uniquement par le code.")
-    # si "think" est actif, il faut laisser de la place au raisonnement
+    prompt = (f"{_nonce()}\nRead the following text.\n\n{before}\nIMPORTANT INFORMATION: the secret code is {code}.\n"
+              f"{after}\n\nQuestion: what is the secret code? Answer with the code only.")
+    # if "think" is on, room must be left for the reasoning
     r = c.generate(model, prompt, seed=seed, **_gen_kwargs(v, num_predict=int(v["gen_tokens"])))
     out = _common([r])
     found = code in (r.text or "").upper().replace(" ", "") if r.ok else False
@@ -106,17 +107,17 @@ def run_prefix_cache(c: OllamaClient, model: str, v: dict, seed: int, cpt: float
     rng = random.Random(seed)
     prefix = f"{_nonce()}\n{filler(int(v['ctx_depth']), rng, cpt)}\n\n"
     kw = _gen_kwargs(v, num_predict=min(32, int(v["gen_tokens"])))
-    cold = c.generate(model, prefix + "Résume en une phrase.", seed=seed, **kw)
-    warm = c.generate(model, prefix + "Résume en deux mots.", seed=seed, **kw)
+    cold = c.generate(model, prefix + "Summarise in one sentence.", seed=seed, **kw)
+    warm = c.generate(model, prefix + "Summarise in two words.", seed=seed, **kw)
     out = _common([cold])
     out.update({
         "cold_prompt_eval_s": cold.prompt_eval_s, "warm_prompt_eval_s": warm.prompt_eval_s,
         "cold_prompt_tokens": cold.prompt_tokens, "warm_prompt_tokens": warm.prompt_tokens,
         "cold_ttft_s": cold.ttft_s, "warm_ttft_s": warm.ttft_s,
         "cache_ttft_speedup": (cold.ttft_s / warm.ttft_s) if warm.ok and warm.ttft_s and warm.ttft_s > 0 else math.nan,
-        # part du travail de lecture évitée = 1 - temps de lecture du prompt (2e requête) / temps de lecture (1re requête).
-        # Mesuré le 2026-10-19 : Ollama renseigne prompt_eval_count avec le prompt COMPLET même quand le préfixe est réutilisé,
-        # donc un calcul sur les nombres de tokens donnait toujours 0 ; le temps, lui, tombe de 18 s à 0,7 s.
+        # share of the reading work avoided = 1 - prompt reading time (2nd request) / reading time (1st request).
+        # Measured: Ollama reports prompt_eval_count with the COMPLETE prompt even when the prefix is reused,
+        # so a calculation on token counts always gave 0; the time, on the other hand, drops from 18 s to 0.7 s.
         "cache_reuse_frac": (1 - warm.prompt_eval_s / cold.prompt_eval_s) if (cold.prompt_eval_s and cold.prompt_eval_s > 0 and warm.ok) else math.nan,
     })
     return out
@@ -129,7 +130,7 @@ def run_concurrency(c: OllamaClient, model: str, v: dict, seed: int, cpt: float)
     def one(i):
         rng = random.Random(seed * 1000 + i)
         prompt = (f"{_nonce()}\n{filler(int(v['ctx_depth']), rng, cpt)}\n\n"
-                  "Écris un long texte descriptif sur la gestion de la mémoire dans un ordinateur.")
+                  "Write a long descriptive text about memory management in a computer.")
         results[i] = c.generate(model, prompt, seed=seed + i, **_gen_kwargs(v))
 
     t0 = time.perf_counter()
@@ -146,12 +147,12 @@ def run_concurrency(c: OllamaClient, model: str, v: dict, seed: int, cpt: float)
 
 
 def run_arith(c: OllamaClient, model: str, v: dict, seed: int, cpt: float) -> dict:
-    """Mini test de qualité : 12 calculs. Sensible à la dégradation due à une quantification agressive du cache KV."""
-    rng = random.Random(4242)  # mêmes questions à chaque exécution : seule la configuration varie
+    """Small quality test: 12 calculations. Sensitive to degradation due to aggressive KV cache quantisation."""
+    rng = random.Random(4242)  # same questions at every run: only the configuration varies
     qs = []
     for _ in range(12):
         a, b, cc = rng.randint(120, 989), rng.randint(12, 97), rng.randint(100, 900)
-        qs.append((f"Calcule {a} * {b} + {cc}. Réponds uniquement par le nombre.", a * b + cc))
+        qs.append((f"Compute {a} * {b} + {cc}. Answer with the number only.", a * b + cc))
     ok, rs = 0, []
     for q, ans in qs:
         r = c.generate(model, f"{_nonce()}\n{q}", seed=seed, **_gen_kwargs(v, num_predict=int(v["gen_tokens"])))
@@ -169,15 +170,15 @@ ARITH_EASY_N = 150
 
 
 def run_arith_easy(c: OllamaClient, model: str, v: dict, seed: int, cpt: float) -> dict:
-    """Test de qualité plus fin que `arith` : 150 calculs FACILES (2 chiffres × 1 chiffre + 2 chiffres), mêmes questions
-    pour tous les types de cache. Le modèle doit en réussir la grande majorité sans raisonner, pour qu'une perte soit visible.
-    La température est nulle, mais un identifiant aléatoire est placé en tête de chaque prompt : deux répétitions peuvent différer
-    d'une question ou deux (constaté le 2026-10-19). Les contextes sont courts (≈ 65 tokens par question) : le cache KV est peu sollicité."""
+    """Finer quality test than `arith`: 150 EASY calculations (2 digits × 1 digit + 2 digits), same questions
+    for every cache type. The model must get the vast majority right without reasoning, so that a loss is visible.
+    The temperature is zero, but a random identifier is placed at the start of each prompt: two repetitions may differ
+    by a question or two (observed). The contexts are short (≈ 65 tokens per question): the KV cache gets little load."""
     rng = random.Random(777)
     qs = []
     for _ in range(ARITH_EASY_N):
         a, b, cc = rng.randint(12, 99), rng.randint(2, 9), rng.randint(10, 99)
-        qs.append((f"Calcule {a} * {b} + {cc}. Réponds uniquement par le nombre.", a * b + cc))
+        qs.append((f"Compute {a} * {b} + {cc}. Answer with the number only.", a * b + cc))
     ok, rs = 0, []
     for q, ans in qs:
         r = c.generate(model, f"{_nonce()}\n{q}", seed=seed, **_gen_kwargs(v, num_predict=int(v["gen_tokens"])))

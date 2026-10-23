@@ -31,15 +31,15 @@ cooldown: {target_c: 999, max_wait_s: 1}
 request: {num_ctx: 8192, ctx_depth: 400, gen_tokens: 40}
 factors: {power_limit_w: [350, 200]}
 """, "t")
-    assert abs(gpu.limit - 350) < 1e-6          # limite d'origine restaurée
+    assert abs(gpu.limit - 350) < 1e-6          # original limit restored
     df = pd.read_csv(out / "runs.csv")
     assert len(df) == 8 and (df.n_ok == 1).all()
     a = df[df.power_limit_w == 350].decode_tps.mean(); b = df[df.power_limit_w == 200].decode_tps.mean()
-    assert b < a * 0.7, (a, b)                  # la perte est bien mesurée
+    assert b < a * 0.7, (a, b)                  # the loss is measured
     assert (df[df.power_limit_w == 200].avg_power_w <= 201).all()
     rep = build_report(out)
     html = rep.read_text()
-    assert "Variation par rapport" in html and "data:image/png" in html
+    assert "Variation from the baseline" in html and "data:image/png" in html
     cmp = pd.read_csv(out / "comparisons.csv")
     row = cmp[cmp.power_limit_w == 200].iloc[0]
     assert row.decode_tps_pct < -20 and bool(row.decode_tps_sig)
@@ -52,7 +52,7 @@ def test_resume_skips_done():
     exp = load_experiment(y, "fake:1b"); out = d / "res"
     run_experiment(exp, gpu, out, mode="external", external_url=url, log=lambda m: None)
     n1 = len(pd.read_csv(out / "runs.csv"))
-    (out / "runs.csv").write_text("".join(open(out / "runs.csv").readlines()[:4]))   # simule une coupure
+    (out / "runs.csv").write_text("".join(open(out / "runs.csv").readlines()[:4]))   # simulates an interruption
     run_experiment(exp, gpu, out, mode="external", external_url=url, log=lambda m: None)
     df = pd.read_csv(out / "runs.csv"); srv.shutdown()
     assert n1 == 6 and len(df) == 6 and df.run_id.is_unique
