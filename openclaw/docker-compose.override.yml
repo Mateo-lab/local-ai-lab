@@ -1,12 +1,12 @@
-# Override copié à la racine du dépôt OpenClaw par install.sh.
+# Override copied to the root of the OpenClaw repository by install.sh.
 #
-# Le compose officiel (dans le dépôt openclaw/openclaw) définit les services
-# `openclaw-gateway` et `openclaw-cli`. `openclaw-cli` partage l'espace réseau
-# de la gateway, donc seule la gateway a besoin d'être rattachée à un réseau.
+# The official compose (in the openclaw/openclaw repository) defines the services
+# `openclaw-gateway` and `openclaw-cli`. `openclaw-cli` shares the gateway's
+# network namespace, so only the gateway needs to be attached to a network.
 #
-# La gateway rejoint `llm-net` (créé par ../ai-stack) pour joindre Ollama via
-# http://ollama:11434. Elle ne rejoint PAS `ai-net` : elle n'a donc aucun accès
-# direct à n8n, Qdrant ni Open WebUI.
+# The gateway joins `llm-net` (created by ../ai-stack) to reach Ollama at
+# http://ollama:11434. It does NOT join `ai-net`: so it has no direct access
+# to n8n, Qdrant or Open WebUI. llm-net is internal: no Internet (docs/agent-isolation.md).
 
 services:
   openclaw-gateway:

@@ -1,171 +1,171 @@
-# Un voyant (siteMonitor) par service : requête HTTP depuis le conteneur, via les réseaux partagés.
-# "href" = adresse à ouvrir dans le navigateur de la machine (ou de ton PC si le tunnel SSH est actif).
+# One light (siteMonitor) per service: HTTP request from the container, through the shared networks.
+# "href" = address to open in the machine's browser (or your PC's if the SSH tunnel is up).
 
 - Interfaces:
-    - Panneau de boutons:
+    - Button panel:
         icon: mdi-gesture-tap-button
         href: http://127.0.0.1:3011
-        description: Modes, mise à jour, sauvegarde, revue Hermes (lab panel install)
+        description: Modes, update, backup, Hermes review (lab panel install)
     - Open WebUI:
         icon: open-webui.png
         href: http://127.0.0.1:3000
-        description: Chat avec les modèles, documents, recherche web, voix
+        description: Chat with the models, documents, web search, voice
         siteMonitor: http://open-webui:8080
     - n8n:
         icon: n8n.png
         href: http://127.0.0.1:5678
-        description: Automatisations
+        description: Automations
         siteMonitor: http://n8n:5678/healthz
     - ComfyUI:
         icon: comfyui.png
         href: http://127.0.0.1:8188
-        description: Images (à lancer avec lab start comfyui)
+        description: Images (start with lab mode images)
         siteMonitor: http://comfyui:8188
     - Qdrant:
         icon: qdrant.png
         href: http://127.0.0.1:6333/dashboard
-        description: Base vectorielle
+        description: Vector database
         siteMonitor: http://qdrant:6333/healthz
 
-- Moteur et outils:
+- Engine and tools:
     - Ollama:
         icon: ollama.png
         href: http://127.0.0.1:11434
-        description: Moteur des modèles (API)
+        description: Model engine (API)
         siteMonitor: http://ollama:11434
     - SearXNG:
         icon: searxng.png
-        description: Recherche web privée (interne)
+        description: Private web search (internal)
         siteMonitor: http://searxng:8080
     - Kokoro:
         icon: mdi-account-voice
-        description: Synthèse vocale (interne)
+        description: Text-to-speech (internal)
         siteMonitor: http://kokoro:8880/docs
     - Tika:
         icon: mdi-file-document-outline
-        description: Extraction de documents (interne)
+        description: Document extraction (internal)
         siteMonitor: http://tika:9998/tika
 
-- Observabilité:
+- Observability:
     - Grafana:
         icon: grafana.png
         href: http://127.0.0.1:3001
-        description: Tableaux de bord (utilisateur admin)
+        description: Dashboards (user admin)
         siteMonitor: http://grafana:3000/api/health
     - Prometheus:
         icon: prometheus.png
         href: http://127.0.0.1:9090
-        description: Métriques et alertes
+        description: Metrics and alerts
         siteMonitor: http://prometheus:9090/-/healthy
     - Langfuse:
         icon: mdi-chart-timeline-variant
         href: http://127.0.0.1:3002
-        description: "Optionnel : suivi des agents (installer avec ./6-langfuse.sh)"
+        description: "Optional: agent tracing (install with ./6-langfuse.sh)"
         siteMonitor: http://langfuse-web:3000/api/public/health
 
-# Agents lancés à la demande. Pas de voyant : voir docs/portal.md (isolation des réseaux d'OpenClaw et Hermes).
-- Agents (à la demande):
+# Agents started on demand. No light: see docs/portal.md (network isolation of OpenClaw and Hermes).
+- Agents (on demand):
     - OpenClaw:
         icon: mdi-robot-outline
         href: http://127.0.0.1:18789
-        description: "Optionnel : agent isolé (installer avec openclaw/install.sh). Pas de voyant"
+        description: "Optional: isolated agent (install with openclaw/install.sh). No light"
     - Hermes:
         icon: mdi-console
-        description: "Optionnel : agent en ligne de commande, lancé avec ./5-hermes.sh (pas d'interface web)"
+        description: "Optional: command-line agent, started with ./5-hermes.sh (no web interface)"
 
-# Mesures lues dans Prometheus (nécessite le monitoring démarré). Chaque carte = une requête.
+# Metrics read from Prometheus (needs monitoring running). Each card = one query.
 - Machine:
-    - GPU puissance:
+    - GPU power:
         icon: mdi-flash
-        description: RTX 3090
+        description: NVIDIA GPU
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=nvidia_smi_power_draw_watts
           refreshInterval: 5000
           mappings:
             - field: data.result.0.value.1
-              label: Puissance
+              label: Power
               format: float
               suffix: " W"
-    - GPU température:
+    - GPU temperature:
         icon: mdi-thermometer
-        description: RTX 3090
+        description: NVIDIA GPU
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=nvidia_smi_temperature_gpu
           refreshInterval: 5000
           mappings:
             - field: data.result.0.value.1
-              label: Température
+              label: Temperature
               format: float
               suffix: " °C"
-    - GPU charge:
+    - GPU load:
         icon: mdi-chip
-        description: Utilisation du GPU
+        description: GPU utilisation
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=round%28nvidia_smi_utilization_gpu_ratio%2A100%2C0.1%29
           refreshInterval: 5000
           mappings:
             - field: data.result.0.value.1
-              label: Charge
+              label: Load
               format: float
               suffix: " %"
-    - GPU état:
+    - GPU state:
         icon: mdi-sleep
-        description: P8 = repos, P2 = calcul actif, P0 = pleine charge
+        description: P8 = idle, P2 = active compute, P0 = full load
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=nvidia_smi_pstate
           refreshInterval: 5000
           mappings:
             - field: data.result.0.value.1
-              label: État
+              label: State
               prefix: "P"
     - VRAM:
         icon: mdi-memory
-        description: Mémoire du GPU utilisée
+        description: GPU memory used
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=nvidia_smi_memory_used_bytes
           refreshInterval: 10000
           mappings:
             - field: data.result.0.value.1
-              label: Utilisée
+              label: Used
               format: bytes
     - RAM:
         icon: mdi-memory
-        description: Mémoire de la machine utilisée
+        description: Machine memory used
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=round%28%281-node_memory_MemAvailable_bytes%2Fnode_memory_MemTotal_bytes%29%2A100%2C0.1%29
           refreshInterval: 10000
           mappings:
             - field: data.result.0.value.1
-              label: Utilisée
+              label: Used
               format: float
               suffix: " %"
-    - Disque système:
+    - System disk:
         icon: mdi-harddisk
-        description: Disque système (/)
+        description: System disk (/)
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=round%28100-node_filesystem_avail_bytes%7Bmountpoint%3D%22%2F%22%7D%2Fnode_filesystem_size_bytes%7Bmountpoint%3D%22%2F%22%7D%2A100%2C0.1%29
           refreshInterval: 60000
           mappings:
             - field: data.result.0.value.1
-              label: Plein à
+              label: Full
               format: float
               suffix: " %"
-    - Disque données:
+    - Data disk:
         icon: mdi-harddisk
-        description: Disque de données le plus rempli (ext4/xfs/btrfs hors /)
+        description: Fullest data disk (ext4/xfs/btrfs except /)
         widget:
           type: customapi
           url: http://prometheus:9090/api/v1/query?query=round%28max%28100-node_filesystem_avail_bytes%7Bfstype%3D~%22ext4%7Cxfs%7Cbtrfs%22%2Cmountpoint%21%3D%22%2F%22%7D%2Fnode_filesystem_size_bytes%7Bfstype%3D~%22ext4%7Cxfs%7Cbtrfs%22%2Cmountpoint%21%3D%22%2F%22%7D%2A100%29%2C0.1%29
           refreshInterval: 60000
           mappings:
             - field: data.result.0.value.1
-              label: Plein à
+              label: Full
               format: float
               suffix: " %"

@@ -1,11 +1,11 @@
-# Hermes Agent (Nous Research) : agent avec sous-agents, mémoire et skills.
-# Image officielle : nousresearch/hermes-agent (tags : stable, latest, main, X.Y.Z).
+# Hermes Agent (Nous Research): agent with sub-agents, memory and skills.
+# Official image: nousresearch/hermes-agent (tags: stable, latest, main, X.Y.Z).
 #
-# Isolation : réseau hermes-net (interne) partagé avec Ollama uniquement (ni n8n, ni Qdrant, ni OpenClaw) ;
-# aucun accès à Internet ni au réseau local, sauf SSH vers les machines de test autorisées (docs/agent-isolation.md).
-# Aucun port publié, et PAS de socket Docker monté : l'agent travaille DANS ce conteneur,
-# qui est son bac à sable. Il ne voit que ./data (sa mémoire ET son dossier de travail ./data/workspace,
-# vu comme /opt/data/workspace dans le conteneur : dépose tes fichiers là).
+# Isolation: hermes-net network (internal) shared with Ollama only (no n8n, Qdrant or OpenClaw);
+# no access to the Internet or the local network, except SSH to the allowed test machines (docs/agent-isolation.md).
+# No published port, and NO Docker socket mounted: the agent works INSIDE this container,
+# which is its sandbox. It only sees ./data (its memory AND its working folder ./data/workspace,
+# seen as /opt/data/workspace in the container: put your files there).
 
 name: hermes
 
@@ -13,20 +13,20 @@ services:
   hermes:
     image: nousresearch/hermes-agent:${HERMES_TAG:-stable}
     container_name: hermes
-    # Utilisé à la demande (voir ../5-hermes.sh) ; pas de service permanent.
+    # Used on demand (see ../5-hermes.sh); not a permanent service.
     restart: "no"
     environment:
       HERMES_UID: ${HERMES_UID:-1000}
       HERMES_GID: ${HERMES_GID:-1000}
     volumes:
       - ./data:/opt/data
-    # Pour les outils navigateur de l'agent (si utilisés)
+    # For the agent's browser tools (if used)
     shm_size: 1g
     mem_limit: 8g
     networks:
       - hermes-net
-      - obs-net # pour envoyer les traces à Langfuse (voir ../langfuse), optionnel
-      - hermes-sortie # SEULE sortie : filtrée par scripts/isolation-agents.sh (SSH vers les machines de lab.conf, rien d'autre)
+      - obs-net # to send traces to Langfuse (see ../langfuse), optional
+      - hermes-sortie # ONLY exit: filtered by scripts/isolation-agents.sh (SSH to the machines in lab.conf, nothing else)
 
 networks:
   hermes-net:
@@ -35,9 +35,10 @@ networks:
   obs-net:
     external: true
     name: obs-net
-  # hermes-net et obs-net sont internes (sans sortie). Ce réseau-ci est la seule route de Hermes vers l'extérieur ;
-  # son nom d'interface est fixe pour que le pare-feu (lab isolation) le reconnaisse : tout y est bloqué
-  # sauf SSH vers LAB_AGENT_SSH_ALLOW (lab.conf). Voir docs/agent-isolation.md.
+  # hermes-net and obs-net are internal (no exit). This network is Hermes's only route to the outside
+  # ("sortie" = exit; name kept for existing installations); its interface name is fixed so that the firewall
+  # (lab isolation) recognises it: everything is blocked there except SSH to LAB_AGENT_SSH_ALLOW (lab.conf).
+  # See docs/agent-isolation.md.
   hermes-sortie:
     name: hermes-sortie
     driver_opts:

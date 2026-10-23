@@ -1,9 +1,9 @@
-# Portail : page d'accueil (Homepage) avec un voyant de santé par service et les mesures de la machine.
-# Interface : http://127.0.0.1:3010  (lié à 127.0.0.1 : visible uniquement depuis la machine, ou via tunnel SSH)
+# Portal ("portail"): home page (Homepage) with a health light per service and the machine's metrics.
+# Interface: http://127.0.0.1:3010  (bound to 127.0.0.1: only visible from the machine, or through the SSH tunnel)
 #
-# Prérequis : ai-stack ET monitoring démarrés (ils créent les réseaux ci-dessous). `lab start` s'en charge.
-# Le portail n'a PAS accès au socket Docker (donc pas de droits root sur la machine) : l'état de chaque service
-# est testé par une requête HTTP (siteMonitor) sur les réseaux partagés.
+# Prerequisite: ai-stack AND monitoring started (they create the networks below). `lab start` takes care of it.
+# The portal has NO access to the Docker socket (so no root rights on the machine): the state of each service
+# is checked by an HTTP request (siteMonitor) on the shared networks.
 
 name: portail
 
@@ -13,7 +13,7 @@ services:
     container_name: homepage
     restart: unless-stopped
     environment:
-      # Obligatoire (Homepage refuse les autres noms d'hôte). Le port doit être celui utilisé dans le navigateur.
+      # Required (Homepage refuses other host names). The port must be the one used in the browser.
       HOMEPAGE_ALLOWED_HOSTS: "127.0.0.1:3010,localhost:3010"
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}

@@ -1,25 +1,25 @@
-# ComfyUI : génération d'images, pilotée par Open WebUI.
-# Image COMMUNAUTAIRE (pas d'image officielle) : github.com/clsferguson/ComfyUI-Docker (licence MIT).
-# Elle suit les versions de ComfyUI mais reste un projet personnel : fige un tag (vX.Y.Z) une fois que ça marche.
+# ComfyUI: image generation, driven by Open WebUI.
+# COMMUNITY image (no official image): github.com/clsferguson/ComfyUI-Docker (MIT license).
+# It follows ComfyUI's versions but remains a personal project: it is pinned by digest below.
 #
-# Joint le réseau de la stack (ai-stack_ai-net) pour qu'Open WebUI l'atteigne sur http://comfyui:8188.
-# Le port est lié à 127.0.0.1 : interface visible uniquement depuis la machine.
+# Joins the stack's network (ai-stack_ai-net) so that Open WebUI reaches it at http://comfyui:8188.
+# The port is bound to 127.0.0.1: interface only visible from the machine.
 
 name: comfyui
 
 services:
   comfyui:
-    image: ghcr.io/clsferguson/comfyui-docker@sha256:6c0adbc07478eca67c56ec25ac0bfdd4e58ea91fc7f63b0cad45a11a2ad76a32   # version du 6 oct. 2026, figée (voir docs/image-generation.md)
+    image: ghcr.io/clsferguson/comfyui-docker@sha256:6c0adbc07478eca67c56ec25ac0bfdd4e58ea91fc7f63b0cad45a11a2ad76a32   # pinned version (see docs/image-generation.md)
     container_name: comfyui
-    # Ne démarre pas tout seul au boot : tu le lances quand tu en as besoin (il prend de la VRAM).
+    # Does not start by itself at boot: start it when you need it (it takes VRAM).
     restart: "no"
     environment:
       TZ: Europe/Brussels
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
-      TRITON_CACHE_DIR: /tmp/triton   # ComfyUI tourne en appuser avec HOME=/root (runuser -p) : /root/.triton non inscriptible
+      TRITON_CACHE_DIR: /tmp/triton   # ComfyUI runs as appuser with HOME=/root (runuser -p): /root/.triton is not writable
       TRITON_HOME: /tmp/triton
-      COMFY_FORCE_INSTALL: "1"     # réinstalle à chaque démarrage les requirements des nœuds (gguf pour ComfyUI-GGUF)
+      COMFY_FORCE_INSTALL: "1"     # reinstalls the nodes' requirements at every start (gguf for ComfyUI-GGUF)
     volumes:
       - comfyui_user:/app/ComfyUI/user/default
       - comfyui_nodes:/app/ComfyUI/custom_nodes

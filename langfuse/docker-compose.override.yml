@@ -1,10 +1,10 @@
-# Surcharge du docker-compose.yml OFFICIEL de Langfuse (cloné par ../6-langfuse.sh dans ./app).
-# Elle corrige trois choses du fichier officiel :
-#  1. l'interface (port 3000) et MinIO (9090) y sont publiés sur TOUTES les interfaces réseau ;
-#     ici ils sont liés à 127.0.0.1 ;
-#  2. les ports 3000 (Open WebUI) et 9090 (Prometheus) sont déjà pris dans ce labo ;
-#  3. Langfuse rejoint le réseau obs-net, partagé avec Open WebUI et Hermes uniquement.
-# "!override" remplace la liste des ports au lieu de s'y ajouter (Docker Compose >= 2.24).
+# Override of Langfuse's OFFICIAL docker-compose.yml (cloned by ../6-langfuse.sh into ./app).
+# It fixes three things of the official file:
+#  1. the interface (port 3000) and MinIO (9090) are published there on ALL network interfaces;
+#     here they are bound to 127.0.0.1;
+#  2. ports 3000 (Open WebUI) and 9090 (Prometheus) are already taken in this lab;
+#  3. Langfuse joins the obs-net network, shared with Open WebUI and Hermes only.
+# "!override" replaces the list of ports instead of adding to it (Docker Compose >= 2.24).
 
 services:
   langfuse-web:
@@ -14,8 +14,8 @@ services:
       - default
       - obs-net
     environment:
-      # Next.js n'écoute sinon que sur la première adresse du conteneur (réseau « default ») : le portail et
-      # les agents, qui passent par obs-net, recevaient « Connection refused ». Le port publié reste sur 127.0.0.1.
+      # Otherwise Next.js only listens on the container's first address ("default" network): the portal and
+      # the agents, which go through obs-net, got "Connection refused". The published port stays on 127.0.0.1.
       HOSTNAME: "0.0.0.0"
     logging: &logs
       driver: json-file

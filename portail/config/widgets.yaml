@@ -5,6 +5,6 @@
       dateStyle: short
       hour12: false
 - resources:
-    label: Portail
+    label: Portal
     cpu: true
     memory: true

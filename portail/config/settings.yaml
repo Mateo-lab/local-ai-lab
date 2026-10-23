@@ -1,6 +1,6 @@
 title: AiBeast
-description: Labo IA local
-language: fr
+description: Local AI lab
+language: en
 theme: dark
 color: slate
 headerStyle: boxed
@@ -11,13 +11,13 @@ layout:
   Interfaces:
     style: row
     columns: 4
-  Moteur et outils:
+  Engine and tools:
     style: row
     columns: 4
-  Observabilité:
+  Observability:
     style: row
     columns: 3
-  Agents (à la demande):
+  Agents (on demand):
     style: row
     columns: 2
   Machine:
