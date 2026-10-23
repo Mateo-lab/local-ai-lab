@@ -1,59 +1,63 @@
-# Agents et Langfuse
+# Agents and Langfuse
 
-Langfuse enregistre ce que font les agents : chaque tour de conversation, chaque appel au modèle (durée, tokens),
-chaque outil utilisé. Tout reste sur AiBeast (`http://127.0.0.1:3002`).
+Langfuse records what the agents do: every conversation turn, every model call (duration, tokens), every tool used.
+Everything stays on AiBeast (`http://127.0.0.1:3002`).
 
-Résultat vérifié le 2026-10-18 : **Hermes → Langfuse fonctionne** (2 traces, 4 observations après une conversation).
-OpenClaw n'est pas branché (voir §6).
+Verified result on the reference machine: **Hermes → Langfuse works** (2 traces, 4 observations after a conversation).
+OpenClaw is not connected (see §6).
 
-## 1. Installer Langfuse
+## 1. Installing Langfuse
 
 ```bash
 cd ~/Documents/ai-lab
 ./6-langfuse.sh
 ```
-Le script clone le dépôt officiel dans `langfuse/app`, génère les secrets (`langfuse/app/.env`), lance ~6 services
-(web, worker, ClickHouse, Redis, MinIO, PostgreSQL) et attend que Langfuse réponde.
-La surcharge `langfuse/docker-compose.override.yml` (copiée dans `langfuse/app/`) :
-- lie l'interface à `127.0.0.1:3002` et MinIO à `127.0.0.1:9092/9091` (le compose officiel publie sur toutes les interfaces) ;
-- joint Langfuse au réseau `obs-net` (partagé avec Open WebUI et Hermes) ;
-- fixe `HOSTNAME=0.0.0.0` pour `langfuse-web` : sans cela, Next.js n'écoute que sur la première adresse du conteneur
-  et le portail (sonde de santé) et les agents, qui passent par `obs-net`, reçoivent « Connection refused ».
+The script clones the official repository into `langfuse/app`, generates the secrets (`langfuse/app/.env`), starts ~6
+services (web, worker, ClickHouse, Redis, MinIO, PostgreSQL) and waits until Langfuse answers.
+The override `langfuse/docker-compose.override.yml` (copied into `langfuse/app/`):
+- binds the interface to `127.0.0.1:3002` and MinIO to `127.0.0.1:9092/9091` (the official compose publishes on all
+  interfaces);
+- joins Langfuse to the `obs-net` network (shared with Open WebUI and Hermes);
+- sets `HOSTNAME=0.0.0.0` for `langfuse-web`: without it, Next.js only listens on the container's first address, and
+  the portal (health probe) and the agents, which go through `obs-net`, get "Connection refused".
 
-Santé : `docker exec homepage wget -qO- http://langfuse-web:3000/api/public/health` → `{"status":"OK",...}`.
+Health: `docker exec homepage wget -qO- http://langfuse-web:3000/api/public/health` → `{"status":"OK",...}`.
 
-## 2. Brancher Hermes
+## 2. Connecting Hermes
 
-1. Langfuse : créer une organisation et un projet `hermes`, puis Settings → API Keys → Create (clé publique `pk-lf-…`, clé secrète `sk-lf-…`, affichée une seule fois).
-2. Écrire les variables dans `hermes/data/.env` (fichier lu par Hermes, inclus dans la sauvegarde chiffrée) :
+1. Langfuse: create an organisation and a `hermes` project, then Settings → API Keys → Create (public key `pk-lf-…`,
+   secret key `sk-lf-…`, shown only once).
+2. Write the variables into `hermes/data/.env` (file read by Hermes, included in the encrypted backup):
    ```
    HERMES_LANGFUSE_PUBLIC_KEY=pk-lf-…
    HERMES_LANGFUSE_SECRET_KEY=sk-lf-…
    HERMES_LANGFUSE_BASE_URL=http://langfuse-web:3000
    HERMES_LANGFUSE_ENV=local
    ```
-   Une seule fois chacune : l'installateur du plugin écrit déjà ces lignes ; ne les ajoute pas une seconde fois.
-3. Installer le plugin : `cd hermes && docker compose run --rm hermes plugins install langfuse`
-   (dans la version testée, `plugins enable observability/langfuse` répond « Langfuse moved out of core » : c'est un plugin du catalogue officiel, version 2.0.0).
-4. Vérifier : `docker compose run --rm hermes plugins list --plain --no-bundled | grep -i langfuse` → `enabled`.
-5. Tester : `./5-hermes.sh MODELE chat`, écrire un message, attendre la réponse, `/exit`, attendre ~10 s.
-   Dans Langfuse (projet `hermes`) : une trace « Hermes turn » avec l'appel au modèle.
+   Once each: the plugin installer already writes these lines; do not add them a second time.
+3. Install the plugin: `cd hermes && docker compose run --rm hermes plugins install langfuse`
+   (in the tested version, `plugins enable observability/langfuse` answers "Langfuse moved out of core": it is a plugin
+   from the official catalogue, version 2.0.0). The installation needs the Internet: `lab isolation remove` first, then
+   `lab isolation apply` afterwards.
+4. Check: `docker compose run --rm hermes plugins list --plain --no-bundled | grep -i langfuse` → `enabled`.
+5. Test: `./5-hermes.sh MODEL chat`, write a message, wait for the answer, `/exit`, wait ~10 s.
+   In Langfuse (project `hermes`): a "Hermes turn" trace with the model call.
 
-Confidentialité : par défaut le plugin envoie le contenu des échanges en masquant les secrets (`sanitized`).
-`HERMES_LANGFUSE_CAPTURE=metadata` n'envoie que durées, tokens et noms d'outils.
-`HERMES_LANGFUSE_DEBUG=true` n'est utile que pour diagnostiquer : retire-le ensuite.
+Privacy: by default the plugin sends the content of the exchanges with secrets masked (`sanitized`).
+`HERMES_LANGFUSE_CAPTURE=metadata` only sends durations, tokens and tool names.
+`HERMES_LANGFUSE_DEBUG=true` is only useful for diagnosis: remove it afterwards.
 
-## 3. Ce qui a coûté du temps (à éviter)
+## 3. What cost time (to avoid)
 
-| Symptôme | Cause | Remède |
+| Symptom | Cause | Remedy |
 |---|---|---|
-| Aucune trace, aucune erreur visible | Le plugin échoue en silence (clés ou adresse fausses) | Journaux : `hermes/data/logs/errors.log` (**horodatés en UTC**, 2 h de moins que l'heure de Bruxelles en heure d'été) |
-| `Failed to resolve 'langfuse-web'` | `hermes/docker-compose.yml` sans `obs-net` (copie antérieure à l'ajout) | Ajouter `- obs-net` aux réseaux du service **et** déclarer `obs-net: {external: true, name: obs-net}` en bas. Ne pas écraser le fichier si tu as ajouté d'autres volumes (ex. `./workspace:/workspace`) |
-| `Input is not a terminal`, saisie mélangée | `./5-hermes.sh … chat \| tee fichier` : Hermes a besoin d'un vrai terminal | Ne jamais rediriger ni passer par `tee` ; lire les journaux dans `hermes/data/logs/` |
-| `HTTP 404 … Langfuse v4 events_only mode` sur `/api/public/traces` | Langfuse v4 a retiré cet ancien point d'accès | Utiliser `GET /api/public/v2/observations?fromStartTime=…&limit=10` (basic auth clé publique:clé secrète). Avec certains clients, délai possible de 15 min |
-| `docker compose run` bloqué sur `Creating` après Ctrl+C / Ctrl+Z | Conteneurs `hermes-hermes-run-*` orphelins | `docker ps -aq --filter name=hermes-hermes-run \| xargs -r docker rm -f` |
+| No trace, no visible error | The plugin fails silently (wrong keys or address) | Logs: `hermes/data/logs/errors.log` (**timestamps in UTC**) |
+| `Failed to resolve 'langfuse-web'` | `hermes/docker-compose.yml` without `obs-net` (copy older than its addition) | Add `- obs-net` to the service's networks **and** declare `obs-net: {external: true, name: obs-net}` at the bottom. Do not overwrite the file if you added other volumes (e.g. `./workspace:/workspace`) |
+| `Input is not a terminal`, mixed-up input | `./5-hermes.sh … chat \| tee file`: Hermes needs a real terminal | Never redirect or go through `tee`; read the logs in `hermes/data/logs/` |
+| `HTTP 404 … Langfuse v4 events_only mode` on `/api/public/traces` | Langfuse v4 removed this old endpoint | Use `GET /api/public/v2/observations?fromStartTime=…&limit=10` (basic auth public key:secret key). With some clients, possible delay of 15 min |
+| `docker compose run` stuck on `Creating` after Ctrl+C / Ctrl+Z | Orphan `hermes-hermes-run-*` containers | `docker ps -aq --filter name=hermes-hermes-run \| xargs -r docker rm -f` |
 
-Vérifier sans l'interface (les clés ne sont jamais affichées) :
+Checking without the interface (the keys are never displayed):
 ```bash
 cd ~/Documents/ai-lab/hermes
 set -a; . ./data/.env; set +a
@@ -63,57 +67,61 @@ curl -s -G -u "$HERMES_LANGFUSE_PUBLIC_KEY:$HERMES_LANGFUSE_SECRET_KEY" \
 unset HERMES_LANGFUSE_PUBLIC_KEY HERMES_LANGFUSE_SECRET_KEY HERMES_LANGFUSE_BASE_URL HERMES_LANGFUSE_ENV
 ```
 
-## 4. Mode agents (`lab mode agents`)
+## 4. Agents mode (`lab mode agents`)
 
-Libère de la VRAM et de la RAM pour les agents : arrête ComfyUI, Kokoro et Tika. Ollama, Open WebUI, n8n, Qdrant,
-SearXNG, la supervision et **Langfuse** restent actifs. Retour : `lab mode normal` (ne relance pas ComfyUI :
-`lab start comfyui`). Détail : `docs/lab.md`.
+Frees VRAM and RAM for the agents: stops ComfyUI, Kokoro and Tika. Ollama, Open WebUI, n8n, Qdrant, SearXNG, monitoring
+and **Langfuse** stay active. Back: `lab mode normal` (does not restart ComfyUI: `lab start comfyui`). Details:
+`docs/lab.md`.
 
-## 5. ComfyUI : premier démarrage
+## 5. ComfyUI: first start
 
-- L'image fait ~8 Go. Si la session SSH peut couper pendant le téléchargement, lancer en arrière-plan :
+- The image is ~8 GB. If the SSH session may drop during the download, start it in the background:
   `nohup ./lab start comfyui > ~/comfyui-start.log 2>&1 &`.
-- Premier démarrage : le conteneur exécute `chown -R` sur toute la bibliothèque Python. Charge disque forte, CPU à 0 %,
-  **plusieurs minutes sans message** (observé : ~6 min). L'interface (`http://127.0.0.1:8188`) répond ensuite ; ne
-  relance pas le conteneur pendant cette étape. Elle se refait si le conteneur est recréé (`lab update`).
-- Modèles : `comfyui/data/models/checkpoints/`. Exemple vérifié : SDXL base 1.0 (6,9 Go) téléchargé avec
+- First start: the container runs `chown -R` on the whole Python library. Heavy disk load, CPU at 0 %, **several
+  minutes without a message** (observed: ~6 min). The interface (`http://127.0.0.1:8188`) answers afterwards; do not
+  restart the container during this step. It happens again if the container is recreated (`lab update`).
+- Models: `comfyui/data/models/checkpoints/`. Verified example: SDXL base 1.0 (6.9 GB) downloaded with
   `nohup wget -c -O sd_xl_base_1.0.safetensors https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors`.
-  Non sauvegardés (se retéléchargent).
+  Not backed up (they can be downloaded again).
 
-## 5 bis. Partage de la VRAM : Ollama contre ComfyUI (mesuré le 2026-10-18)
+## 5a. Sharing the VRAM: Ollama versus ComfyUI (measured on the reference machine)
 
-| Situation | VRAM utilisée |
+| Situation | VRAM used |
 |---|---|
-| `qwen3.8:27b` chargé (17 Go de modèle, contexte 65 536) + ComfyUI allumé | 20,8 Go / 24 Go |
-| Après `lab mode agents` (ComfyUI, Kokoro, Tika arrêtés) | 20,2 Go |
-| Après `lab mode images` (modèle Ollama déchargé, ComfyUI démarré, SDXL pas encore chargé) | 0,4 Go |
-| SDXL base 1.0 chargé dans ComfyUI après une génération (mode images) | 7,0 Go |
+| `qwen3.8:27b` loaded (17 GB model, 65,536 context) + ComfyUI on | 20.8 GB / 24 GB |
+| After `lab mode agents` (ComfyUI, Kokoro, Tika stopped) | 20.2 GB |
+| After `lab mode images` (Ollama model unloaded, ComfyUI started, SDXL not loaded yet) | 0.4 GB |
+| SDXL base 1.0 loaded in ComfyUI after a generation (images mode) | 7.0 GB |
 
-Le modèle de langage seul occupe ~20 Go : SDXL (~7 Go) ne tient pas à côté et ComfyUI bascule sur un fonctionnement avec
-déchargement en RAM (plus lent ; sa mémoire vive montait à 5,3 Go). Les deux usages demandent donc d'alterner :
-le modèle Ollama se décharge seul après son délai d'inactivité (colonne `UNTIL` de `ollama ps`), ou à la main avec
-`docker exec ollama ollama stop NOM_DU_MODELE`. `lab mode images` automatise cette bascule (voir `docs/lab.md`).
-Mesuré avec `lab mode images` : démarrage de ComfyUI en quelques secondes (interface prête après ~25 s), VRAM à 0,4 Go avant la première génération,
-**génération SDXL en ≈ 15 s**, 7,0 Go de VRAM une fois le modèle chargé. SDXL (7 Go) + `qwen3.8:27b` (~20 Go) = ~27 Go > 24 Go : l'alternance est nécessaire.
-La durée de génération *avant* le mode images (modèle Ollama chargé, ComfyUI en repli RAM) n'a pas été chronométrée : pas de comparaison chiffrée.
+The language model alone takes ~20 GB: SDXL (~7 GB) does not fit next to it and ComfyUI falls back to offloading to RAM
+(slower; its RAM went up to 5.3 GB). The two uses therefore have to alternate: the Ollama model unloads by itself after
+its idle delay (`UNTIL` column of `ollama ps`), or by hand with `docker exec ollama ollama stop MODEL_NAME`.
+`lab mode images` automates this switch (see `docs/lab.md`).
+Measured with `lab mode images`: ComfyUI starts in a few seconds (interface ready after ~25 s), VRAM at 0.4 GB before
+the first generation, **SDXL generation in ≈ 15 s**, 7.0 GB of VRAM once the model is loaded. SDXL (7 GB) +
+`qwen3.8:27b` (~20 GB) = ~27 GB > 24 GB: alternating is necessary.
+The generation time *before* images mode (Ollama model loaded, ComfyUI falling back to RAM) was not timed: no numeric
+comparison.
 
 ## 6. OpenClaw
 
-Non branché. OpenClaw est volontairement isolé sur `llm-net`, hors de `obs-net`. Il possède un plugin de traces
-(`diagnostics-otel`, protocole OpenTelemetry) qui pourrait viser Langfuse (`/api/public/otel`), mais cela imposerait de
-le joindre à `obs-net` et donc de relâcher son isolement. Décision à prendre explicitement ; rien n'a été fait.
+Not connected. OpenClaw is deliberately isolated on `llm-net`, outside `obs-net`. It has a tracing plugin
+(`diagnostics-otel`, OpenTelemetry protocol) that could target Langfuse (`/api/public/otel`), but that would require
+joining it to `obs-net` and therefore loosening its isolation. A decision to make explicitly; nothing was done.
 
-## 7. Sauvegarde de Langfuse
+## 7. Backing up Langfuse
 
-`lab backup run` sauvegarde la base PostgreSQL de Langfuse (comptes, projets, clés API, prompts) et son `.env`.
-Le conteneur est retrouvé par le dossier de son compose (`langfuse/app`), pas par le nom de projet (Docker le nomme `app`).
-**Non sauvegardés** : ClickHouse (les traces elles-mêmes) et MinIO.
+`lab backup run` backs up Langfuse's PostgreSQL database (accounts, projects, API keys, prompts) and its `.env`.
+The container is found through the folder of its compose file (`langfuse/app`), not through the project name (Docker
+names it `app`). **Not backed up**: ClickHouse (the traces themselves) and MinIO.
 
-## Ce qui n'est pas vérifié
+## What is not verified
 
-- `lab mode agents` : testé avec ComfyUI allumé et `qwen3.8:27b` chargé dans Ollama (2026-10-18). ComfyUI, Kokoro et Tika s'arrêtent
-  et reviennent ; la VRAM passe de 20,8 à 20,2 Go (seulement 0,6 Go libérés). La libération d'un modèle d'image **entièrement chargé** n'est pas mesurée.
-- Le contenu exact d'une trace (niveau de détail du mode `sanitized`) n'a pas été relu dans l'interface.
-- Branchement d'OpenClaw, et de n8n ou Open WebUI comme sources de traces : non fait.
-- Une mise à jour de l'image Hermes (`:stable`) peut changer le plugin ; le retester après `lab update`.
-- Restauration de la base Langfuse : testée le 2026-10-18 (snapshot restauré dans `~/restore-test`, `langfuse.sql` chargé dans un PostgreSQL jetable de même image : code de sortie 0, 1 utilisateur, 2 projets, 2 clés API). Non testé : la remise en service réelle (réinjecter la base dans Langfuse) ni la restauration de ClickHouse (non sauvegardé).
+- `lab mode agents`: tested with ComfyUI on and `qwen3.8:27b` loaded in Ollama. ComfyUI, Kokoro and Tika stop and come
+  back; the VRAM goes from 20.8 to 20.2 GB (only 0.6 GB freed). Freeing a **fully loaded** image model is not measured.
+- The exact content of a trace (level of detail of the `sanitized` mode) was not reviewed in the interface.
+- Connecting OpenClaw, and n8n or Open WebUI as trace sources: not done.
+- An update of the Hermes image (`:stable`) may change the plugin; test it again after `lab update`.
+- Restoring the Langfuse database: tested (snapshot restored into `~/restore-test`, `langfuse.sql` loaded into a
+  throwaway PostgreSQL with the same image: exit code 0, 1 user, 2 projects, 2 API keys). Not tested: actually putting it
+  back into service (re-injecting the database into Langfuse) nor restoring ClickHouse (not backed up).
