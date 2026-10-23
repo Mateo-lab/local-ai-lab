@@ -1,461 +1,480 @@
-# Comprendre les mesures : quoi tester, pourquoi, et comment lire les résultats
+# Understanding the measurements: what to test, why, and how to read the results
 
-Ce document explique **chaque réglage que le banc d'essai (`lab bench`) mesure** : ce que c'est, pourquoi ça vaut la peine
-de le tester, comment lire le résultat, et ce que ta machine a donné. Il se termine par un glossaire.
+This document explains **each setting the benchmark bench (`lab bench`) measures**: what it is, why it is worth testing,
+how to read the result, and what the reference machine gave. It ends with a glossary.
 
-Les chiffres de ta machine sont dans [performance.md](performance.md) ; le mode d'emploi du banc est dans
-[`bench/README.md`](../bench/README.md). Ici : le « pourquoi » et le « comment lire ».
+The reference machine's numbers are in [performance.md](performance.md); the bench's user guide is in
+[`bench/README.md`](../bench/README.md). Here: the "why" and the "how to read".
 
-## 1. Pourquoi mesurer au lieu de deviner
+## 1. Why measure instead of guessing
 
-Un réglage qui « paraît bon » peut coûter de la vitesse, de la mémoire ou de la qualité sans que ça se voie à l'usage.
-Exemple vécu : la limite de puissance de 300 W est annoncée « sans perte » partout ; sur ta carte, elle coûte environ 7 % de
-vitesse de génération (et fait gagner 7 % d'énergie par token). C'est un bon compromis, mais c'est un **compromis**, et
-seule la mesure dit de combien.
+A setting that "looks good" can cost speed, memory or quality without it showing in daily use. Real example: the 300 W
+power limit is advertised as "lossless" everywhere; on the reference card, it costs about 7 % of generation speed (and
+saves 7 % of energy per token). It is a good compromise, but it is a **compromise**, and only measurement says by how
+much.
 
-Règle de la maison : **on change un réglage seulement quand une mesure le justifie, puis on note la décision** dans le
-journal de [performance.md](performance.md) §4.
+House rule: **a setting is only changed when a measurement justifies it, and the decision is written down** in the log
+of [performance.md](performance.md) §4.
 
-## 2. La carte : un réglage, une question, une expérience
+## 2. The map: one setting, one question, one experiment
 
-| Réglage | La question | Expérience | Décision à la clé | État |
+| Setting | The question | Experiment | Decision at stake | Status |
 |---|---|---|---|---|
-| Limite de puissance du GPU | Combien de vitesse perd-on en bridant la carte ? | `power-sweep`, `power-confirm` | Quelle limite installer (`lab gpu-limit`) | **Mesuré** : 300 W |
-| Quantité de texte dans le contexte | Combien coûte un long document ? | `context-scaling` | Valeur de `OLLAMA_CONTEXT_LENGTH`, temps d'attente à prévoir | **Mesuré** |
-| Taille de la fenêtre de contexte (`num_ctx`) | Combien coûte de **réserver** une grande fenêtre, même vide ? Où est la limite de la carte ? | `ctx-window` | Taille de fenêtre par défaut et par préréglage ; marge de VRAM | Mesuré le 2026-10-18 (voir §3.2 bis) |
-| Type de cache KV (`f16`, `q8_0`, `q4_0`) | Combien de mémoire gagne-t-on, pour quelle perte de vitesse ou de justesse ? | `kv-cache` | Valeur de `OLLAMA_KV_CACHE_TYPE` | Mesuré le 2026-10-18 (décodage invalide, voir §3.3) |
-| Qualité avec le cache KV quantifié | La quantification abîme-t-elle les réponses ? | `kv-quality` | Garder `q8_0` ou renoncer à `q4_0` | Mesuré les 2026-10-18 et 2026-10-19 (aucune perte visible, tests faibles, voir §3.4) |
-| Cache de préfixe | Gagne-t-on du temps quand le début d'un prompt se répète ? | `prefix-cache` | Comment écrire les prompts des agents | Pas encore |
-| Parallélisme | Peut-on servir plusieurs demandes en même temps ? | `concurrency` | Valeur de `OLLAMA_NUM_PARALLEL` | Pas encore |
+| GPU power limit | How much speed is lost by capping the card? | `power-sweep`, `power-confirm` | Which limit to install (`lab gpu-limit`) | **Measured**: 300 W |
+| Amount of text in the context | How much does a long document cost? | `context-scaling` | Value of `OLLAMA_CONTEXT_LENGTH`, waiting time to expect | **Measured** |
+| Context window size (`num_ctx`) | How much does it cost to **reserve** a large window, even empty? Where is the card's limit? | `ctx-window` | Default window size and per preset; VRAM margin | Measured (see §3.2b) |
+| KV cache type (`f16`, `q8_0`, `q4_0`) | How much memory is saved, for what loss of speed or accuracy? | `kv-cache` | Value of `OLLAMA_KV_CACHE_TYPE` | Measured (decoding invalid, see §3.3) |
+| Quality with a quantised KV cache | Does quantisation damage the answers? | `kv-quality` | Keep `q8_0` or give up `q4_0` | Measured (no visible loss, weak tests, see §3.4) |
+| Prefix cache | Is time saved when the start of a prompt repeats? | `prefix-cache` | How to write the agents' prompts | Measured (see §3.5) |
+| Parallelism | Can several requests be served at the same time? | `concurrency` | Value of `OLLAMA_NUM_PARALLEL` | Measured (see §3.6) |
 
-## 3. Les réglages, un par un
+## 3. The settings, one by one
 
-### 3.1 Limite de puissance du GPU
+### 3.1 GPU power limit
 
-**Ce que c'est.** Un plafond de watts que la carte ne dépasse pas (`nvidia-smi -pl`). L'usine règle la RTX 3090 à 350 W.
+**What it is.** A cap in watts the card does not exceed (`nvidia-smi -pl`). The factory sets the RTX 3090 to 350 W.
 
-**Pourquoi tester.** Moins de watts, c'est moins de chaleur, moins de bruit, moins de consommation. Mais la carte baisse sa
-fréquence pour respecter le plafond, donc elle calcule plus lentement. Le tout est de savoir **à partir de quand la perte de
-vitesse n'est plus compensée par l'énergie économisée**.
+**Why test it.** Fewer watts means less heat, less noise, less consumption. But the card lowers its clock to respect the
+cap, so it computes more slowly. The point is to know **from where the speed loss is no longer compensated by the energy
+saved**.
 
-**Ce qu'on mesure.** Vitesse de génération (tok/s), énergie par token (J/token), puissance moyenne, fréquence du GPU.
+**What is measured.** Generation speed (tok/s), energy per token (J/token), mean power, GPU clock.
 
-**Comment lire.**
-- Compare la vitesse **et** l'énergie par token. Un plafond plus bas n'est intéressant que si l'énergie par token baisse aussi.
-- Sous un certain seuil, les deux se dégradent : la carte tourne si lentement que l'énergie « fixe » (mémoire, ventilateurs,
-  repos) pèse plus par token. Le brider davantage ne sert alors à rien.
+**How to read it.**
+- Compare the speed **and** the energy per token. A lower cap is only interesting if the energy per token drops too.
+- Below a certain threshold, both get worse: the card runs so slowly that the "fixed" energy (memory, fans, idle) weighs
+  more per token. Capping it further is then useless.
 
-**Ton résultat** (`qwen3.8:27b`, 2 048 tokens de contexte) : 300 W donne environ −7 % de vitesse, −7 % d'énergie par token,
-−11,5 % de puissance moyenne ; 250 W perd un tiers de vitesse sans gain d'énergie. **300 W est installé en permanence.**
+**Result on the reference machine** (`qwen3.8:27b`, 2,048 tokens of context): 300 W gives about −7 % speed, −7 % energy
+per token, −11.5 % mean power; 250 W loses a third of the speed without any energy gain. **300 W is installed
+permanently.**
 
-### 3.2 Le contexte : combien de texte la machine « garde en tête »
+### 3.2 The context: how much text the machine "keeps in mind"
 
-**Ce que c'est.** La fenêtre de contexte est la quantité de texte (conversation, document, consignes) que le modèle voit en
-même temps, comptée en tokens. `OLLAMA_CONTEXT_LENGTH` fixe la taille par défaut ; un préréglage Open WebUI peut la modifier
+**What it is.** The context window is the amount of text (conversation, document, instructions) the model sees at the
+same time, counted in tokens. `OLLAMA_CONTEXT_LENGTH` sets the default size; an Open WebUI preset can change it
 (`num_ctx`).
 
-**Pourquoi tester.** Un grand contexte permet d'analyser un long document, mais il a deux coûts : de la **mémoire** (le cache KV,
-voir §3.3) et du **temps** (le modèle doit « lire » tout le texte avant de répondre : c'est le prefill).
+**Why test it.** A large context makes it possible to analyse a long document, but it has two costs: **memory** (the KV
+cache, see §3.3) and **time** (the model must "read" all the text before answering: that is the prefill).
 
-**Ce qu'on mesure.** On remplit le contexte à 512, 4 096, 16 384, 32 768 et 56 000 tokens et on regarde : le délai avant le
-premier mot (TTFT), la vitesse de lecture (prefill), la vitesse de génération, et si le modèle reste entièrement sur le GPU.
+**What is measured.** The context is filled to 512, 4,096, 16,384, 32,768 and 56,000 tokens and we look at: the delay
+before the first word (TTFT), the reading speed (prefill), the generation speed, and whether the model stays entirely on
+the GPU.
 
-**Comment lire.**
-- **TTFT** : c'est le temps d'attente ressenti. Il croît à peu près proportionnellement au texte à lire.
-- **Vitesse de génération** : si elle reste stable quand le contexte grandit, un grand contexte ne ralentit pas les mots suivants.
-- **Part du temps au GPU** (`gpu_frac`) : doit rester à 100 %. Si elle descend, une partie du modèle déborde sur le processeur
-  et tout devient beaucoup plus lent.
+**How to read it.**
+- **TTFT**: this is the waiting time you feel. It grows roughly in proportion to the text to read.
+- **Generation speed**: if it stays stable as the context grows, a large context does not slow down the following words.
+- **Share of time on the GPU** (`gpu_frac`): must stay at 100 %. If it drops, part of the model spills over to the CPU
+  and everything becomes much slower.
 
-**Ton résultat.** TTFT : 3,6 s à 4 096 tokens, 13,4 s à 16 384, 27,4 s à 32 768, 50,8 s à 56 000 (≈ 0,9 ms par token de prompt).
-Génération stable (≈ 55 à 59 tok/s). 100 % GPU jusqu'à 65 536 de contexte, seul sur la carte. **Décision : `OLLAMA_CONTEXT_LENGTH`
-inchangé (32 768).**
+**Result on the reference machine.** TTFT: 3.6 s at 4,096 tokens, 13.4 s at 16,384, 27.4 s at 32,768, 50.8 s at 56,000
+(≈ 0.9 ms per prompt token). Stable generation (≈ 55 to 59 tok/s). 100 % GPU up to a 65,536 context, alone on the card.
+**Decision: `OLLAMA_CONTEXT_LENGTH` unchanged (32,768).**
 
-**Piège.** Ce test mesure la *quantité de texte dans la fenêtre*, pas la *taille de la fenêtre* : toute la série est à
-`num_ctx` 65 536. L'effet de la taille de fenêtre sur la mémoire et la vitesse à vide n'a pas été comparé.
+**Pitfall.** This test measures the *amount of text in the window*, not the *size of the window*: the whole series is at
+`num_ctx` 65,536. The effect of the window size on memory and on speed with an empty context was not compared here (see
+§3.2b).
 
-### 3.2 bis La taille de la fenêtre (à ne pas confondre avec son remplissage)
+### 3.2b The window size (not to be confused with how full it is)
 
-**Ce que c'est.** `num_ctx` est la taille de la fenêtre **réservée** ; le remplissage est le texte réellement présent dedans.
-La mémoire du cache KV (§3.3) est dimensionnée sur la fenêtre, pas sur le texte, d'après ce que je comprends du fonctionnement
-d'Ollama (non vérifié ici : c'est une des choses que ce test établit). Une fenêtre de 65 536 pour une conversation de 500 tokens
-coûterait donc la même VRAM qu'une fenêtre pleine.
+**What it is.** `num_ctx` is the size of the **reserved** window; the fill is the text actually in it. The KV cache memory
+(§3.3) is sized on the window, not on the text, according to how Ollama is understood to work (this is one of the things
+this test establishes). A 65,536 window for a 500-token conversation would therefore cost the same VRAM as a full window.
 
-**Pourquoi tester.** `context-scaling` a mesuré le coût du *remplissage* dans une fenêtre fixe. Il ne dit rien de ce que coûte
-la *taille* : combien de VRAM prend le passage de 32 768 à 65 536, quelle marge reste pour le modèle de tâches ou ComfyUI, et
-à partir de quelle taille le modèle déborde sur le processeur.
+**Why test it.** `context-scaling` measured the cost of *filling* a fixed window. It says nothing about the cost of the
+*size*: how much VRAM going from 32,768 to 65,536 takes, what margin remains for the task model or ComfyUI, and from what
+size the model spills over to the CPU.
 
-**Ce qu'on mesure (`ctx-window`).** Cinq tailles (8 192, 16 384, 32 768, 65 536, 98 304) × deux types de cache (`f16`,
-`q8_0`), avec un prompt court de 1 024 tokens pour ne mesurer que l'effet de la réservation : VRAM utilisée sur la carte
-(`peak_mem_used_mb`), part du modèle en VRAM (`gpu_frac`), vitesse de génération, TTFT, taille de fenêtre réellement
-appliquée (`ctx_effective` dans `runs.csv`).
+**What is measured (`ctx-window`).** Five sizes (8,192, 16,384, 32,768, 65,536, 98,304) × two cache types (`f16`,
+`q8_0`), with a short 1,024-token prompt to measure only the effect of the reservation: VRAM used on the card
+(`peak_mem_used_mb`), share of the model in VRAM (`gpu_frac`), generation speed, TTFT, window size actually applied
+(`ctx_effective` in `runs.csv`).
 
-**Comment lire.**
-- **VRAM en fonction de `num_ctx`** : si elle augmente en ligne droite avec la taille, chaque 16 384 tokens de fenêtre coûte une
-  quantité fixe ; tu en déduis la marge disponible pour une fenêtre donnée. Compare `f16` et `q8_0` : l'écart est le gain du cache
-  compressé.
-- **`gpu_frac` < 100 %** à une taille donnée : le modèle ne tient plus entièrement dans la carte. C'est la limite pratique,
-  pas une erreur du banc.
-- **`ctx_effective` inférieur à `num_ctx`** : le modèle plafonne sa fenêtre à son maximum. Au-delà, demander plus ne sert à
-  rien.
-- **Vitesse de génération et TTFT à vide** : s'ils bougent peu avec la taille, une grande fenêtre ne coûte que de la mémoire.
+**How to read it.**
+- **VRAM as a function of `num_ctx`**: if it grows in a straight line with the size, each 16,384 tokens of window cost a
+  fixed amount; you deduce the margin available for a given window. Compare `f16` and `q8_0`: the difference is the gain
+  of the compressed cache.
+- **`gpu_frac` < 100 %** at a given size: the model no longer fits entirely on the card. This is the practical limit,
+  not a bench error.
+- **`ctx_effective` lower than `num_ctx`**: the model caps its window at its maximum. Beyond it, asking for more is
+  useless.
+- **Generation speed and TTFT with an empty context**: if they barely move with the size, a large window only costs
+  memory.
 
-**Pièges.**
-- `peak_mem_used_mb` est la VRAM de **toute la carte** : si autre chose l'utilise (ComfyUI, le bureau à distance, un autre
-  modèle), le chiffre est faussé. Isole la carte comme pour les autres tests.
-- Le banc recharge le modèle à chaque changement de taille (le test est groupé par taille pour limiter les rechargements).
-- À lancer **après** `kv-cache` : le type de cache retenu détermine la ligne qui compte pour ta production.
+**Pitfalls.**
+- `peak_mem_used_mb` is the VRAM of **the whole card**: if something else uses it (ComfyUI, the remote desktop, another
+  model), the number is skewed. Isolate the card as for the other tests.
+- The bench reloads the model at each change of size (the test is grouped by size to limit reloads).
+- To run **after** `kv-cache`: the chosen cache type determines the row that matters for your production.
 
-**Ton résultat (`ctx-window`, 2026-10-18, 40 mesures, 4 répétitions par condition, prompt court, 128 tokens générés, 300 W).**
+**Result on the reference machine (`ctx-window`, 40 measurements, 4 repetitions per condition, short prompt, 128 tokens
+generated, 300 W).**
 
-VRAM utilisée sur la carte (pic, Mio ; carte de 24 576 ; le banc tourne seul, production arrêtée) :
+VRAM used on the card (peak, MiB; 24,576 MiB card; the bench runs alone, production stopped):
 
-| `num_ctx` | `f16` | `q8_0` | Modèle sur le GPU |
+| `num_ctx` | `f16` | `q8_0` | Model on the GPU |
 |---|---|---|---|
-| 8 192 | 19 284 | 19 045 | 100 % |
-| 16 384 | 19 524 | 19 065 | 100 % |
-| 32 768 | 20 644 | 19 769 | 100 % |
-| 65 536 | 22 854 | 21 147 | 100 % |
-| 98 304 | 22 682 (**débordement**) | 22 555 | **`f16` : 81 %** ; `q8_0` : 100 % |
+| 8,192 | 19,284 | 19,045 | 100 % |
+| 16,384 | 19,524 | 19,065 | 100 % |
+| 32,768 | 20,644 | 19,769 | 100 % |
+| 65,536 | 22,854 | 21,147 | 100 % |
+| 98,304 | 22,682 (**spill-over**) | 22,555 | **`f16`: 81 %**; `q8_0`: 100 % |
 
-- **La croissance n'est pas linéaire :** pour `q8_0`, passer de 8 192 à 16 384 ne coûte que 20 Mio, puis +704 (→ 32 768),
-  +1 378 (→ 65 536), +1 408 (→ 98 304). Pour `f16` : +240, +1 120, +2 210. Ne pas extrapoler à partir de deux points.
-- **`f16` déborde à 98 304 :** 19 % du modèle passe sur le processeur (la VRAM mesurée *baisse* parce que des couches sont
-  parties), le décodage tombe de ≈ 50 à **24 tok/s**, le préremplissage de ≈ 1 070 à 785 tok/s, le TTFT monte à 1,45 s.
-  Même type de cache : à 65 536 `f16` occupe déjà 22,9 Go ; avec le petit modèle de tâches (≈ 1,7 Gio) il ne tiendrait plus.
-- **`q8_0` tient à 98 304** (22 555 Mio, soit ≈ 2,0 Gio de marge, vitesse inchangée), **mais seul** : avec le petit modèle de
-  tâches chargé, la marge disparaîtrait (non mesuré). Mon estimation d'avant la mesure (≈ 21,7 Go) était trop basse d'environ 0,9 Go.
-- **Vitesse :** jusqu'à 65 536, le décodage reste entre 48 et 54 tok/s pour les deux caches, écarts dans les marges d'erreur
-  (4 répétitions) : réserver une grande fenêtre ne coûte pas de vitesse détectable, seulement de la mémoire, tant que tout tient.
-  Le TTFT est de 0,97 s à 8 192 puis ≈ 1,11 à 1,14 s dès 16 384 et plat ensuite (cause inconnue, écart de 0,14 s).
-- Le décodage de cette expérience (≈ 50 tok/s) est plus bas que celui de `kv-decode` (≈ 56-59) : protocoles différents (prompt
-  court, 4 répétitions, fréquences GPU plus basses : 1 410-1 460 MHz contre ≈ 1 550). Ne compare pas les deux.
+- **The growth is not linear:** for `q8_0`, going from 8,192 to 16,384 only costs 20 MiB, then +704 (→ 32,768), +1,378
+  (→ 65,536), +1,408 (→ 98,304). For `f16`: +240, +1,120, +2,210. Do not extrapolate from two points.
+- **`f16` spills over at 98,304:** 19 % of the model goes to the CPU (the measured VRAM *drops* because layers left),
+  decoding falls from ≈ 50 to **24 tok/s**, prefill from ≈ 1,070 to 785 tok/s, TTFT rises to 1.45 s. Same cache type: at
+  65,536 `f16` already takes 22.9 GB; with the small task model (≈ 1.7 GiB) it would no longer fit.
+- **`q8_0` fits at 98,304** (22,555 MiB, i.e. ≈ 2.0 GiB of margin, speed unchanged), **but alone**: with the small task
+  model loaded, the margin would disappear (not measured). The estimate made before the measurement (≈ 21.7 GB) was about
+  0.9 GB too low.
+- **Speed:** up to 65,536, decoding stays between 48 and 54 tok/s for both caches, differences within the error margins
+  (4 repetitions): reserving a large window costs no detectable speed, only memory, as long as everything fits. TTFT is
+  0.97 s at 8,192 then ≈ 1.11 to 1.14 s from 16,384 on and flat afterwards (unknown cause, 0.14 s difference).
+- The decoding in this experiment (≈ 50 tok/s) is lower than in `kv-decode` (≈ 56-59): different protocols (short prompt,
+  4 repetitions, lower GPU clocks: 1,410-1,460 MHz versus ≈ 1,550). Do not compare the two.
 
-**Conséquences pour les réglages.** `OLLAMA_CONTEXT_LENGTH` reste à 32 768. Un préréglage à 65 536 est possible en `q8_0`
-avec le petit modèle de tâches (22 620 Mio mesurés plus haut, §1 de `open-webui.md`) ; en `f16` non. 98 304 : `q8_0` seulement,
-sans le petit modèle, et sans marge : non recommandé.
+**Consequences for the settings.** `OLLAMA_CONTEXT_LENGTH` stays at 32,768. A preset at 65,536 is possible in `q8_0` with
+the small task model (22,620 MiB measured, §1 of `open-webui.md`); not in `f16`. 98,304: `q8_0` only, without the small
+model, and without margin: not recommended.
 
-### 3.3 Le cache KV et sa quantification
+### 3.3 The KV cache and its quantisation
 
-**Ce que c'est.** Pour produire chaque nouveau mot, le modèle consulte des résultats intermédiaires de tout ce qui précède
-(les « clés » et « valeurs » de l'attention, d'où KV). Plutôt que de les recalculer, il les garde en mémoire vidéo : c'est le
-**cache KV**. Sa taille grandit avec le contexte. On peut le stocker en pleine précision (`f16`) ou en le compressant
-(`q8_0`, environ moitié moins de mémoire ; `q4_0`, environ un quart). La compression de `q4_0` et `q8_0` s'appelle la
-**quantification**. L'**attention flash** (`OLLAMA_FLASH_ATTENTION`) est une façon optimisée de calculer l'attention, requise
-pour quantifier le cache.
+**What it is.** To produce each new word, the model consults intermediate results of everything that comes before (the
+"keys" and "values" of attention, hence KV). Rather than recompute them, it keeps them in video memory: this is the
+**KV cache**. Its size grows with the context. It can be stored at full precision (`f16`) or compressed (`q8_0`, about
+half the memory; `q4_0`, about a quarter). The compression of `q4_0` and `q8_0` is called **quantisation**. **Flash
+attention** (`OLLAMA_FLASH_ATTENTION`) is an optimised way of computing attention, required to quantise the cache.
 
-**Pourquoi tester.** Ta carte a 24 Go de VRAM et le gros modèle en occupe une grande partie. Un cache plus petit libère de la
-place (pour le modèle de tâches, pour un plus grand contexte, pour ComfyUI à côté). En contrepartie, il peut ralentir ou
-dégrader les réponses : l'ampleur dépend du modèle, c'est pourquoi on mesure sur le **tien**.
+**Why test it.** The card has 24 GB of VRAM and the big model takes a large part of it. A smaller cache frees room (for
+the task model, for a larger context, for ComfyUI next to it). In return, it can slow down or degrade the answers: how
+much depends on the model, which is why it is measured on **yours**.
 
-**Ce qu'on mesure.** Pour `f16`, `q8_0` et `q4_0` : vitesse de génération et de prefill, VRAM, et un test de « l'aiguille » : on
-cache une information à 10 %, 50 % ou 90 % d'un texte de 24 000 tokens et on demande au modèle de la retrouver (proportion
-de réussites avec son intervalle d'incertitude).
+**What is measured.** For `f16`, `q8_0` and `q4_0`: generation and prefill speed, VRAM, and a "needle" test: a piece of
+information is hidden at 10 %, 50 % or 90 % of a 24,000-token text and the model is asked to find it (success rate with
+its uncertainty interval).
 
-**Comment lire.**
-- Si `q8_0` n'est pas plus lent que `f16` **et** retrouve l'aiguille aussi souvent, il est préférable (même résultat, moins de
-  mémoire). C'est la lecture que j'en fais, pas une règle démontrée.
-- `q4_0` ne se justifie que s'il ne perd rien de visible ; la quantification la plus forte est celle qui risque le plus.
-- Un taux de réussite qui baisse **surtout pour une position précise** de l'aiguille (par exemple 50 %, au milieu) est un signe
-  que la compression gêne la récupération d'information dans un long texte.
+**How to read it.**
+- If `q8_0` is not slower than `f16` **and** finds the needle as often, it is preferable (same result, less memory).
+  This is a reading proposal, not a demonstrated rule.
+- `q4_0` is only justified if it loses nothing visible; the strongest quantisation is the one most at risk.
+- A success rate that drops **mostly for a precise position** of the needle (for example 50 %, in the middle) is a sign
+  that the compression hampers retrieving information from a long text.
 
-**Ton résultat (`kv-cache`, 2026-10-18, 54 mesures, 22 min, contexte 32 768 rempli à ≈ 21 700 tokens, 300 W).**
+**Result on the reference machine (`kv-cache`, 54 measurements, 22 min, context 32,768 filled to ≈ 21,700 tokens,
+300 W).**
 
-| Cache | VRAM utilisée sur la carte (pic) | Préremplissage (tok/s) | TTFT (s) | Aiguille retrouvée |
+| Cache | VRAM used on the card (peak) | Prefill (tok/s) | TTFT (s) | Needle found |
 |---|---|---|---|---|
-| `f16` | ≈ 20 643 Mio | 1 170 | 19,44 | 100 % |
-| `q8_0` (production) | ≈ 19 753-19 771 Mio | 1 160 | 19,35 | 100 % |
-| `q4_0` | ≈ 19 241-19 259 Mio | 1 162 | 19,18 | 100 % |
+| `f16` | ≈ 20,643 MiB | 1,170 | 19.44 | 100 % |
+| `q8_0` (production) | ≈ 19,753-19,771 MiB | 1,160 | 19.35 | 100 % |
+| `q4_0` | ≈ 19,241-19,259 MiB | 1,162 | 19.18 | 100 % |
 
-- **Mémoire :** `q8_0` économise ≈ 0,9 Gio de VRAM par rapport à `f16`, `q4_0` ≈ 0,5 Gio de plus (valeurs lues dans `runs.csv`,
-  carte entière, 595 Mio déjà utilisés au repos). Le cache f16 de 32 768 tokens pèse donc ≈ 1,9 Gio sur ce modèle
-  (extrapolation à partir de ces écarts, non mesurée directement).
-- **Préremplissage et TTFT :** `f16` est < 1 % plus rapide : sans intérêt pratique.
-- **Justesse :** l'aiguille est retrouvée partout, `q4_0` compris. Test faible (un seul fait) : le verdict vient de `kv-quality`.
-- **Décodage : à ne pas utiliser.** Le modèle ne générait que 4 à 7 tokens par requête (la réponse est un code de 6 caractères) ;
-  la vitesse calculée sur si peu de tokens dépend du nombre de tokens (≈ 69 tok/s pour 4, 85-90 pour 5, 100-109 pour 6,
-  ≈ 61 pour 7), pas du cache. À nombre de tokens égal (5), les médianes sont `f16` ≈ 90, `q8_0` ≈ 86, `q4_0` ≈ 85 tok/s :
-  tendance (≈ 5 % pour `f16`), pas une preuve, et les blocs ont tourné l'un après l'autre (`q4_0`, `f16`, `q8_0`).
-  La mesure propre est l'expérience `kv-decode` (ci-dessous).
-- **J/token : sans signification ici** (≈ 5 000 J de toute la requête, préremplissage compris, divisés par 5 tokens).
-  Deux mesures de `f16` (profondeur 10 %) ont un compteur d'énergie incohérent (707 et 3 763 J) avec des pics à 365-380 W.
+- **Memory:** `q8_0` saves ≈ 0.9 GiB of VRAM compared with `f16`, `q4_0` ≈ 0.5 GiB more (values read in `runs.csv`,
+  whole card, 595 MiB already used at idle). The f16 cache of 32,768 tokens therefore weighs ≈ 1.9 GiB on this model
+  (extrapolated from these differences, not measured directly).
+- **Prefill and TTFT:** `f16` is < 1 % faster: of no practical interest.
+- **Accuracy:** the needle is found everywhere, `q4_0` included. A weak test (a single fact): the verdict comes from
+  `kv-quality`.
+- **Decoding: do not use it.** The model only generated 4 to 7 tokens per request (the answer is a 6-character code); the
+  speed computed on so few tokens depends on the number of tokens (≈ 69 tok/s for 4, 85-90 for 5, 100-109 for 6, ≈ 61
+  for 7), not on the cache. At an equal number of tokens (5), the medians are `f16` ≈ 90, `q8_0` ≈ 86, `q4_0` ≈ 85
+  tok/s: a trend (≈ 5 % for `f16`), not a proof, and the blocks ran one after the other (`q4_0`, `f16`, `q8_0`). The
+  clean measurement is the `kv-decode` experiment (below).
+- **J/token: meaningless here** (≈ 5,000 J for the whole request, prefill included, divided by 5 tokens). Two `f16`
+  measurements (10 % depth) have an inconsistent energy counter (707 and 3,763 J) with peaks at 365-380 W.
 
-**Ton résultat (`kv-decode`, 2026-10-18, 18 mesures, 9 min, 128 tokens générés à chaque requête, contexte ≈ 22 000 tokens, 300 W).**
+**Result on the reference machine (`kv-decode`, 18 measurements, 9 min, 128 tokens generated per request, context
+≈ 22,000 tokens, 300 W).**
 
-| Cache | Décodage moyen (tok/s) | Médiane | Les 6 mesures (tok/s) | VRAM (Mio) |
+| Cache | Mean decoding (tok/s) | Median | The 6 measurements (tok/s) | VRAM (MiB) |
 |---|---|---|---|---|
-| `f16` | 58,6 ± 3,0 | 59,0 | 54,4 à 62,5 | 20 643 |
-| `q8_0` | 50,4 ± 13,8 (**55,7** sans la mesure 24,1) | 54,9 | 24,1 ; 51,4 ; 53,8 ; 56,1 ; 57,2 ; 59,8 | 19 771 |
-| `q4_0` | 55,4 ± 2,4 | 55,0 | 53,2 à 58,9 | 19 263 |
+| `f16` | 58.6 ± 3.0 | 59.0 | 54.4 to 62.5 | 20,643 |
+| `q8_0` | 50.4 ± 13.8 (**55.7** without the 24.1 measurement) | 54.9 | 24.1; 51.4; 53.8; 56.1; 57.2; 59.8 | 19,771 |
+| `q4_0` | 55.4 ± 2.4 | 55.0 | 53.2 to 58.9 | 19,263 |
 
-- **Mesure aberrante :** une mesure de `q8_0` (la 2ᵉ du bloc) a duré 25,1 s au lieu de 21-22 s et décodé à 24 tok/s, avec un pic à
-  305 W (au-dessus de la limite de 300 W). Cause inconnue (à-coup ponctuel). Sans elle, `q8_0` ≈ 55,7 tok/s (5 mesures).
-- **Vitesse :** `f16` ≈ 5 % plus rapide que `q8_0` (58,6 contre 55,7 tok/s), `q4_0` ≈ `q8_0` (55,4). Le même ordre de grandeur
-  (+5 % pour `f16`) était apparu à nombre de tokens égal dans `kv-cache`. **Ce n'est pas statistiquement établi** (l'écart de
-  3 tok/s est du même ordre que la dispersion entre mesures, 6 mesures par cache, blocs exécutés l'un après l'autre).
-- **VRAM :** identique au millième à `kv-cache` (reproductible) : `q8_0` économise 872 Mio, `q4_0` 508 Mio de plus.
-- **J/token (42 à 50) :** ≈ 19,5 s de préremplissage pour ≈ 2,2 s de décodage ; l'énergie du seul décodage est de l'ordre de
-  5 J/token (288 W ÷ 58 tok/s). Ne pas comparer avec d'autres expériences.
+- **Outlier:** one `q8_0` measurement (the 2nd of the block) lasted 25.1 s instead of 21-22 s and decoded at 24 tok/s,
+  with a peak at 305 W (above the 300 W limit). Unknown cause (one-off hiccup). Without it, `q8_0` ≈ 55.7 tok/s
+  (5 measurements).
+- **Speed:** `f16` ≈ 5 % faster than `q8_0` (58.6 versus 55.7 tok/s), `q4_0` ≈ `q8_0` (55.4). The same order of
+  magnitude (+5 % for `f16`) had appeared at an equal number of tokens in `kv-cache`. **It is not statistically
+  established** (the 3 tok/s difference is of the same order as the spread between measurements, 6 measurements per
+  cache, blocks run one after the other).
+- **VRAM:** identical to `kv-cache` to the last MiB (reproducible): `q8_0` saves 872 MiB, `q4_0` 508 MiB more.
+- **J/token (42 to 50):** ≈ 19.5 s of prefill for ≈ 2.2 s of decoding; the energy of decoding alone is around 5 J/token
+  (288 W ÷ 58 tok/s). Do not compare with other experiments.
 
-**Même test après la mise à jour d'Ollama (`kv-decode`, 2026-10-19, `lab update` du matin, 18 mesures).**
+**Same test after an Ollama update (`kv-decode`, the day after, following `lab update`, 18 measurements).**
 
-| Cache | Décodage moyen (tok/s) | Sans la mesure aberrante | Les 6 mesures (tok/s) | VRAM (Mio) |
+| Cache | Mean decoding (tok/s) | Without the outlier | The 6 measurements (tok/s) | VRAM (MiB) |
 |---|---|---|---|---|
-| `f16` | 57,6 ± 2,6 | (aucune) 57,6 | 53,7 à 60,3 | 20 642 |
-| `q8_0` | 49,6 ± 13,5 | 54,7 | 23,9 ; 51,0 ; 52,3 ; 55,9 ; 55,9 ; 58,5 | 19 771 |
-| `q4_0` | 50,7 ± 14,3 | 56,3 | 23,0 ; 54,0 ; 55,5 ; 56,8 ; 56,8 ; 58,3 | 19 259 |
+| `f16` | 57.6 ± 2.6 | (none) 57.6 | 53.7 to 60.3 | 20,642 |
+| `q8_0` | 49.6 ± 13.5 | 54.7 | 23.9; 51.0; 52.3; 55.9; 55.9; 58.5 | 19,771 |
+| `q4_0` | 50.7 ± 14.3 | 56.3 | 23.0; 54.0; 55.5; 56.8; 56.8; 58.3 | 19,259 |
 
-- **Pas de régression visible :** `f16` 57,6 contre 58,6 avant (dans la dispersion), VRAM identique à quelques Mio près. Ce test
-  ne dit pas si l'image d'Ollama a réellement changé de version du moteur (la version n'est pas dans les fichiers reçus).
-- **Mesures aberrantes :** `q8_0` et `q4_0` ont chacun une mesure à ≈ 23 tok/s (la 5ᵉ de leur bloc), avec 3 s de plus que les autres
-  et une puissance moyenne plus basse. Déjà vu une fois pour `q8_0` le 18 octobre, jamais pour `f16` (3 fois sur 24 mesures
-  quantifiées, 0 sur 12 en `f16`). Cause inconnue ; je n'ai pas de preuve que le cache quantifié en soit responsable, et 12 mesures
-  en `f16` ne suffisent pas à l'exclure.
-- **Conclusion inchangée :** `f16` ≈ 3 à 5 % plus rapide que les caches quantifiés hors aberrations, écart du même ordre que la
-  dispersion ; `q8_0` reste en production pour ≈ 0,9 Gio de VRAM.
-- **À propos de la colonne `itl_p50_ms` :** ≈ 0,018 ms, donc inutilisable. Le journal du serveur montre que le moteur démarre avec
-  `--spec-type draft-mtp` (décodage spéculatif : plusieurs tokens validés d'un coup). Je n'ai pas mesuré l'effet de ce mode ; ne lis
-  que `decode_tps` et `itl_p95_ms`.
-- **Pourquoi la quantification économise peu :** le journal indique que seules 16 des 64 couches ont un cache KV
-  (`f16` : 2 048 Mio à 32 768 de contexte, `q8_0` : 1 088, `q4_0` : 576) ; le reste est un état récurrent fixe de 748 Mio.
+- **No visible regression:** `f16` 57.6 versus 58.6 before (within the spread), VRAM identical to a few MiB. This test does
+  not say whether the Ollama image really changed engine version (the version is not in the files received).
+- **Outliers:** `q8_0` and `q4_0` each have one measurement at ≈ 23 tok/s (the 5th of their block), 3 s longer than the
+  others and with a lower mean power. Already seen once for `q8_0` the day before, never for `f16` (3 times out of 24
+  quantised measurements, 0 out of 12 in `f16`). Unknown cause; there is no proof that the quantised cache is
+  responsible, and 12 measurements in `f16` are not enough to rule it out.
+- **Conclusion unchanged:** `f16` ≈ 3 to 5 % faster than the quantised caches apart from outliers, a difference of the
+  same order as the spread; `q8_0` stays in production for ≈ 0.9 GiB of VRAM.
+- **About the `itl_p50_ms` column:** ≈ 0.018 ms, hence unusable. The server log shows the engine starts with
+  `--spec-type draft-mtp` (speculative decoding: several tokens validated at once). The effect of this mode was not
+  measured; only read `decode_tps` and `itl_p95_ms`.
+- **Why quantisation saves little:** the log shows that only 16 of the 64 layers have a KV cache (`f16`: 2,048 MiB at a
+  32,768 context, `q8_0`: 1,088, `q4_0`: 576); the rest is a fixed recurrent state of 748 MiB.
 
-**Décision provisoire :** `q8_0` reste en production : ≈ 0,9 Gio de VRAM gagnés par rapport à `f16` pour une perte de décodage
-d'environ 5 % (≈ 3 tok/s, non démontrée), aucune perte visible sur l'aiguille. `q4_0` ne va pas plus vite que `q8_0` et ne gagne que
-0,5 Gio : à ne considérer qu'après `kv-quality`. Si la VRAM n'est jamais la limite, `f16` reste défendable.
+**Provisional decision:** `q8_0` stays in production: ≈ 0.9 GiB of VRAM saved compared with `f16` for a decoding loss of
+about 5 % (≈ 3 tok/s, not demonstrated), no visible loss on the needle. `q4_0` is no faster than `q8_0` and only saves
+0.5 GiB more: only to consider after `kv-quality`. If VRAM is never the limit, `f16` remains defensible.
 
-### 3.4 Qualité avec le cache KV quantifié
+### 3.4 Quality with a quantised KV cache
 
-**Ce que c'est.** Un test de justesse complémentaire à l'aiguille : 12 calculs d'arithmétique par mesure, 10 répétitions, pour
-chaque type de cache, avec le raisonnement du modèle désactivé.
+**What it is.** An accuracy test complementary to the needle: 12 arithmetic calculations per measurement, 10
+repetitions, for each cache type, with the model's reasoning disabled.
 
-**Pourquoi tester.** Une réponse rapide mais fausse ne sert à rien. Ce test détecte une dégradation **marquée**.
+**Why test it.** A fast but wrong answer is useless. This test detects a **marked** degradation.
 
-**Comment lire.** Compare le taux de réussite entre `f16`, `q8_0` et `q4_0` (avec les intervalles de Wilson). Si les intervalles
-se recouvrent, **tu ne peux pas dire que l'un est meilleur** : c'est du bruit.
+**How to read it.** Compare the success rate between `f16`, `q8_0` and `q4_0` (with the Wilson intervals). If the
+intervals overlap, **you cannot say that one is better**: it is noise.
 
-**Ton résultat (`kv-quality-easy`, 2026-10-19, 150 calculs faciles, 2 répétitions par cache, ≈ 9 min, contexte 8 192).**
+**Result on the reference machine (`kv-quality-easy`, 150 easy calculations, 2 repetitions per cache, ≈ 9 min, context
+8,192).**
 
-| Cache | Bonnes réponses (répétition 1 / 2) | Taux moyen | VRAM (Mio) |
+| Cache | Correct answers (repetition 1 / 2) | Mean rate | VRAM (MiB) |
 |---|---|---|---|
-| `f16` | 147 / 147 sur 150 | 98,0 % | 19 287 |
-| `q8_0` | 148 / 147 | 98,3 % | 19 049 |
-| `q4_0` | 149 / 148 | 99,0 % | 18 921 |
+| `f16` | 147 / 147 out of 150 | 98.0 % | 19,287 |
+| `q8_0` | 148 / 147 | 98.3 % | 19,049 |
+| `q4_0` | 149 / 148 | 99.0 % | 18,921 |
 
-- **Aucune perte visible :** les trois caches sont à 98-99 %, l'écart maximal est de 2 questions sur 150, ce qui est du bruit
-  (`q4_0` est même le premier, sans que cela veuille dire qu'il soit meilleur). Pour 147 réussites sur 150, l'intervalle à 95 % va
-  d'environ 94 % à 99 % : le test ne verrait qu'une perte d'au moins ≈ 5 points.
-- **Mais il sollicite peu le cache :** chaque question ne fait que ≈ 65 tokens ; la quantification a très peu de matière à
-  abîmer. Ce test dit surtout que le modèle fonctionne normalement avec un cache quantifié, pas que `q4_0` tient sur de longs
-  textes. Pour le long contexte, seule l'aiguille à ≈ 22 000 tokens (100 % pour les trois) y répond, et c'est un test faible.
-- **Répétitions :** à température nulle on attendait des réponses identiques ; `q8_0` et `q4_0` diffèrent d'une question entre
-  les deux répétitions (un identifiant aléatoire placé en tête de chaque prompt suffit à changer légèrement les calculs).
-- **Conclusion :** `q4_0` n'a montré aucune dégradation sur les trois tests (aiguille longue, 12 calculs difficiles, 150 calculs
-  faciles), mais ces tests sont faibles et il n'économise que 0,5 Gio de plus que `q8_0`. Je ne vois pas de raison de prendre ce
-  risque : `q8_0` reste le choix.
+- **No visible loss:** the three caches are at 98-99 %, the maximum difference is 2 questions out of 150, which is noise
+  (`q4_0` even comes first, without meaning it is better). For 147 successes out of 150, the 95 % interval goes from
+  about 94 % to 99 %: the test would only see a loss of at least ≈ 5 points.
+- **But it puts little load on the cache:** each question is only ≈ 65 tokens; quantisation has very little material to
+  damage. This test mostly says that the model works normally with a quantised cache, not that `q4_0` holds on long
+  texts. For long contexts, only the needle at ≈ 22,000 tokens (100 % for all three) answers, and it is a weak test.
+- **Repetitions:** at zero temperature identical answers were expected; `q8_0` and `q4_0` differ by one question between
+  the two repetitions (a random identifier placed at the start of each prompt is enough to slightly change the
+  calculations).
+- **Conclusion:** `q4_0` showed no degradation in the three tests (long needle, 12 hard calculations, 150 easy
+  calculations), but these tests are weak and it only saves 0.5 GiB more than `q8_0`. There is no reason to take that
+  risk: `q8_0` remains the choice.
 
-**Limites.** 12 calculs, c'est peu : ça voit un effondrement, pas une perte de 1 %. Une mesure de qualité rigoureuse demanderait
-un corpus de texte et une mesure de perplexité (non faite ici).
+**Limits.** 12 calculations is little: it sees a collapse, not a 1 % loss. A rigorous quality measurement would require a
+text corpus and a perplexity measurement (not done here).
 
-**Ton résultat (`kv-quality`, 2026-10-18, 12 calculs × 10 répétitions × 3 caches, contexte 8 192).**
+**Result on the reference machine (`kv-quality`, 12 calculations × 10 repetitions × 3 caches, context 8,192).**
 
-| Cache | Taux de réussite moyen | Variabilité | VRAM (Mio) |
+| Cache | Mean success rate | Variability | VRAM (MiB) |
 |---|---|---|---|
-| `f16` | 25,0 % (3 calculs sur 12, **identique aux 10 répétitions**) | 0 | 19 289 |
-| `q8_0` | 24,2 % (29 bonnes réponses sur 120) | 10,9 % | 19 049 |
-| `q4_0` | 25,0 % (30 sur 120) | 22 % | 18 926 |
+| `f16` | 25.0 % (3 calculations out of 12, **identical in all 10 repetitions**) | 0 | 19,289 |
+| `q8_0` | 24.2 % (29 correct answers out of 120) | 10.9 % | 19,049 |
+| `q4_0` | 25.0 % (30 out of 120) | 22 % | 18,926 |
 
-- **Aucune différence détectable** entre les trois caches : 29, 30 et 30 réponses justes sur 120.
-- **Mais le test est peu informatif.** (1) Le modèle, sans raisonnement, ne réussit que 3 calculs sur 12
-  (multiplication à 3 chiffres × 2 chiffres + 3 chiffres, réponse directe) : avec une base aussi basse, une dégradation
-  de la qualité serait difficile à voir. (2) Les 12 questions et la graine sont fixes et la température est nulle : `f16`
-  redonne exactement les mêmes réponses à chaque répétition, donc les 10 répétitions valent **une seule mesure**.
-  (3) 12 questions : un écart de 1 ou 2 réponses n'est pas significatif.
-- **Conclusion prudente :** ce test **ne prouve pas** que `q4_0` est sans danger ; il montre seulement qu'il n'y a pas
-  d'effondrement visible sur ce test. Pour trancher, il faudrait des questions plus faciles (base proche de 100 %) et plus
-  nombreuses. C'est l'expérience **`kv-quality-easy`** (150 calculs faciles, mêmes questions pour les trois caches, 6 mesures) :
-  mesurée le 2026-10-19 (résultat ci-dessous).
-- **Vitesse et énergie de cette expérience : à ignorer** (réponses de quelques tokens, voir §4.3 bis).
-- **VRAM à 8 192 de contexte :** `f16` 19 289, `q8_0` 19 049, `q4_0` 18 926 Mio. J'en avais déduit une taille de cache « par
-  token » en supposant une croissance linéaire ; **`ctx-window` a montré que c'est faux** (voir §3.2 bis : la croissance n'est pas
-  linéaire). Ne retiens pas cette extrapolation.
+- **No detectable difference** between the three caches: 29, 30 and 30 correct answers out of 120.
+- **But the test is not very informative.** (1) The model, without reasoning, only gets 3 calculations out of 12 right
+  (3-digit × 2-digit multiplication + 3 digits, direct answer): with such a low baseline, a quality degradation would be
+  hard to see. (2) The 12 questions and the seed are fixed and the temperature is zero: `f16` gives exactly the same
+  answers at every repetition, so the 10 repetitions are worth **a single measurement**. (3) 12 questions: a difference
+  of 1 or 2 answers is not significant.
+- **Cautious conclusion:** this test **does not prove** that `q4_0` is safe; it only shows that there is no visible
+  collapse on this test. To decide, easier questions (baseline close to 100 %) and more of them would be needed. That is
+  the **`kv-quality-easy`** experiment (150 easy calculations, same questions for the three caches, 6 measurements):
+  result above.
+- **Speed and energy of this experiment: to ignore** (answers of a few tokens, see §4.3b).
+- **VRAM at an 8,192 context:** `f16` 19,289, `q8_0` 19,049, `q4_0` 18,926 MiB. A "per-token" cache size had been
+  deduced from these assuming linear growth; **`ctx-window` showed that this is wrong** (see §3.2b: the growth is not
+  linear). Do not keep that extrapolation.
 
-### 3.5 Le cache de préfixe
+### 3.5 The prefix cache
 
-**Ce que c'est.** Quand une nouvelle demande commence exactement comme la précédente (mêmes consignes, même début de
-conversation), Ollama peut réutiliser le travail déjà fait sur ce début au lieu de le relire.
+**What it is.** When a new request starts exactly like the previous one (same instructions, same start of conversation),
+Ollama can reuse the work already done on that start instead of reading it again.
 
-**Pourquoi tester.** Pour les agents (Hermes, OpenClaw), qui renvoient à chaque tour un long début identique (consignes système,
-outils, historique), le gain de temps peut être important. À l'inverse, un début qui change à chaque fois annule le bénéfice.
+**Why test it.** For agents (Hermes, OpenClaw), which send a long identical start at every turn (system instructions,
+tools, history), the time saved can be large. Conversely, a start that changes every time cancels the benefit.
 
-**Ce qu'on mesure.** Le TTFT quand le début est déjà connu, avec 1 024, 8 192 et 24 000 tokens de préfixe commun.
+**What is measured.** TTFT when the start is already known, with 1,024, 8,192 and 24,000 tokens of shared prefix.
 
-**Comment lire.** Un TTFT qui chute quand le préfixe est réutilisé signifie que **l'ordre des éléments du prompt compte** :
-mets ce qui ne change pas **au début**, ce qui change à la fin.
+**How to read it.** A TTFT that drops when the prefix is reused means that **the order of the prompt's elements
+matters**: put what does not change **at the start**, what changes at the end.
 
-**Ton résultat (`prefix-cache`, 2026-10-19, 18 mesures, ≈ 4 min, cache KV en `f16` : la valeur par défaut du banc, pas celle de ta production `q8_0`).**
-Chaque mesure envoie deux demandes qui partagent le même long début : la 1re est « froide », la 2e « chaude ».
+**Result on the reference machine (`prefix-cache`, 18 measurements, ≈ 4 min, KV cache in `f16`: the bench default, not
+the production value `q8_0`).** Each measurement sends two requests sharing the same long start: the 1st is "cold", the
+2nd "warm".
 
-| Début commun (tokens réels) | TTFT froid | TTFT chaud | Gain |
+| Shared start (real tokens) | Cold TTFT | Warm TTFT | Gain |
 |---|---|---|---|
-| ≈ 950 | 1,39 s (très variable : 1,1 à 1,8) | 0,56-0,58 s | × 2,5 (± 0,6) |
-| ≈ 7 400 | 6,52 s | 0,62-0,64 s | × 10,3 (± 0,5) |
-| ≈ 21 500 | 18,87 s | 0,81 s | **× 23,3** (± 0,4) |
+| ≈ 950 | 1.39 s (very variable: 1.1 to 1.8) | 0.56-0.58 s | × 2.5 (± 0.6) |
+| ≈ 7,400 | 6.52 s | 0.62-0.64 s | × 10.3 (± 0.5) |
+| ≈ 21,500 | 18.87 s | 0.81 s | **× 23.3** (± 0.4) |
 
-- **Le gain augmente avec la longueur du début commun** parce que le coût d'une demande chaude reste presque fixe (0,56 s à 0,81 s)
-  alors que celui d'une demande froide croît avec le texte. Pour un agent qui renvoie ≈ 20 000 tokens identiques à chaque tour, le
-  premier token arrive en moins d'une seconde au lieu de 19 s.
-- **Condition :** le début doit être **identique caractère pour caractère** et au **début** du prompt (une date, un identifiant ou un
-  horodatage placé en tête annule le gain), et le modèle doit rester chargé (30 min par défaut ici).
-- **Non mesuré :** avec le cache `q8_0` de ta production, avec plusieurs conversations en parallèle (voir `concurrency`), et dans
-  les vrais clients (Hermes, OpenClaw, Open WebUI) : je ne sais pas s'ils gardent leur début stable.
-- **Défaut du banc corrigé :** la colonne « part du préfixe réutilisée » (`cache_reuse_frac`) valait 0 partout parce
-  qu'Ollama renseigne le nombre de tokens du prompt **complet** même quand il en réutilise une grande partie. Le calcul
-  se fait désormais sur les temps de lecture du prompt (18,4 s contre 0,73 s, soit 96 % évités à 21 500 tokens). Pour le run déjà
-  fait, ignore cette colonne et lis `cold_prompt_eval_s` / `warm_prompt_eval_s` dans `runs.csv`. Le correctif n'est vérifié que par la
-  suite de tests, pas sur le GPU.
-- Vitesse de décodage et J/token de cette expérience : sans objet (32 tokens, énergie dominée par la lecture du prompt).
+- **The gain grows with the length of the shared start** because the cost of a warm request stays almost fixed (0.56 s
+  to 0.81 s) while that of a cold request grows with the text. For an agent sending ≈ 20,000 identical tokens at every
+  turn, the first token arrives in less than a second instead of 19 s.
+- **Condition:** the start must be **identical character for character** and at the **start** of the prompt (a date, an
+  identifier or a timestamp placed first cancels the gain), and the model must stay loaded (30 min by default here).
+- **Not measured:** with the production `q8_0` cache, with several conversations in parallel (see `concurrency`), and in
+  the real clients (Hermes, OpenClaw, Open WebUI): it is not known whether they keep their start stable.
+- **Bench defect fixed:** the "share of the prefix reused" column (`cache_reuse_frac`) was 0 everywhere because Ollama
+  reports the number of tokens of the **complete** prompt even when it reuses a large part of it. The calculation is now
+  based on the prompt reading times (18.4 s versus 0.73 s, i.e. 96 % avoided at 21,500 tokens). For the run already done,
+  ignore this column and read `cold_prompt_eval_s` / `warm_prompt_eval_s` in `runs.csv`. The fix is only verified by the
+  test suite, not on the GPU.
+- Decoding speed and J/token of this experiment: not applicable (32 tokens, energy dominated by reading the prompt).
 
-### 3.6 Le parallélisme
+### 3.6 Parallelism
 
-**Ce que c'est.** `OLLAMA_NUM_PARALLEL` fixe combien de demandes le même modèle traite en même temps. Chaque « emplacement »
-supplémentaire multiplie le cache KV.
+**What it is.** `OLLAMA_NUM_PARALLEL` sets how many requests the same model handles at the same time. Each extra "slot"
+multiplies the KV cache.
 
-**Pourquoi tester.** n8n, Open WebUI et les agents peuvent demander quelque chose simultanément. Il faut savoir si le
-parallélisme augmente le travail total par seconde (le **débit agrégé**) ou si chacun attend plus longtemps pour rien.
+**Why test it.** n8n, Open WebUI and the agents can ask for something simultaneously. You need to know whether
+parallelism increases the total work per second (the **aggregate throughput**) or whether everyone just waits longer.
 
-**Ce qu'on mesure.** `NUM_PARALLEL` de 1, 2 et 4 avec 1, 2 et 4 clients simultanés : débit total et latence par client.
+**What is measured.** `NUM_PARALLEL` of 1, 2 and 4 with 1, 2 and 4 simultaneous clients: total throughput and latency per
+client.
 
-**Comment lire.** Le bon réglage est celui où le débit total progresse sans que la latence d'un client devienne pénible. Plus
-d'emplacements coûte de la VRAM : vérifie toujours que le modèle reste à 100 % GPU (`ollama ps`).
+**How to read it.** The right setting is the one where the total throughput increases without the latency of a client
+becoming painful. More slots cost VRAM: always check that the model stays 100 % GPU (`ollama ps`).
 
-**Ton résultat (`concurrency`, 2026-10-19, 45 mesures, ≈ 8 min, cache KV `f16`, contexte 16 384, prompt ≈ 1 000 tokens, 128 tokens par client).**
+**Result on the reference machine (`concurrency`, 45 measurements, ≈ 8 min, KV cache `f16`, context 16,384, prompt
+≈ 1,000 tokens, 128 tokens per client).**
 
-| Clients simultanés | Premier token (moyenne, `NUM_PARALLEL` 1 / 2 / 4) | Débit total (tok/s) |
+| Simultaneous clients | First token (mean, `NUM_PARALLEL` 1 / 2 / 4) | Total throughput (tok/s) |
 |---|---|---|
-| 1 | 1,14 / 1,13 / 1,11 s | 36,1 / 38,1 / 36,4 |
-| 2 | 2,86 / 2,90 / 2,87 s | 36,6 / 36,7 / 36,6 |
-| 4 | 6,40 / 6,33 / 6,42 s | 36,2 / 36,9 / 36,4 |
+| 1 | 1.14 / 1.13 / 1.11 s | 36.1 / 38.1 / 36.4 |
+| 2 | 2.86 / 2.90 / 2.87 s | 36.6 / 36.7 / 36.6 |
+| 4 | 6.40 / 6.33 / 6.42 s | 36.2 / 36.9 / 36.4 |
 
-- **Les demandes sont traitées l'une après l'autre, quel que soit `NUM_PARALLEL`.** Le débit total reste à ≈ 36-38 tok/s (il
-  ne progresse pas avec les clients), la vitesse de chaque client reste à ≈ 54 tok/s quand il est servi, et le premier token
-  arrive de plus en plus tard : avec 4 clients, la durée totale est ≈ 4 fois celle d'un client (13,9 s contre 3,5 s).
-- **`NUM_PARALLEL=2` ou `4` n'a eu aucun effet mesurable, ni sur la vitesse, ni sur la mémoire** (VRAM 19 521 à 19 523 Mio dans
-  les trois cas, alors que quatre emplacements devraient réserver quatre fois plus de cache). **Cause confirmée par le journal du serveur**
-  (`server-logs.txt`, relevé le 2026-10-19 avec `NUM_PARALLEL` 4 et 2) : Ollama écrit
-  `model architecture does not currently support parallel requests architecture=qwen35`, puis lance le moteur avec `-np 1`
-  (un seul emplacement, `n_slots = 1`). Le réglage est donc ignoré pour ce modèle (architecture `qwen35`) dans cette version
-  d'Ollama. Ça pourrait changer avec une mise à jour d'Ollama ou un autre modèle : à re-tester alors.
-- **Conséquence pratique :** ne monte pas `OLLAMA_NUM_PARALLEL` en espérant servir plusieurs demandes plus vite : ici, rien n'est
-  gagné. Avec `NUM_PARALLEL=1` (valeur actuelle), deux demandes simultanées (n8n et Open WebUI par exemple) se mettent en file :
-  la seconde attend la fin de la première (≈ 3,5 s pour une réponse de 128 tokens), sans erreur.
-- Mesuré en `f16`, avec un seul modèle chargé ; le cache de préfixe (§3.5) n'a pas été testé avec plusieurs clients.
+- **Requests are handled one after the other, whatever `NUM_PARALLEL` is.** The total throughput stays at ≈ 36-38 tok/s
+  (it does not grow with the clients), each client's speed stays at ≈ 54 tok/s when it is served, and the first token
+  arrives later and later: with 4 clients, the total duration is ≈ 4 times that of one client (13.9 s versus 3.5 s).
+- **`NUM_PARALLEL=2` or `4` had no measurable effect, neither on speed nor on memory** (VRAM 19,521 to 19,523 MiB in all
+  three cases, whereas four slots should reserve four times more cache). **Cause confirmed by the server log**
+  (`server-logs.txt`, with `NUM_PARALLEL` 4 and 2): Ollama writes
+  `model architecture does not currently support parallel requests architecture=qwen35`, then starts the engine with
+  `-np 1` (a single slot, `n_slots = 1`). The setting is therefore ignored for this model (`qwen35` architecture) in
+  this version of Ollama. This could change with an Ollama update or another model: test again then.
+- **Practical consequence:** do not raise `OLLAMA_NUM_PARALLEL` hoping to serve several requests faster: here, nothing is
+  gained. With `NUM_PARALLEL=1` (current value), two simultaneous requests (n8n and Open WebUI for example) queue up: the
+  second waits for the first to finish (≈ 3.5 s for a 128-token answer), without error.
+- Measured in `f16`, with a single model loaded; the prefix cache (§3.5) was not tested with several clients.
 
-## 4. Lire un rapport sans se tromper
+## 4. Reading a report without getting it wrong
 
-### 4.1 Les fichiers
+### 4.1 The files
 
-| Fichier | Contenu | À utiliser pour |
+| File | Content | Use it for |
 |---|---|---|
-| `summary.csv` | Valeurs **absolues** par condition (tok/s, secondes, watts…), avec intervalle de confiance et CV | Savoir « combien » |
-| `comparisons.csv` | Écarts **en pourcentage par rapport à la référence** | Savoir « mieux ou moins bien que la référence » |
-| `runs.csv` | Une ligne par mesure | Chercher une mesure aberrante |
-| `telemetry.csv` | État du GPU à 10 mesures par seconde | Comprendre un bridage ou une chaleur |
-| `report.html` | Tout cela avec graphiques et avertissements | Lecture générale |
-| `meta.json` | Réglages réellement utilisés, version d'Ollama | Vérifier dans quelles conditions la mesure a été faite |
+| `summary.csv` | **Absolute** values per condition (tok/s, seconds, watts…), with confidence interval and CV | Knowing "how much" |
+| `comparisons.csv` | Differences **in percent relative to the baseline** | Knowing "better or worse than the baseline" |
+| `runs.csv` | One line per measurement | Looking for an outlier |
+| `telemetry.csv` | GPU state at 10 samples per second | Understanding throttling or heat |
+| `report.html` | All of that with charts and warnings | General reading |
+| `meta.json` | Settings actually used, Ollama version | Checking under which conditions the measurement was made |
 
-### 4.2 Les quatre questions à poser à chaque chiffre
+### 4.2 The four questions to ask of every number
 
-1. **Quelle est la marge d'erreur ?** Une valeur sans intervalle de confiance n'est qu'un chiffre. Si les intervalles de deux
-   conditions se recouvrent, la différence n'est pas démontrée.
-2. **Est-ce significatif ?** Le rapport marque une différence « significative » seulement si l'intervalle de l'écart exclut 0.
-3. **Est-ce plus grand que le bruit ?** Le rapport donne le **plus petit écart détectable** : en dessous, une différence est
-   indistinguable du hasard. Pour ta machine à l'époque du `power-sweep` : ≈ 10,5 %.
-4. **La référence est-elle fiable ?** Un pourcentage n'a de sens que si la référence est bonne (voir §4.3).
+1. **What is the margin of error?** A value without a confidence interval is just a number. If the intervals of two
+   conditions overlap, the difference is not demonstrated.
+2. **Is it significant?** The report marks a difference as "significant" only if the interval of the difference
+   excludes 0.
+3. **Is it larger than the noise?** The report gives the **smallest detectable difference**: below it, a difference is
+   indistinguishable from chance. For the reference machine at the time of the `power-sweep`: ≈ 10.5 %.
+4. **Is the baseline reliable?** A percentage only makes sense if the baseline is good (see §4.3).
 
-### 4.3 Un piège rencontré en vrai (`context-scaling`)
+### 4.3 A pitfall met for real (`context-scaling`)
 
-`comparisons.csv` annonçait que la génération était **+19 % à +22 % plus rapide** avec un grand contexte que la référence.
-C'est contre-intuitif : plus de texte ne devrait pas accélérer la génération. En lisant `summary.csv`, la cause apparaît : le
-point de référence (512 tokens) est anormalement lent (48,6 tok/s contre ≈ 58), avec une puissance et une fréquence plus basses :
-des essais très courts, GPU pas encore monté en régime. Les pourcentages en héritent. **Moralité : quand un résultat est
-contre-intuitif, regarde les valeurs absolues avant de conclure.**
+`comparisons.csv` announced that generation was **+19 % to +22 % faster** with a large context than the baseline. That is
+counter-intuitive: more text should not speed up generation. Reading `summary.csv`, the cause appears: the baseline point
+(512 tokens) is abnormally slow (48.6 tok/s versus ≈ 58), with lower power and clock: very short trials, GPU not yet up
+to speed. The percentages inherit that. **Moral: when a result is counter-intuitive, look at the absolute values before
+concluding.**
 
-### 4.3 bis Un deuxième piège rencontré en vrai (`kv-cache`)
+### 4.3b A second pitfall met for real (`kv-cache`)
 
-Une vitesse de décodage calculée sur **4 à 7 tokens** n'est pas une vitesse : elle change avec le nombre de tokens (de 61 à
-109 tok/s dans le même run) et ses marges d'erreur sont énormes. Avant de lire `decode_tps`, ouvre `runs.csv` et regarde la
-colonne `gen_tokens` : il en faut au moins plusieurs dizaines. Les expériences à base d'aiguille (réponse d'un code) ne
-mesurent pas le décodage ; la charge `mixed` (long texte demandé) le fait. Même réflexe pour les joules par token : si
-`energy_j` couvre un préremplissage de 19 s pour 5 tokens générés, le résultat (> 1 000 J/token) n'a aucun sens.
+A decoding speed computed on **4 to 7 tokens** is not a speed: it changes with the number of tokens (from 61 to 109
+tok/s in the same run) and its error margins are huge. Before reading `decode_tps`, open `runs.csv` and look at the
+`gen_tokens` column: several dozen are needed at least. Needle-based experiments (the answer is a code) do not measure
+decoding; the `mixed` workload (long text requested) does. Same reflex for joules per token: if `energy_j` covers a 19 s
+prefill for 5 generated tokens, the result (> 1,000 J/token) makes no sense.
 
-### 4.4 Les avertissements automatiques du rapport
+### 4.4 The report's automatic warnings
 
-Le rapport signale : trop peu de répétitions ; bruit élevé (CV > 5 %), donc machine pas isolée ; dérive dans le temps
-(la vitesse change avec l'ordre des mesures) ; bridage thermique ou matériel ; modèle partiellement sur le processeur. Un
-avertissement ne dit pas la cause : à toi de chercher (une application en arrière-plan, la température de la pièce…).
+The report flags: too few repetitions; high noise (CV > 5 %), so the machine is not isolated; drift over time (speed
+changes with the order of measurements); thermal or hardware throttling; model partly on the CPU. A warning does not
+give the cause: it is up to you to look (a background application, the room temperature…).
 
-### 4.5 Les conditions d'une bonne mesure
+### 4.5 The conditions of a good measurement
 
-- **Machine isolée** : le banc arrête l'Ollama de production ; arrête aussi ComfyUI et Hermes, et laisse le bureau à distance
-  éteint (il consomme ≈ 100 W et fausse la comparaison).
-- **Modèle explicite** : passe toujours `--model qwen3.8:27b`. Sans cela, `lab bench` prend le premier modèle chargé, qui peut
-  être le petit modèle de tâches.
-- **Même modèle, même version d'Ollama** que ceux que tu utilises : les résultats ne se transportent pas d'un autre modèle.
-- **Noter l'état de la machine** (bureau à distance, température de la pièce) pour pouvoir comparer plus tard.
+- **Isolated machine**: the bench stops the production Ollama; also stop ComfyUI and Hermes, and keep the remote desktop
+  off (it draws ≈ 100 W and skews the comparison).
+- **Explicit model**: always pass `--model qwen3.8:27b` (or your model). Otherwise, `lab bench` takes the first loaded
+  model, which may be the small task model.
+- **Same model, same Ollama version** as the ones you use: results do not carry over from another model.
+- **Note the machine's state** (remote desktop, room temperature) to be able to compare later.
 
-## 5. Glossaire
+## 5. Glossary
 
-| Terme | Définition |
+| Term | Definition |
 |---|---|
-| **Token** | Morceau de texte (mot, partie de mot, ponctuation) : l'unité que le modèle lit et écrit. Environ 3 à 4 caractères en français. |
-| **Prompt** | Tout le texte envoyé au modèle pour une demande : consignes, historique, documents, question. |
-| **Contexte / fenêtre de contexte** | Quantité maximale de tokens que le modèle considère à la fois (prompt + réponse). |
-| **Réservation vs remplissage** | `num_ctx` réserve la fenêtre ; le remplissage est le texte qui s'y trouve vraiment. Le temps d'attente suit le remplissage, la mémoire suit (en principe) la réservation. |
-| **`num_ctx`** | Réglage Ollama de la taille de cette fenêtre pour une demande. `OLLAMA_CONTEXT_LENGTH` donne la valeur par défaut. |
-| **Prefill** | Phase où le modèle **lit** le prompt avant de répondre. Se mesure en tokens lus par seconde. |
-| **Génération (decode)** | Phase où le modèle **écrit** la réponse, token après token. Se mesure en tokens/s. |
-| **tok/s** | Tokens par seconde : la vitesse. |
-| **TTFT** (*time to first token*) | Délai entre l'envoi de la demande et le premier token de la réponse : l'attente ressentie. Dépend surtout du prefill. |
-| **ITL** (*inter-token latency*) | Délai entre deux tokens successifs ; sa valeur p95 dit que 95 % des délais sont inférieurs. |
-| **p50 / p95 / p99** | Percentiles : valeur en dessous de laquelle se trouvent 50 %, 95 %, 99 % des mesures. Le p95 décrit les « mauvais jours ». |
-| **Cache KV** | Mémoire où le modèle garde les résultats intermédiaires de tout le texte déjà vu pour ne pas les recalculer. |
-| **Quantification** | Stockage compressé (moins de bits par valeur) : moins de mémoire, au prix éventuel de précision. |
-| **`f16` / `q8_0` / `q4_0`** | Précision du cache KV : 16 bits (pleine), 8 bits, 4 bits. |
-| **Attention flash** | Méthode de calcul de l'attention plus économe en mémoire et plus rapide ; requise pour quantifier le cache KV. |
-| **VRAM** | Mémoire vidéo de la carte (24 Go sur la 3090) où vivent le modèle et le cache KV. |
-| **100 % GPU** | Tout le modèle est dans la VRAM. Moins que cela = une partie sur le processeur, nettement plus lent. |
-| **Limite de puissance (`power limit`)** | Plafond en watts imposé au GPU. |
-| **Fréquence SM** | Vitesse d'horloge des unités de calcul du GPU (en MHz) ; elle baisse quand la carte est bridée. |
-| **Bridage (`throttling`)** | Baisse automatique de fréquence, due à la limite de puissance, à la température, ou à une protection matérielle. |
-| **J/token** | Énergie par token généré (joules). Dans nos mesures elle **inclut le prefill** : un long prompt la fait exploser sans que la génération devienne moins efficace. |
-| **État `P8`** | Mode repos du GPU (≈ 20 W). Un GPU qui n'y retourne pas indique une charge de fond. |
-| **Répétition** | Une mesure refaite dans les mêmes conditions, pour estimer le bruit. |
-| **Échauffement (`warmup`)** | Mesure non comptée faite avant, pour que le modèle et la carte soient prêts. |
-| **Refroidissement (`cooldown`)** | Attente que le GPU redescende à une température cible entre deux mesures. |
-| **Référence (`baseline`)** | Condition à laquelle on compare les autres. |
-| **Facteur** | Réglage qui varie d'une condition à l'autre dans une expérience. |
-| **Plan factoriel** | Toutes les combinaisons des valeurs des facteurs. |
-| **Intervalle de confiance à 95 % (IC)** | Fourchette dans laquelle la vraie valeur se trouve avec 95 % de probabilité, d'après l'échantillon. |
-| **CV** (coefficient de variation) | Dispersion relative des mesures (écart-type ÷ moyenne). Plus il est grand, plus c'est bruité. |
-| **Significatif** | Écart dont l'IC exclut 0 : peu probablement dû au hasard. |
-| **Plus petit écart détectable** | Taille minimale d'écart que ce nombre de répétitions permet de distinguer du bruit. |
-| **Intervalle de Wilson** | Intervalle de confiance adapté aux proportions (taux de réussite). |
-| **Aiguille (`needle`)** | Test de récupération : une information cachée dans un long texte, que le modèle doit retrouver. |
-| **Cache de préfixe** | Réutilisation du travail fait sur un début de prompt identique entre deux demandes. |
-| **`OLLAMA_NUM_PARALLEL`** | Nombre de demandes traitées simultanément par le même modèle. |
-| **`OLLAMA_KEEP_ALIVE`** | Durée pendant laquelle un modèle reste en VRAM après sa dernière utilisation (30 min ici). |
-| **`OLLAMA_MAX_LOADED_MODELS`** | Nombre de modèles chargés en même temps (2 avec le modèle de tâches). |
-| **Perplexité** | Mesure rigoureuse de la qualité d'un modèle sur un texte ; non faite ici. |
+| **Token** | Piece of text (word, part of a word, punctuation): the unit the model reads and writes. About 3 to 4 characters in English. |
+| **Prompt** | All the text sent to the model for a request: instructions, history, documents, question. |
+| **Context / context window** | Maximum number of tokens the model considers at once (prompt + answer). |
+| **Reservation vs fill** | `num_ctx` reserves the window; the fill is the text actually in it. Waiting time follows the fill, memory (in principle) follows the reservation. |
+| **`num_ctx`** | Ollama setting for the size of that window for one request. `OLLAMA_CONTEXT_LENGTH` gives the default value. |
+| **Prefill** | Phase where the model **reads** the prompt before answering. Measured in tokens read per second. |
+| **Generation (decode)** | Phase where the model **writes** the answer, token after token. Measured in tokens/s. |
+| **tok/s** | Tokens per second: the speed. |
+| **TTFT** (*time to first token*) | Delay between sending the request and the first token of the answer: the waiting time you feel. Depends mostly on the prefill. |
+| **ITL** (*inter-token latency*) | Delay between two successive tokens; its p95 value says that 95 % of the delays are below it. |
+| **p50 / p95 / p99** | Percentiles: value below which 50 %, 95 %, 99 % of the measurements lie. The p95 describes the "bad days". |
+| **KV cache** | Memory where the model keeps the intermediate results of all the text already seen, so as not to recompute them. |
+| **Quantisation** | Compressed storage (fewer bits per value): less memory, possibly at the cost of precision. |
+| **`f16` / `q8_0` / `q4_0`** | Precision of the KV cache: 16 bits (full), 8 bits, 4 bits. |
+| **Flash attention** | A way of computing attention that is faster and uses less memory; required to quantise the KV cache. |
+| **VRAM** | The card's video memory (24 GB on the 3090) where the model and the KV cache live. |
+| **100 % GPU** | The whole model is in VRAM. Less than that = part of it on the CPU, much slower. |
+| **Power limit** | Cap in watts imposed on the GPU. |
+| **SM clock** | Clock speed of the GPU's compute units (in MHz); it drops when the card is capped. |
+| **Throttling** | Automatic clock reduction, due to the power limit, the temperature, or a hardware protection. |
+| **J/token** | Energy per generated token (joules). In these measurements it **includes the prefill**: a long prompt makes it explode without generation becoming less efficient. |
+| **`P8` state** | GPU idle mode (≈ 20 W). A GPU that does not return to it indicates a background load. |
+| **Repetition** | A measurement redone under the same conditions, to estimate the noise. |
+| **Warm-up** | Uncounted measurement made beforehand, so that the model and the card are ready. |
+| **Cool-down** | Waiting for the GPU to come back down to a target temperature between two measurements. |
+| **Baseline** | Condition the others are compared with. |
+| **Factor** | Setting that varies from one condition to another in an experiment. |
+| **Factorial design** | All combinations of the factors' values. |
+| **95 % confidence interval (CI)** | Range in which the true value lies with 95 % probability, according to the sample. |
+| **CV** (coefficient of variation) | Relative spread of the measurements (standard deviation ÷ mean). The larger it is, the noisier. |
+| **Significant** | A difference whose CI excludes 0: unlikely to be due to chance. |
+| **Smallest detectable difference** | Minimum size of difference that this number of repetitions can tell apart from noise. |
+| **Wilson interval** | Confidence interval suited to proportions (success rates). |
+| **Needle** | Retrieval test: a piece of information hidden in a long text, which the model must find. |
+| **Prefix cache** | Reuse of the work done on an identical prompt start between two requests. |
+| **`OLLAMA_NUM_PARALLEL`** | Number of requests handled simultaneously by the same model. |
+| **`OLLAMA_KEEP_ALIVE`** | How long a model stays in VRAM after its last use (30 min here). |
+| **`OLLAMA_MAX_LOADED_MODELS`** | Number of models loaded at the same time (2 with the task model). |
+| **Perplexity** | Rigorous measure of a model's quality on a text; not done here. |
 
-## 6. Ce qui n'est pas vérifié
+## 6. What is not verified
 
-- Les définitions du §5 et les explications du §3 sont des explications générales ; elles ne proviennent pas de mesures sur ta
-  machine. Seuls les paragraphes « Ton résultat » le sont.
-- Les chiffres « environ moitié » et « environ un quart » du cache quantifié sont des propriétés du format, pas des
-  mesures de ta machine. La VRAM gagnée a été lue dans `runs.csv` de `kv-cache` (voir §3.3).
-- Les critères de choix du §3.3 (garder `q8_0` s'il n'est pas plus lent et retrouve l'aiguille aussi bien) sont ma proposition de
-  lecture, pas une règle établie.
-- `prefix-cache` et `concurrency` ont été mesurés en cache `f16` seulement ; `NUM_PARALLEL` est ignoré par Ollama pour l'architecture `qwen35` (confirmé par le journal).
-- `ctx-window` : 4 répétitions seulement par condition ; la combinaison « 98 304 + petit modèle de tâches » et la valeur réellement appliquée de `num_ctx` à 98 304 (colonne `ctx_effective` de `runs.csv`) n'ont pas été vérifiées.
-- J'ai ajouté la colonne `peak_mem_used_mb` aux tableaux du rapport (`bench/labbench/report.py`) ; elle n'a été testée qu'avec la suite de tests à faux GPU, pas sur un vrai rapport. En cas de doute, la colonne est dans `runs.csv`.
-- Les résultats de `power-sweep` et `power-confirm` ont été obtenus avec le bureau à distance dans un état non noté pour le
-  second ; leur comparaison avec `context-scaling` (génération à 58 tok/s contre 50 mesurés au `power-sweep`) reste inexpliquée.
+- The definitions in §5 and the explanations in §3 are general explanations; they do not come from measurements. Only
+  the "Result on the reference machine" paragraphs do.
+- The "about half" and "about a quarter" figures for the quantised cache are properties of the format, not measurements.
+  The VRAM saved was read in the `runs.csv` of `kv-cache` (see §3.3).
+- The choice criteria in §3.3 (keep `q8_0` if it is not slower and finds the needle as well) are a reading proposal, not
+  an established rule.
+- `prefix-cache` and `concurrency` were measured with an `f16` cache only; `NUM_PARALLEL` is ignored by Ollama for the
+  `qwen35` architecture (confirmed by the log).
+- `ctx-window`: only 4 repetitions per condition; the combination "98,304 + small task model" and the value of `num_ctx`
+  actually applied at 98,304 (`ctx_effective` column of `runs.csv`) were not checked.
+- The `peak_mem_used_mb` column in the report tables (`bench/labbench/report.py`) was only tested with the fake-GPU test
+  suite, not on a real report. When in doubt, the column is in `runs.csv`.
+- The `power-sweep` and `power-confirm` results were obtained with the remote desktop in a state not noted for the
+  second; their comparison with `context-scaling` (generation at 58 tok/s versus 50 measured in the `power-sweep`)
+  remains unexplained.
