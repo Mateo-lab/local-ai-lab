@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# ÉTAPE 8 (optionnelle) : prépare le second SSD (/data) et y déplace les données Docker.
+# STEP 8 (optional): prepares the second SSD (/data) and moves Docker's data to it.
 #
-#     ./8-stockage.sh disque /dev/NOM          # 1) EFFACE ce disque, le formate en ext4 et le monte sur LAB_DATA_DIR (/data)
-#     ./8-stockage.sh docker                   # 2) déplace Docker (images, volumes, modèles Ollama) sur /data
-#     ./8-stockage.sh etat                     # affiche l'état (disques, /data, racine Docker)
+#     ./8-stockage.sh disk /dev/NAME           # 1) ERASES this disk, formats it as ext4 and mounts it on LAB_DATA_DIR (/data)
+#     ./8-stockage.sh docker                   # 2) moves Docker (images, volumes, Ollama models) to /data
+#     ./8-stockage.sh status                   # shows the state (disks, /data, Docker root)
 #
-# Les deux étapes demandent une confirmation. "disque" est DESTRUCTIF pour le disque ciblé : lis ce qui s'affiche.
-# "docker" arrête tes conteneurs ; relance ensuite ./3-demarrer.sh. Jamais de 'down -v'.
+# Both steps ask for a confirmation. "disk" is DESTRUCTIVE for the target disk: read what is shown.
+# "docker" stops your containers; then run ./3-demarrer.sh again. Never 'down -v'.
+# (The former French sub-commands "disque" and "etat" still work.)
 set -euo pipefail
 
 _CONF="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lab.conf"; [ ! -f "$_CONF" ] || . "$_CONF"
 DATA="${LAB_DATA_DIR:-/data}"
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
-die() { echo "ERREUR : $*" >&2; exit 1; }
+die() { echo "ERROR: $*" >&2; exit 1; }
 
 root_disk() { lsblk -no PKNAME "$(findmnt -no SOURCE /)" | head -1; }
 
@@ -21,70 +22,70 @@ cmd_etat() {
   echo
   df -h / "$DATA" 2>/dev/null || true
   echo
-  echo "Racine Docker : $(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo 'Docker injoignable')"
+  echo "Docker root: $(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo 'Docker unreachable')"
 }
 
 cmd_disque() {
   local dev="${1:-}"
-  [ -n "$dev" ] || { lsblk -o NAME,SIZE,MODEL,FSTYPE,MOUNTPOINTS; die "indique le disque à EFFACER, par exemple : ./8-stockage.sh disque /dev/nvme1n1 (voir la liste ci-dessus)"; }
-  [ -b "$dev" ] || die "$dev n'est pas un disque. Voir : lsblk"
-  [ "$(lsblk -dno TYPE "$dev")" = "disk" ] || die "$dev n'est pas un disque entier (pas une partition)."
-  [ "$(basename "$dev")" != "$(root_disk)" ] || die "$dev est le disque du système. Arrêt."
-  mountpoint -q "$DATA" && die "$DATA est déjà monté. Rien à faire (./8-stockage.sh etat)."
+  [ -n "$dev" ] || { lsblk -o NAME,SIZE,MODEL,FSTYPE,MOUNTPOINTS; die "give the disk to ERASE, for example: ./8-stockage.sh disk /dev/nvme1n1 (see the list above)"; }
+  [ -b "$dev" ] || die "$dev is not a disk. See: lsblk"
+  [ "$(lsblk -dno TYPE "$dev")" = "disk" ] || die "$dev is not a whole disk (not a partition)."
+  [ "$(basename "$dev")" != "$(root_disk)" ] || die "$dev is the system disk. Stopping."
+  mountpoint -q "$DATA" && die "$DATA is already mounted. Nothing to do (./8-stockage.sh status)."
 
-  say "Disque ciblé : $dev"
+  say "Target disk: $dev"
   lsblk -o NAME,SIZE,MODEL,FSTYPE,LABEL,MOUNTPOINTS "$dev"
   local mp; mp="$(lsblk -nlo MOUNTPOINTS "$dev" | grep -v '^$' | head -1 || true)"
   if [ -n "$mp" ]; then
-    echo; echo "Contenu actuel (monté sur $mp) :"
+    echo; echo "Current content (mounted on $mp):"
     df -h "$mp" | tail -1
     ls -A "$mp" | head -20
-    echo "Nombre d'entrées à la racine : $(ls -A "$mp" | wc -l)"
+    echo "Number of entries at the root: $(ls -A "$mp" | wc -l)"
   fi
   echo
-  echo "TOUT ce qui se trouve sur $dev sera EFFACÉ, sans retour possible."
-  read -r -p "Pour confirmer, tape exactement « $dev » : " ans
-  [ "$ans" = "$dev" ] || { echo "Annulé."; exit 0; }
+  echo "EVERYTHING on $dev will be ERASED, with no way back."
+  read -r -p "To confirm, type exactly \"$dev\": " ans
+  [ "$ans" = "$dev" ] || { echo "Cancelled."; exit 0; }
 
   sudo -v
-  say "Démontage et effacement"
+  say "Unmounting and erasing"
   for m in $(lsblk -nlo MOUNTPOINTS "$dev" | grep -v '^$' || true); do sudo umount "$m"; done
   sudo wipefs -a "$dev"
 
-  say "Partition GPT + ext4"
+  say "GPT partition + ext4"
   sudo parted -s "$dev" mklabel gpt mkpart DATA ext4 1MiB 100%
   sudo udevadm settle
   sleep 2
   local part; part="$(lsblk -nlo PATH,TYPE "$dev" | awk '$2=="part"{print $1; exit}')"
-  [ -b "${part:-}" ] || die "partition introuvable après création"
+  [ -b "${part:-}" ] || die "partition not found after creation"
   sudo mkfs.ext4 -m 1 -L DATA "$part"
-  for m in $(lsblk -nlo MOUNTPOINTS "$part" | grep -v '^$' || true); do sudo umount "$m" || true; done   # montage automatique du bureau
+  for m in $(lsblk -nlo MOUNTPOINTS "$part" | grep -v '^$' || true); do sudo umount "$m" || true; done   # automatic mount by the desktop
 
-  say "Montage sur $DATA (UUID dans /etc/fstab, démarrage possible même si le disque manque)"
+  say "Mounting on $DATA (UUID in /etc/fstab, boot still possible if the disk is missing)"
   local uuid; uuid="$(sudo blkid -s UUID -o value "$part")"
-  [ -n "$uuid" ] || die "UUID introuvable"
+  [ -n "$uuid" ] || die "UUID not found"
   sudo mkdir -p "$DATA"
   grep -q "UUID=$uuid" /etc/fstab || echo "UUID=$uuid $DATA ext4 defaults,noatime,nofail,x-systemd.device-timeout=10s 0 2" | sudo tee -a /etc/fstab >/dev/null
   sudo systemctl daemon-reload
   sudo mount "$DATA"
-  mountpoint -q "$DATA" || die "le montage de $DATA a échoué"
+  mountpoint -q "$DATA" || die "mounting $DATA failed"
   sudo mkdir -p "$DATA/docker" "$DATA/backups"
   sudo chown "$USER":"$USER" "$DATA/backups"
   sudo chmod 755 "$DATA"
-  say "Terminé"
+  say "Done"
   df -h "$DATA"
-  echo "Étape suivante : ./8-stockage.sh docker"
+  echo "Next step: ./8-stockage.sh docker"
 }
 
 cmd_docker() {
-  mountpoint -q "$DATA" || die "$DATA n'est pas monté (lance d'abord : ./8-stockage.sh disque)."
-  command -v rsync >/dev/null || { echo "→ installation de rsync"; sudo apt-get install -y rsync; }
-  docker info >/dev/null 2>&1 || die "Docker ne répond pas."
+  mountpoint -q "$DATA" || die "$DATA is not mounted (run first: ./8-stockage.sh disk)."
+  command -v rsync >/dev/null || { echo "→ installing rsync"; sudo apt-get install -y rsync; }
+  docker info >/dev/null 2>&1 || die "Docker does not answer."
   local cur; cur="$(docker info -f '{{.DockerRootDir}}')"
-  [ "$cur" != "$DATA/docker" ] || { echo "Docker utilise déjà $DATA/docker. Rien à faire."; exit 0; }
-  [ "$cur" = "/var/lib/docker" ] || die "Racine Docker inattendue : $cur (attendu /var/lib/docker)."
+  [ "$cur" != "$DATA/docker" ] || { echo "Docker already uses $DATA/docker. Nothing to do."; exit 0; }
+  [ "$cur" = "/var/lib/docker" ] || die "Unexpected Docker root: $cur (expected /var/lib/docker)."
 
-  # Docker récent : les images peuvent être stockées par containerd (/var/lib/containerd), pas seulement /var/lib/docker
+  # Recent Docker: images may be stored by containerd (/var/lib/containerd), not only in /var/lib/docker
   local cd_store=0
   docker info -f '{{json .DriverStatus}}' | grep -q 'io.containerd.snapshotter' && cd_store=1
   local need; need=$(sudo du -sm /var/lib/docker 2>/dev/null | cut -f1)
@@ -92,23 +93,23 @@ cmd_docker() {
   local free; free=$(df -m --output=avail "$DATA" | tail -1 | tr -d ' ')
 
   say "Plan"
-  echo "  Taille à copier : ${need} Mo  ·  libre sur $DATA : ${free} Mo"
-  echo "  Magasin d'images : $([ $cd_store = 1 ] && echo 'containerd (sera déplacé aussi)' || echo 'overlay2 (dans /var/lib/docker)')"
-  echo "  Conteneurs actifs : $(docker ps --format '{{.Names}}' | tr '\n' ' ')"
-  [ "$free" -gt $(( need * 12 / 10 )) ] || die "pas assez de place sur $DATA"
-  echo "  Les conteneurs seront arrêtés proprement, puis Docker redémarré avec data-root=$DATA/docker."
-  echo "  Les anciennes données restent dans /var/lib/docker.old (suppression manuelle, plus tard)."
-  read -r -p "Continuer ? [o/N] " ok; [ "$ok" = "o" ] || [ "$ok" = "O" ] || { echo "Annulé."; exit 0; }
+  echo "  Size to copy: ${need} MB  ·  free on $DATA: ${free} MB"
+  echo "  Image store: $([ $cd_store = 1 ] && echo 'containerd (will be moved too)' || echo 'overlay2 (in /var/lib/docker)')"
+  echo "  Running containers: $(docker ps --format '{{.Names}}' | tr '\n' ' ')"
+  [ "$free" -gt $(( need * 12 / 10 )) ] || die "not enough room on $DATA"
+  echo "  The containers will be stopped cleanly, then Docker restarted with data-root=$DATA/docker."
+  echo "  The old data stays in /var/lib/docker.old (to delete by hand, later)."
+  read -r -p "Continue? [y/N] " ok; [[ "$ok" =~ ^([yYoO]|yes|oui)$ ]] || { echo "Cancelled."; exit 0; }
   sudo -v
 
-  say "Arrêt propre des conteneurs"
+  say "Stopping the containers cleanly"
   local ids; ids="$(docker ps -q)"
   [ -z "$ids" ] || docker stop $ids >/dev/null
-  say "Arrêt de Docker"
+  say "Stopping Docker"
   sudo systemctl stop docker.socket docker
   [ "$cd_store" = 1 ] && sudo systemctl stop containerd
 
-  say "Copie (peut durer plusieurs minutes)"
+  say "Copying (can take several minutes)"
   sudo rsync -aHAX --numeric-ids --info=progress2 /var/lib/docker/ "$DATA/docker/"
   if [ "$cd_store" = 1 ]; then
     sudo mkdir -p "$DATA/containerd"
@@ -121,7 +122,7 @@ cmd_docker() {
 import json, os
 p = "/etc/docker/daemon.json"
 d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) else {}
-d["data-root"] = "$DATA/docker"          # on conserve le reste (runtime NVIDIA, etc.)
+d["data-root"] = "$DATA/docker"          # keep the rest (NVIDIA runtime, etc.)
 json.dump(d, open(p, "w"), indent=2)
 PY
   if [ "$cd_store" = 1 ]; then
@@ -135,7 +136,7 @@ PY
       sudo mv /etc/containerd/config.toml.new /etc/containerd/config.toml
     fi
   fi
-  # Docker ne doit jamais démarrer avant le montage de /data (sinon il recréerait un dossier vide sur la racine)
+  # Docker must never start before /data is mounted (otherwise it would recreate an empty folder on the root disk)
   sudo mkdir -p /etc/systemd/system/docker.service.d
   printf '[Unit]\nRequiresMountsFor=%s\n' "$DATA" | sudo tee /etc/systemd/system/docker.service.d/data-mount.conf >/dev/null
   if [ "$cd_store" = 1 ]; then
@@ -144,26 +145,26 @@ PY
   fi
   sudo systemctl daemon-reload
 
-  say "Mise de côté de l'ancien emplacement et redémarrage"
+  say "Setting the old location aside and restarting"
   sudo mv /var/lib/docker /var/lib/docker.old
   [ "$cd_store" = 1 ] && { sudo mv /var/lib/containerd /var/lib/containerd.old; sudo systemctl start containerd; }
   sudo systemctl start docker
   sleep 3
 
-  say "Vérification"
+  say "Check"
   local now; now="$(docker info -f '{{.DockerRootDir}}')"
-  echo "Racine Docker : $now"
-  [ "$now" = "$DATA/docker" ] || die "Docker n'utilise pas $DATA/docker. Anciennes données intactes dans /var/lib/docker.old."
-  echo "Volumes : $(docker volume ls -q | wc -l) · Images : $(docker image ls -q | wc -l)"
+  echo "Docker root: $now"
+  [ "$now" = "$DATA/docker" ] || die "Docker does not use $DATA/docker. Old data intact in /var/lib/docker.old."
+  echo "Volumes: $(docker volume ls -q | wc -l) · Images: $(docker image ls -q | wc -l)"
   docker volume ls --format '  {{.Name}}' | head -20
   echo
-  echo "OK. Relance maintenant tes services : ./3-demarrer.sh (puis ./5-hermes.sh, ./6-langfuse.sh… au besoin)."
-  echo "Quand tout fonctionne depuis plusieurs jours : sudo rm -rf /var/lib/docker.old /var/lib/containerd.old (libère de la place)."
+  echo "OK. Now restart your services: ./3-demarrer.sh (then ./5-hermes.sh, ./6-langfuse.sh… if needed)."
+  echo "Once everything has worked for several days: sudo rm -rf /var/lib/docker.old /var/lib/containerd.old (frees space)."
 }
 
 case "${1:-help}" in
-  disque) shift; cmd_disque "$@" ;;
+  disk|disque) shift; cmd_disque "$@" ;;
   docker) cmd_docker ;;
-  etat)   cmd_etat ;;
-  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' ;;
+  status|etat) cmd_etat ;;
+  *) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

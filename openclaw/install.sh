@@ -1,65 +1,65 @@
 #!/usr/bin/env bash
-# Installe OpenClaw en Docker (image officielle pré-construite) et le branche
-# sur l'Ollama de ../ai-stack via le réseau Docker `llm-net`.
+# Installs OpenClaw with Docker (official pre-built image) and connects it
+# to the Ollama of ../ai-stack through the `llm-net` Docker network.
 #
-# Usage :  ./install.sh
-# Variables optionnelles :
-#   OPENCLAW_DIR    dossier d'installation (défaut : ~/openclaw)
-#   OPENCLAW_IMAGE  image à utiliser       (défaut : ghcr.io/openclaw/openclaw:latest)
-#                   Pour la fonction navigateur de la gateway : ...:latest-browser
+# Usage:  ./install.sh
+# Optional variables:
+#   OPENCLAW_DIR    installation folder (default: ~/openclaw)
+#   OPENCLAW_IMAGE  image to use        (default: ghcr.io/openclaw/openclaw:latest)
+#                   For the gateway's browser feature: ...:latest-browser
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="${OPENCLAW_DIR:-$HOME/openclaw}"
 export OPENCLAW_IMAGE="${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}"
 
-need() { command -v "$1" >/dev/null 2>&1 || { echo "Erreur : '$1' est introuvable." >&2; exit 1; }; }
+need() { command -v "$1" >/dev/null 2>&1 || { echo "Error: '$1' not found." >&2; exit 1; }; }
 need docker
 need git
-docker compose version >/dev/null 2>&1 || { echo "Erreur : Docker Compose v2 est requis." >&2; exit 1; }
+docker compose version >/dev/null 2>&1 || { echo "Error: Docker Compose v2 is required." >&2; exit 1; }
 
-# Le réseau llm-net est créé quand la stack ai-stack démarre
+# The llm-net network is created when the ai-stack starts
 if ! docker network inspect llm-net >/dev/null 2>&1; then
-  echo "Erreur : le réseau Docker 'llm-net' n'existe pas." >&2
-  echo "Démarre d'abord la stack :  cd ../ai-stack && docker compose up -d" >&2
+  echo "Error: the Docker network 'llm-net' does not exist." >&2
+  echo "Start the stack first:  cd ../ai-stack && docker compose up -d" >&2
   exit 1
 fi
 
 if [ -d "$TARGET/.git" ]; then
-  echo "→ Dépôt OpenClaw déjà présent, mise à jour : $TARGET"
+  echo "→ OpenClaw repository already present, updating: $TARGET"
   git -C "$TARGET" pull --ff-only
 else
-  echo "→ Clonage du dépôt OpenClaw dans $TARGET"
+  echo "→ Cloning the OpenClaw repository into $TARGET"
   git clone https://github.com/openclaw/openclaw.git "$TARGET"
 fi
 
-echo "→ Ajout de l'override réseau (llm-net)"
+echo "→ Adding the network override (llm-net)"
 cp "$HERE/docker-compose.override.yml" "$TARGET/docker-compose.override.yml"
 
 cd "$TARGET"
-echo "→ Image : $OPENCLAW_IMAGE"
+echo "→ Image: $OPENCLAW_IMAGE"
 echo
-echo "L'assistant d'installation va démarrer. Réponses à donner :"
-echo "  • Provider : Ollama, mode « Local only »"
-echo "  • URL Ollama : http://ollama:11434   (PAS host.docker.internal)"
-echo "  • Modèle : celui que tu as téléchargé (ex. qwen3.5:27b)"
+echo "The installation wizard is about to start. Answers to give:"
+echo "  • Provider: Ollama, mode \"Local only\""
+echo "  • Ollama URL: http://ollama:11434   (NOT host.docker.internal)"
+echo "  • Model: the one you downloaded (e.g. qwen3.8:27b)"
 echo
 ./scripts/docker/setup.sh
 
-# Le script officiel appelle « docker compose -f docker-compose.yml » : mon override (réseau llm-net) est alors
-# ignoré. On rattache donc la passerelle à llm-net ici (sans effet si elle y est déjà).
+# The official script calls "docker compose -f docker-compose.yml": the override (llm-net network) is then
+# ignored. So the gateway is attached to llm-net here (no effect if it already is).
 GW="$(docker compose -f docker-compose.yml ps -q openclaw-gateway 2>/dev/null | head -n1)"
 if [ -n "$GW" ]; then
-  docker network connect llm-net "$GW" 2>/dev/null && echo "→ Passerelle rattachée à llm-net" || true
+  docker network connect llm-net "$GW" 2>/dev/null && echo "→ Gateway attached to llm-net" || true
   if docker network inspect llm-net --format '{{range .Containers}}{{.Id}} {{end}}' | grep -q "${GW:0:12}"; then
-    echo "→ OK : la passerelle est sur llm-net (Ollama joignable via http://ollama:11434)"
+    echo "→ OK: the gateway is on llm-net (Ollama reachable at http://ollama:11434)"
   else
-    echo "ATTENTION : la passerelle n'est pas sur llm-net. Tape : docker network connect llm-net \$(docker compose -f $TARGET/docker-compose.yml ps -q openclaw-gateway)" >&2
+    echo "WARNING: the gateway is not on llm-net. Type: docker network connect llm-net \$(docker compose -f $TARGET/docker-compose.yml ps -q openclaw-gateway)" >&2
   fi
 fi
 
-# Le compose officiel publie ses ports sur TOUTES les interfaces (réseau local, VPN). On les limite à 127.0.0.1 :
-# l'interface reste joignable depuis cette machine et par le tunnel SSH (voir docs/openclaw.md, Sécurité).
+# The official compose publishes its ports on ALL interfaces (local network, VPN). Limit them to 127.0.0.1:
+# the interface stays reachable from this machine and through the SSH tunnel (see docs/openclaw.md, Security).
 if [ -f .env ]; then
   cp .env .env.avant-localhost
   for v in OPENCLAW_GATEWAY_PORT=127.0.0.1:18789 OPENCLAW_BRIDGE_PORT=127.0.0.1:18790 OPENCLAW_MSTEAMS_PORT=127.0.0.1:3978; do
@@ -68,17 +68,17 @@ if [ -f .env ]; then
   docker compose -f docker-compose.yml up -d openclaw-gateway >/dev/null
   GW="$(docker compose -f docker-compose.yml ps -q openclaw-gateway 2>/dev/null | head -n1)"
   [ -n "$GW" ] && docker network connect llm-net "$GW" 2>/dev/null || true
-  echo "→ Ports limités à 127.0.0.1 (18789, 18790, 3978) ; passerelle recréée et rattachée à llm-net"
+  echo "→ Ports limited to 127.0.0.1 (18789, 18790, 3978); gateway recreated and attached to llm-net"
 fi
 
-# Isolation : le réseau d'OpenClaw vient peut-être d'être (re)créé, le pare-feu des agents doit le connaître.
+# Isolation: OpenClaw's network may just have been (re)created, the agent firewall must know it.
 if systemctl is-active --quiet ai-lab-isolation.service 2>/dev/null; then
-  sudo systemctl restart ai-lab-isolation.service && echo "→ Pare-feu des agents réappliqué (OpenClaw sans accès Internet)"
+  sudo systemctl restart ai-lab-isolation.service && echo "→ Agent firewall reapplied (OpenClaw without Internet access)"
 else
-  echo "ATTENTION : OpenClaw a accès à Internet tant que l'isolation n'est pas installée : lab isolation install (docs/agent-isolation.md)"
+  echo "WARNING: OpenClaw has Internet access as long as isolation is not installed: lab isolation install (docs/agent-isolation.md)"
 fi
 
 echo
-echo "Terminé. Interface de contrôle : http://127.0.0.1:18789/ (depuis ton PC : par le tunnel SSH)"
-echo "Le jeton de la gateway est dans $TARGET/.env (OPENCLAW_GATEWAY_TOKEN)."
-echo "Vérification :  ss -tlnp | grep -E ':(18789|18790|3978)'  (doit afficher 127.0.0.1)  et  lab isolation test"
+echo "Done. Control interface: http://127.0.0.1:18789/ (from your PC: through the SSH tunnel)"
+echo "The gateway token is in $TARGET/.env (OPENCLAW_GATEWAY_TOKEN)."
+echo "Check:  ss -tlnp | grep -E ':(18789|18790|3978)'  (must show 127.0.0.1)  and  lab isolation test"

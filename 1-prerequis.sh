@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# ÉTAPE 1 : installe Docker et le NVIDIA Container Toolkit (Ubuntu / Debian).
+# STEP 1: installs Docker and the NVIDIA Container Toolkit (Ubuntu / Debian).
 #
-# Lance-le avec TON utilisateur normal, SANS "sudo" devant :
+# Run it with YOUR normal user, WITHOUT "sudo" in front:
 #     ./1-prerequis.sh
-# Il te demandera ton mot de passe quand il en a besoin.
+# It asks for your password when it needs it.
 #
-# Commandes reprises de la documentation officielle de Docker et de NVIDIA.
+# Commands taken from the official Docker and NVIDIA documentation.
 set -euo pipefail
 
 if [ "$(id -u)" -eq 0 ]; then
-  echo "Ne lance pas ce script avec sudo ni en root. Lance simplement : ./1-prerequis.sh" >&2
+  echo "Do not run this script with sudo or as root. Simply run: ./1-prerequis.sh" >&2
   exit 1
 fi
 
 . /etc/os-release
-# Ubuntu et ses dérivés (Mint, Pop!_OS...) ou Debian
+# Ubuntu and its derivatives (Mint, Pop!_OS...) or Debian
 DOCKER_DISTRO=""
 CODENAME=""
 case "${ID:-}" in
@@ -27,29 +27,29 @@ case "${ID:-}" in
     esac ;;
 esac
 if [ -z "$DOCKER_DISTRO" ] || [ -z "$CODENAME" ]; then
-  echo "Distribution non prise en charge par ce script : ${PRETTY_NAME:-inconnue}" >&2
-  echo "Ce script gère Ubuntu et Debian. Dis-moi quelle distribution tu utilises." >&2
+  echo "Distribution not supported by this script: ${PRETTY_NAME:-unknown}" >&2
+  echo "This script handles Ubuntu and Debian." >&2
   exit 1
 fi
-echo "Système détecté : ${PRETTY_NAME} (${DOCKER_DISTRO} / ${CODENAME})"
+echo "System detected: ${PRETTY_NAME} (${DOCKER_DISTRO} / ${CODENAME})"
 
-# --- 0. Le pilote NVIDIA doit déjà être installé ---------------------------
+# --- 0. The NVIDIA driver must already be installed -------------------------
 if ! command -v nvidia-smi >/dev/null 2>&1 || ! nvidia-smi >/dev/null 2>&1; then
   echo
-  echo "Le pilote NVIDIA n'est pas actif ('nvidia-smi' ne répond pas)."
-  echo "Installe-le d'abord, puis REDÉMARRE la machine et relance ce script :"
+  echo "The NVIDIA driver is not active ('nvidia-smi' does not answer)."
+  echo "Install it first, then REBOOT the machine and run this script again:"
   echo "    sudo ubuntu-drivers install     (Ubuntu)"
   echo "    sudo reboot"
   exit 1
 fi
-echo "→ Pilote NVIDIA : OK"
+echo "→ NVIDIA driver: OK"
 nvidia-smi -L
 
 # --- 1. Docker ---------------------------------------------------------------
 if command -v docker >/dev/null 2>&1; then
-  echo "→ Docker est déjà installé : $(docker --version)"
+  echo "→ Docker is already installed: $(docker --version)"
 else
-  echo "→ Installation de Docker..."
+  echo "→ Installing Docker..."
   sudo apt-get update
   sudo apt-get install -y ca-certificates curl
   sudo install -m 0755 -d /etc/apt/keyrings
@@ -70,9 +70,9 @@ sudo systemctl enable --now docker
 
 # --- 2. NVIDIA Container Toolkit ---------------------------------------------
 if command -v nvidia-ctk >/dev/null 2>&1; then
-  echo "→ NVIDIA Container Toolkit déjà installé"
+  echo "→ NVIDIA Container Toolkit already installed"
 else
-  echo "→ Installation du NVIDIA Container Toolkit..."
+  echo "→ Installing the NVIDIA Container Toolkit..."
   sudo apt-get update
   sudo apt-get install -y --no-install-recommends ca-certificates curl gnupg2
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
@@ -86,13 +86,13 @@ fi
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 
-# --- 3. Autoriser ton utilisateur à utiliser Docker sans sudo -----------------
+# --- 3. Allow your user to use Docker without sudo ---------------------------
 sudo usermod -aG docker "$USER"
 
 echo
 echo "============================================================"
-echo " Installation terminée."
-echo " IMPORTANT : redémarre la machine maintenant :   sudo reboot"
-echo " (c'est nécessaire pour que Docker fonctionne sans sudo)"
-echo " Ensuite, reconnecte-toi et lance :   ./2-secrets.sh"
+echo " Installation finished."
+echo " IMPORTANT: reboot the machine now:   sudo reboot"
+echo " (needed for Docker to work without sudo)"
+echo " Then log in again and run:   ./2-secrets.sh"
 echo "============================================================"

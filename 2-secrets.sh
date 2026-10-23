@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# ÉTAPE 2 : crée les fichiers ".env" avec des mots de passe générés au hasard.
+# STEP 2: creates the ".env" files with randomly generated passwords.
 #
 #     ./2-secrets.sh
 #
-# Ce script ne demande rien : il génère les secrets pour toi.
-# Il n'écrase jamais un .env existant.
+# This script asks nothing: it generates the secrets for you.
+# It never overwrites an existing .env.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-command -v openssl >/dev/null 2>&1 || { echo "Erreur : 'openssl' est introuvable (sudo apt install openssl)." >&2; exit 1; }
+command -v openssl >/dev/null 2>&1 || { echo "Error: 'openssl' not found (sudo apt install openssl)." >&2; exit 1; }
 
-# make_env <dossier> <VARIABLE:octets> [<VARIABLE:octets> ...]
-# Crée le .env s'il n'existe pas. S'il existe, ne touche à aucune valeur déjà remplie
-# et complète seulement les variables manquantes ou vides (utile après une mise à jour).
+# make_env <folder> <VARIABLE:bytes> [<VARIABLE:bytes> ...]
+# Creates the .env if it does not exist. If it exists, touches no value already filled in
+# and only fills in missing or empty variables (useful after an update).
 make_env() {
   local dir="$1"; shift
   local spec var bytes value current added=0
   if [ ! -f "$dir/.env" ]; then
     cp "$dir/.env.example" "$dir/.env"
-    echo "• $dir/.env créé."
+    echo "• $dir/.env created."
   fi
   for spec in "$@"; do
     var="${spec%%:*}"; bytes="${spec##*:}"
@@ -31,9 +31,9 @@ make_env() {
       printf '%s=%s\n' "$var" "$value" >> "$dir/.env"
     fi
     added=1
-    echo "• $dir/.env : $var généré."
+    echo "• $dir/.env: $var generated."
   done
-  [ "$added" -eq 0 ] && echo "• $dir/.env : rien à compléter, je n'y touche pas."
+  [ "$added" -eq 0 ] && echo "• $dir/.env: nothing to fill in, left untouched."
   chmod 600 "$dir/.env"
 }
 
@@ -41,14 +41,14 @@ make_env ai-stack   WEBUI_SECRET_KEY:32 N8N_ENCRYPTION_KEY:32 POSTGRES_N8N_PASSW
 make_env monitoring GRAFANA_ADMIN_PASSWORD:16
 
 echo
-echo "Où sont les secrets ?"
-echo "  $(pwd)/ai-stack/.env      (fichier caché : 'ls -a ai-stack' pour le voir)"
+echo "Where are the secrets?"
+echo "  $(pwd)/ai-stack/.env      (hidden file: 'ls -a ai-stack' to see it)"
 echo "  $(pwd)/monitoring/.env"
 echo
-echo "À retenir :"
-echo "  • Mot de passe de Grafana (utilisateur 'admin') :"
+echo "To remember:"
+echo "  • Grafana password (user 'admin'):"
 echo "        grep GRAFANA_ADMIN_PASSWORD monitoring/.env"
-echo "  • SAUVEGARDE ai-stack/.env quelque part : sans N8N_ENCRYPTION_KEY, les identifiants"
-echo "    enregistrés dans n8n deviennent illisibles si tu recrées la machine."
+echo "  • BACK UP ai-stack/.env somewhere: without N8N_ENCRYPTION_KEY, the credentials"
+echo "    stored in n8n become unreadable if you rebuild the machine."
 echo
-echo "Étape suivante :   ./3-demarrer.sh"
+echo "Next step:   ./3-demarrer.sh"
