@@ -1,9 +1,9 @@
 {
-  "name": "Gmail – corbeille des mails validés",
+  "name": "Gmail – trash approved messages",
   "nodes": [
     {
-      "id": "532d75c3-c1c4-4533-bf74-2ee5f38a0f2b",
-      "name": "Lancer à la main",
+      "id": "597eb426-6edb-4ebf-8680-e736752fe66c",
+      "name": "Run by hand",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
@@ -13,8 +13,8 @@
       "parameters": {}
     },
     {
-      "id": "f09bbe11-71bb-4f3c-a1ba-3fc4baf551a8",
-      "name": "Lister les libellés",
+      "id": "7d2b5b25-f4e0-4f98-9bae-24934a11d39d",
+      "name": "List labels",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
@@ -35,8 +35,8 @@
       "executeOnce": true
     },
     {
-      "id": "b7574eb4-8925-4c46-8616-a6fd25e3639a",
-      "name": "Mails à supprimer",
+      "id": "fd24be4c-e767-46a5-8d15-72e0a637e272",
+      "name": "Messages to delete",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
@@ -49,7 +49,7 @@
         "returnAll": true,
         "simple": true,
         "filters": {
-          "q": "label:IA-Supprimer -in:trash"
+          "q": "label:AI-Delete -in:trash"
         }
       },
       "credentials": {
@@ -61,8 +61,8 @@
       "executeOnce": true
     },
     {
-      "id": "ccceeabe-1d63-48b7-ab34-13ac3e1bc132",
-      "name": "Garde-fous",
+      "id": "f6797bea-d818-42ef-99af-f18dc25d2b82",
+      "name": "Safeguards",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -71,12 +71,12 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "\nconst MAX_LOT = 1000;   // sécurité : refuse un lot anormalement gros\nconst libelles = $('Lister les libellés').all().map(i => i.json);\nconst l = libelles.find(x => x.name === \"IA/Supprimer\");\nif (!l) throw new Error(\"Libellé « IA/Supprimer» introuvable.\");\nconst mails = $input.all().map(i => i.json).filter(m => m && m.id);\nif (mails.length > MAX_LOT) throw new Error(`${mails.length} mails portent le libellé : au-delà de ${MAX_LOT}, vérifie dans Gmail avant de continuer.`);\nreturn mails.filter(m => !(m.labelIds || []).some(x => x === \"STARRED\")).map(m => ({ json: { id: m.id, libelleId: l.id } }));"
+        "jsCode": "\nconst MAX_BATCH = 1000;   // safety: refuses an abnormally large batch\nconst labels = $('List labels').all().map(i => i.json);\nconst l = labels.find(x => x.name === \"AI/Delete\");\nif (!l) throw new Error(\"Label \\\"AI/Delete\\\" not found.\");\nconst messages = $input.all().map(i => i.json).filter(m => m && m.id);\nif (messages.length > MAX_BATCH) throw new Error(`${messages.length} messages carry the label: above ${MAX_BATCH}, check in Gmail before continuing.`);\nreturn messages.filter(m => !(m.labelIds || []).some(x => x === \"STARRED\")).map(m => ({ json: { id: m.id, labelId: l.id } }));"
       }
     },
     {
-      "id": "9a50ea01-b1bc-4d72-abdf-ef15754a1000",
-      "name": "Retirer le libellé Supprimer",
+      "id": "5e3a1766-fe80-423e-8ef8-dc2c3ae693ac",
+      "name": "Remove the Delete label",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
@@ -87,7 +87,7 @@
         "resource": "message",
         "operation": "removeLabels",
         "messageId": "={{ $json.id }}",
-        "labelIds": "={{ [$json.libelleId] }}"
+        "labelIds": "={{ [$json.labelId] }}"
       },
       "credentials": {
         "gmailOAuth2": {
@@ -97,8 +97,8 @@
       }
     },
     {
-      "id": "021d3e78-b680-4052-9122-6aa08d8afd77",
-      "name": "Mettre à la corbeille",
+      "id": "110998f6-9acc-44c3-9f0d-022f02a30895",
+      "name": "Move to trash",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
@@ -120,55 +120,55 @@
     }
   ],
   "connections": {
-    "Lancer à la main": {
+    "Run by hand": {
       "main": [
         [
           {
-            "node": "Lister les libellés",
+            "node": "List labels",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Lister les libellés": {
+    "List labels": {
       "main": [
         [
           {
-            "node": "Mails à supprimer",
+            "node": "Messages to delete",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Mails à supprimer": {
+    "Messages to delete": {
       "main": [
         [
           {
-            "node": "Garde-fous",
+            "node": "Safeguards",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Garde-fous": {
+    "Safeguards": {
       "main": [
         [
           {
-            "node": "Retirer le libellé Supprimer",
+            "node": "Remove the Delete label",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Retirer le libellé Supprimer": {
+    "Remove the Delete label": {
       "main": [
         [
           {
-            "node": "Mettre à la corbeille",
+            "node": "Move to trash",
             "type": "main",
             "index": 0
           }

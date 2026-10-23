@@ -1,9 +1,9 @@
 {
-  "name": "Gmail – créer les libellés IA",
+  "name": "Gmail – create AI labels",
   "nodes": [
     {
-      "id": "0e75cc65-c5ae-417d-b598-92f67ca1f5ae",
-      "name": "Lancer à la main",
+      "id": "baecc123-a6a2-4557-bb78-aa18bc1b7873",
+      "name": "Run by hand",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
@@ -13,8 +13,8 @@
       "parameters": {}
     },
     {
-      "id": "fe303a41-4588-4656-bbcf-15c4954cee67",
-      "name": "Les libellés",
+      "id": "1ced52a8-ac45-44a1-8270-32de7346f31d",
+      "name": "The labels",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -23,12 +23,12 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "return [{\"json\": {\"nom\": \"IA/À répondre\"}}, {\"json\": {\"nom\": \"IA/Info\"}}, {\"json\": {\"nom\": \"IA/Notification\"}}, {\"json\": {\"nom\": \"IA/Marketing\"}}, {\"json\": {\"nom\": \"IA/Réunion\"}}, {\"json\": {\"nom\": \"IA/Commentaire\"}}, {\"json\": {\"nom\": \"IA/Voyage\"}}, {\"json\": {\"nom\": \"IA/Fait\"}}, {\"json\": {\"nom\": \"IA/Supprimer\"}}];"
+        "jsCode": "return [{\"json\": {\"name\": \"AI/To answer\"}}, {\"json\": {\"name\": \"AI/Info\"}}, {\"json\": {\"name\": \"AI/Notification\"}}, {\"json\": {\"name\": \"AI/Marketing\"}}, {\"json\": {\"name\": \"AI/Meeting\"}}, {\"json\": {\"name\": \"AI/Comment\"}}, {\"json\": {\"name\": \"AI/Travel\"}}, {\"json\": {\"name\": \"AI/Done\"}}, {\"json\": {\"name\": \"AI/Delete\"}}];"
       }
     },
     {
-      "id": "37b1358f-e62a-443e-ae48-fc5a589ee37f",
-      "name": "Créer le libellé",
+      "id": "ce6c774b-71bf-4b5d-bcc0-bf3d3f727ef8",
+      "name": "Create label",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
@@ -38,7 +38,7 @@
       "parameters": {
         "resource": "label",
         "operation": "create",
-        "name": "={{ $json.nom }}",
+        "name": "={{ $json.name }}",
         "options": {
           "labelListVisibility": "labelShow",
           "messageListVisibility": "show"
@@ -54,22 +54,22 @@
     }
   ],
   "connections": {
-    "Lancer à la main": {
+    "Run by hand": {
       "main": [
         [
           {
-            "node": "Les libellés",
+            "node": "The labels",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Les libellés": {
+    "The labels": {
       "main": [
         [
           {
-            "node": "Créer le libellé",
+            "node": "Create label",
             "type": "main",
             "index": 0
           }

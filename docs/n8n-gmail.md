@@ -30,23 +30,28 @@ JSON, to change a label, a category or the prompt.
 | (marker) message already processed | `AI/Done` |
 | (proposal) to review before the trash | `AI/Delete` |
 
-`AI/Done` and `AI/Delete` are deliberately single words without spaces: Gmail searches use them.
+`AI/Done` and `AI/Delete` are deliberately single words without spaces: Gmail searches use them. In a Gmail search, `/` becomes `-`
+(`label:AI-Done`).
+
+Earlier versions of these workflows used French labels (`IA/À répondre`, `IA/Fait`, `IA/Supprimer`…). If you imported
+them, either keep them, or import the new files: they create and use the `AI/…` labels, and the old labels stay in
+Gmail until you delete them.
 
 ## Setup
 
 1. In n8n: *Workflows → ⋯ → Import from file*, for each of the 4 files. On every Gmail node, select your Gmail
    credential.
-2. Run **"create labels"** once (*Execute workflow*).
+2. Run **"Gmail – create AI labels"** once (*Execute workflow*).
 3. In the **"Prepare message"** nodes (sorting workflows), check the `MODEL` line: the name given by `lab main-model`.
-4. Test "sort new messages" with *Execute workflow*, then activate it.
-5. Activate "sort old messages" (or run it by hand): it processes 200 messages per run and stops by itself once
+4. Test "Gmail – local AI sorting (new messages)" with *Execute workflow*, then activate it.
+5. Activate "Gmail – AI sorting of old messages" (or run it by hand): it processes 200 messages per run and stops by itself once
    everything is labelled `AI/Done`.
 
 ## Deleting the useless ones: the circuit
 
 1. The sorting adds `AI/Delete` to the messages that look worthless. **Nothing is deleted at this stage.**
 2. You open the `AI/Delete` label in Gmail and remove the label from the ones you want to keep.
-3. You run "trash approved messages": the remaining messages go to Gmail's **Trash**, **recoverable for 30 days** (Gmail
+3. You run "Gmail – trash approved messages": the remaining messages go to Gmail's **Trash**, **recoverable for 30 days** (Gmail
    empties it afterwards). It is not a permanent deletion.
 
 What can receive `AI/Delete`: only the **Marketing** and **Notification** categories, never a starred or important
