@@ -1,34 +1,34 @@
 @echo off
-rem Copie le dossier de travail de Hermes vers un dossier a toi.
-rem A lancer sur la machine de test Windows (celle de `lab remote add ... --windows`) avec TON compte (celui qui voit C:\Users\hermes).
-rem Ne supprime jamais rien : copie seulement (nouveaux fichiers et fichiers modifies).
+rem Copies Hermes's working folder to a folder of yours ("recuperer" = retrieve).
+rem To run on the Windows test machine (the one of `lab remote add ... --windows`) with YOUR account (the one that sees C:\Users\hermes).
+rem Never deletes anything: only copies (new and modified files).
 
 set "SRC=C:\Users\hermes\work"
 set "DST=%USERPROFILE%\Documents\hermes-work"
 
 if not exist "%SRC%" (
-  echo Dossier source introuvable : %SRC%
-  echo Hermes n'a peut-etre encore rien depose, ou son profil n'existe pas.
+  echo Source folder not found: %SRC%
+  echo Hermes may not have written anything yet, or its profile does not exist.
   pause
   exit /b 1
 )
 
 if not exist "%DST%" mkdir "%DST%"
 
-echo Copie de %SRC%
-echo      vers %DST%
+echo Copying %SRC%
+echo      to %DST%
 echo.
 robocopy "%SRC%" "%DST%" /E /R:1 /W:1 /XJ /NP
 
-rem robocopy renvoie 0 a 7 quand tout s'est bien passe, 8 ou plus en cas d'erreur
+rem robocopy returns 0 to 7 when everything went fine, 8 or more on error
 if %ERRORLEVEL% GEQ 8 (
   echo.
-  echo ERREUR pendant la copie ^(code %ERRORLEVEL%^). Verifie que tu lances ce fichier avec ton compte administrateur.
+  echo ERROR during the copy ^(code %ERRORLEVEL%^). Check that you run this file with your administrator account.
   pause
   exit /b %ERRORLEVEL%
 )
 
 echo.
-echo Termine. Fichiers dans : %DST%
+echo Done. Files in: %DST%
 start "" "%DST%"
 pause

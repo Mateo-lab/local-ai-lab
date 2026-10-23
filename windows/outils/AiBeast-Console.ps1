@@ -1,12 +1,13 @@
-﻿# Console AiBeast : une fenêtre avec des boutons pour tout faire (tunnels, navigateur, déploiement, modes, sauvegardes, Hermes).
-# Utilisation : double-clic sur AiBeast.bat. Prérequis : VPN connecté, clé SSH et entrée "Host aibeast" (voir docs\remote-access.md).
-# Les actions longues s'ouvrent dans leur propre fenêtre (elles posent des questions ou affichent des résultats) : les scripts existants sont réutilisés tels quels.
+﻿# AiBeast console: a window with buttons to do everything (tunnels, browser, deployment, modes, backups, Hermes).
+# Usage: double-click AiBeast.bat. Prerequisites: VPN connected, SSH key and "Host aibeast" entry (see docs\remote-access.md).
+# Long actions open in their own window (they ask questions or show results): the existing scripts are reused as is.
+# (Function names are French, as in the original version.)
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $Dossier = $PSScriptRoot
-$Ports = [ordered]@{ "Portail" = 3010; "Panneau" = 3011; "ComfyUI" = 8188; "Open WebUI" = 3000; "n8n" = 5678 }
+$Ports = [ordered]@{ "Portal" = 3010; "Panel" = 3011; "ComfyUI" = 8188; "Open WebUI" = 3000; "n8n" = 5678 }
 
 function Test-Port([int]$port) {
     $c = New-Object System.Net.Sockets.TcpClient
@@ -25,18 +26,18 @@ function Message([string]$texte, [bool]$erreur = $false) {
 
 function Actualiser-Etat {
     if (Test-Port 3010) {
-        $script:lblTunnels.Text = "Tunnels : ouverts"
+        $script:lblTunnels.Text = "Tunnels: open"
         $script:lblTunnels.ForeColor = [System.Drawing.Color]::SeaGreen
     } else {
-        $script:lblTunnels.Text = "Tunnels : fermés (clique sur « Ouvrir les tunnels »)"
+        $script:lblTunnels.Text = "Tunnels: closed (click 'Open the tunnels')"
         $script:lblTunnels.ForeColor = [System.Drawing.Color]::Firebrick
     }
 }
 
-# Lance un script PowerShell du dossier dans sa propre fenêtre (elle reste ouverte jusqu'à Entrée, comme les .bat).
+# Runs a PowerShell script of the folder in its own window (it stays open until Enter, like the .bat files).
 function Lancer-Fenetre([string]$script, [string]$arguments = "") {
     $chemin = Join-Path $Dossier $script
-    if (-not (Test-Path $chemin)) { Message "Fichier introuvable : $script" $true; return }
+    if (-not (Test-Path $chemin)) { Message "File not found: $script" $true; return }
     $a = "-NoProfile -ExecutionPolicy Bypass -File `"$chemin`" $arguments"
     Start-Process -FilePath "powershell.exe" -ArgumentList $a | Out-Null
 }
@@ -48,14 +49,14 @@ function Confirmer([string]$texte) {
 
 function Ouvrir-Tunnels {
     $deja = Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" | Where-Object { $_.CommandLine -match "-N aibeast" }
-    if ($deja) { Message "Les tunnels sont déjà ouverts."; Actualiser-Etat; return }
-    Message "Ouverture des tunnels..."
+    if ($deja) { Message "The tunnels are already open."; Actualiser-Etat; return }
+    Message "Opening the tunnels..."
     $script:form.Refresh()
     Start-Process -FilePath "ssh" -ArgumentList "-N", "aibeast" -WindowStyle Hidden
     for ($i = 0; $i -lt 16; $i++) { Start-Sleep -Milliseconds 500; if (Test-Port 3010) { break } }
     Actualiser-Etat
-    if (Test-Port 3010) { Message "Tunnels ouverts." }
-    else { Message "Les tunnels ne s'ouvrent pas. Vérifie le VPN et la clé SSH (bouton « Tester la connexion »)." $true }
+    if (Test-Port 3010) { Message "Tunnels open." }
+    else { Message "The tunnels do not open. Check the VPN and the SSH key ('Test the connection' button)." $true }
 }
 
 function Fermer-Tunnels {
@@ -63,39 +64,39 @@ function Fermer-Tunnels {
     Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" | Where-Object { $_.CommandLine -match "-N aibeast" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; $n++ }
     Start-Sleep -Milliseconds 400
     Actualiser-Etat
-    if ($n -gt 0) { Message "Tunnels fermés." } else { Message "Aucun tunnel à fermer." }
+    if ($n -gt 0) { Message "Tunnels closed." } else { Message "No tunnel to close." }
 }
 
 function Ouvrir-Page([string]$nom) {
     $port = $Ports[$nom]
-    if (Test-Port $port) { Start-Process "http://127.0.0.1:$port" | Out-Null; Message "$nom ouvert dans le navigateur." }
-    else { Message "$nom ne répond pas : ouvre d'abord les tunnels (et vérifie que le service tourne sur AiBeast)." $true }
+    if (Test-Port $port) { Start-Process "http://127.0.0.1:$port" | Out-Null; Message "$nom opened in the browser." }
+    else { Message "$nom does not answer: open the tunnels first (and check that the service runs on AiBeast)." $true }
 }
 
 function Executer([string]$cle) {
     switch ($cle) {
         "tunnels-ouvrir" { Ouvrir-Tunnels }
         "tunnels-fermer" { Fermer-Tunnels }
-        "tester"         { Lancer-Fenetre "AiBeast.ps1" "-Action status"; Message "Test lancé dans une fenêtre (il se connecte à AiBeast)." }
-        "web-Portail"    { Ouvrir-Page "Portail" }
-        "web-Panneau"    { Ouvrir-Page "Panneau" }
+        "tester"         { Lancer-Fenetre "AiBeast.ps1" "-Action status"; Message "Test started in a window (it connects to AiBeast)." }
+        "web-Portal"     { Ouvrir-Page "Portal" }
+        "web-Panel"      { Ouvrir-Page "Panel" }
         "web-ComfyUI"    { Ouvrir-Page "ComfyUI" }
         "web-Open WebUI" { Ouvrir-Page "Open WebUI" }
         "web-n8n"        { Ouvrir-Page "n8n" }
-        "deployer"       { if (Confirmer "Envoyer la nouvelle version du lab sur AiBeast ?`n`nUne sauvegarde de sécurité est faite avant de remplacer les fichiers.") { Lancer-Fenetre "Deployer-sur-AiBeast.ps1" } }
+        "deployer"       { if (Confirmer "Send the new version of the lab to AiBeast?`n`nA safety backup is made before replacing the files.") { Lancer-Fenetre "Deployer-sur-AiBeast.ps1" } }
         "copie-sauvegardes" { Lancer-Fenetre "Sauvegarder-AiBeast-hors-machine.ps1" }
         "images"         { Lancer-Fenetre "AiBeast.ps1" "-Action images" }
         "normal"         { Lancer-Fenetre "AiBeast.ps1" "-Action normal" }
         "agents"         { Lancer-Fenetre "AiBeast.ps1" "-Action agents" }
         "status"         { Lancer-Fenetre "AiBeast.ps1" "-Action status" }
         "doctor"         { Lancer-Fenetre "AiBeast.ps1" "-Action doctor" }
-        "update"         { if (Confirmer "Lancer la mise à jour des images Docker sur AiBeast ?`n`nUne sauvegarde est faite avant. Cela peut durer longtemps.") { Lancer-Fenetre "AiBeast.ps1" "-Action update" } }
-        "backup"         { if (Confirmer "Lancer une sauvegarde sur AiBeast maintenant ?") { Lancer-Fenetre "AiBeast.ps1" "-Action backup" } }
+        "update"         { if (Confirmer "Start the update of the Docker images on AiBeast?`n`nA backup is made first. This can take a long time.") { Lancer-Fenetre "AiBeast.ps1" "-Action update" } }
+        "backup"         { if (Confirmer "Start a backup on AiBeast now?") { Lancer-Fenetre "AiBeast.ps1" "-Action backup" } }
         "hermes"         { Lancer-Fenetre "AiBeast.ps1" "-Action hermes" }
     }
 }
 
-# ---------- Fenêtre ----------
+# ---------- Window ----------
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AiBeast"
 $form.StartPosition = "CenterScreen"
@@ -138,24 +139,24 @@ function Ajouter-Groupe([string]$titre, $boutons) {
     $script:y += $hauteur + 8
 }
 
-Ajouter-Groupe "1. Connexion à AiBeast" @(
-    @("Ouvrir les tunnels", "tunnels-ouvrir"), @("Fermer les tunnels", "tunnels-fermer"), @("Tester la connexion", "tester"))
-Ajouter-Groupe "2. Ouvrir dans le navigateur" @(
-    @("Portail", "web-Portail"), @("Panneau de boutons", "web-Panneau"), @("ComfyUI (images)", "web-ComfyUI"),
-    @("Open WebUI (chat)", "web-Open WebUI"), @("n8n (automatisations)", "web-n8n"))
-Ajouter-Groupe "3. Livraison et copies de sauvegarde" @(
-    @("Déployer la nouvelle version", "deployer"), @("Copier les sauvegardes sur ce PC", "copie-sauvegardes"))
-Ajouter-Groupe "4. Modes de la carte graphique" @(
-    @("Mode images", "images"), @("Mode normal", "normal"), @("Mode agents", "agents"),
-    @("État", "status"), @("Santé (diagnostic)", "doctor"))
-Ajouter-Groupe "5. Maintenance et Hermes" @(
-    @("Mise à jour", "update"), @("Sauvegarde", "backup"), @("Hermes (projets, revue)", "hermes"))
+Ajouter-Groupe "1. Connection to AiBeast" @(
+    @("Open the tunnels", "tunnels-ouvrir"), @("Close the tunnels", "tunnels-fermer"), @("Test the connection", "tester"))
+Ajouter-Groupe "2. Open in the browser" @(
+    @("Portal", "web-Portal"), @("Button panel", "web-Panel"), @("ComfyUI (images)", "web-ComfyUI"),
+    @("Open WebUI (chat)", "web-Open WebUI"), @("n8n (automations)", "web-n8n"))
+Ajouter-Groupe "3. Delivery and backup copies" @(
+    @("Deploy the new version", "deployer"), @("Copy the backups to this PC", "copie-sauvegardes"))
+Ajouter-Groupe "4. Graphics card modes" @(
+    @("Images mode", "images"), @("Normal mode", "normal"), @("Agents mode", "agents"),
+    @("State", "status"), @("Health (diagnosis)", "doctor"))
+Ajouter-Groupe "5. Maintenance and Hermes" @(
+    @("Update", "update"), @("Backup", "backup"), @("Hermes (projects, review)", "hermes"))
 
 $lblMessage = New-Object System.Windows.Forms.Label
 $lblMessage.Location = New-Object System.Drawing.Point(16, ($y + 2))
 $lblMessage.Size = New-Object System.Drawing.Size(526, 40)
 $lblMessage.ForeColor = [System.Drawing.Color]::DimGray
-$lblMessage.Text = "Prêt."
+$lblMessage.Text = "Ready."
 $form.Controls.Add($lblMessage)
 $form.ClientSize = New-Object System.Drawing.Size(560, ($y + 48))
 

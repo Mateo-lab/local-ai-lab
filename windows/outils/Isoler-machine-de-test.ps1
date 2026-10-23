@@ -1,25 +1,25 @@
-﻿# Machine de test des agents (Windows) : coupe Internet pour TOUTE la machine et interdit les tunnels SSH
-# au compte de l'agent. A lancer EN ADMINISTRATEUR sur la machine de test (pas sur ton PC habituel) :
+﻿# Agents' test machine (Windows): cuts the Internet for the WHOLE machine and forbids SSH tunnels
+# for the agent's account ("Isoler" = isolate). To run AS ADMINISTRATOR on the test machine (not on your usual PC):
 #
-#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1                 applique (compte : hermes)
-#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -Utilisateur x  autre compte d'agent
-#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -GarderDns      laisse passer le DNS (port 53)
-#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -Annuler        retire les regles de pare-feu
+#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1               applies (account: hermes)
+#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -User x       another agent account
+#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -KeepDns      lets DNS through (port 53)
+#   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -Undo         removes the firewall rules
+# (The former French parameter names -Utilisateur, -GarderDns and -Annuler still work.)
 #
-# Ce que fait le script (detail : docs/agent-isolation.md, section « Machine de test ») :
-# 1. Pare-feu Windows : regles de BLOCAGE sortant vers toutes les adresses publiques (IPv4 et IPv6). Le reseau
-#    local (10.x, 172.16-31.x, 192.168.x, lien local) reste joignable, donc l'agent peut toujours s'y connecter.
-#    Une regle de blocage l'emporte sur toutes les autorisations ; un compte sans droits d'administrateur ne peut
-#    pas la modifier.
-# 2. DNS bloque (port 53, sauf -GarderDns) : sinon des donnees pourraient sortir par des requetes DNS envoyees a la box.
-# 3. Serveur SSH : pour le compte de l'agent, aucun tunnel (redirection de port, SOCKS, agent, X11).
-# 4. Verifications : connexion Internet et resolution DNS doivent echouer ; affichage de l'etat.
-# Consequences : plus d'Internet pour PERSONNE sur cette machine (mises a jour Windows comprises) tant que les regles
-# sont actives. Pour une mise a jour ponctuelle : -Annuler, la mise a jour, puis relancer le script.
+# What the script does (details: docs/agent-isolation.md, "The test machine" section):
+# 1. Windows firewall: outbound BLOCK rules to every public address (IPv4 and IPv6). The local
+#    network (10.x, 172.16-31.x, 192.168.x, link-local) stays reachable, so the agent can still connect to it.
+#    A block rule wins over every allow rule; an account without administrator rights cannot change it.
+# 2. DNS blocked (port 53, unless -KeepDns): otherwise data could leave through DNS queries sent to the router.
+# 3. SSH server: for the agent's account, no tunnel (port forwarding, SOCKS, agent, X11).
+# 4. Checks: Internet connection and DNS resolution must fail; the state is shown.
+# Consequences: no more Internet for ANYONE on this machine (Windows updates included) while the rules
+# are active. For a one-off update: -Undo, the update, then run the script again.
 param(
-    [string]$Utilisateur = "hermes",
-    [switch]$GarderDns,
-    [switch]$Annuler
+    [Alias('User')][string]$Utilisateur = "hermes",
+    [Alias('KeepDns')][switch]$GarderDns,
+    [Alias('Undo')][switch]$Annuler
 )
 $ErrorActionPreference = "Stop"
 $Groupe = "local-ai-lab isolation"
@@ -27,44 +27,44 @@ $Dossier = "C:\ProgramData\ssh"
 
 $moi = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $moi.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "Lance ce script EN ADMINISTRATEUR (clic droit sur PowerShell > Executer en tant qu'administrateur)." -ForegroundColor Red
+    Write-Host "Run this script AS ADMINISTRATOR (right-click PowerShell > Run as administrator)." -ForegroundColor Red
     exit 1
 }
 
 if ($Annuler) {
     Get-NetFirewallRule -Group $Groupe -ErrorAction SilentlyContinue | Remove-NetFirewallRule
-    Write-Host "Regles de pare-feu '$Groupe' retirees : la machine a de nouveau acces a Internet."
-    Write-Host "(Le verrouillage SSH du compte $Utilisateur reste en place : il ne gene rien.)"
+    Write-Host "Firewall rules '$Groupe' removed: the machine has Internet access again."
+    Write-Host "(The SSH lock of the $Utilisateur account stays in place: it gets in nobody's way.)"
     exit 0
 }
 
-# 0. Sauvegardes
+# 0. Backups
 $stamp = Get-Date -Format "yyyyMMdd-HHmm"
 if (-not (Test-Path $Dossier)) { New-Item -ItemType Directory -Path $Dossier | Out-Null }
-netsh advfirewall export "$Dossier\pare-feu-avant-isolation-$stamp.wfw" | Out-Null
-Write-Host "Sauvegarde du pare-feu : $Dossier\pare-feu-avant-isolation-$stamp.wfw"
+netsh advfirewall export "$Dossier\firewall-before-isolation-$stamp.wfw" | Out-Null
+Write-Host "Firewall backup: $Dossier\firewall-before-isolation-$stamp.wfw"
 
-# 1. Pare-feu : actif sur tous les profils, blocage sortant vers Internet
+# 1. Firewall: enabled on every profile, outbound block to the Internet
 Set-NetFirewallProfile -Profile Domain, Private, Public -Enabled True
 Get-NetFirewallRule -Group $Groupe -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 $publiques4 = @("0.0.0.0-9.255.255.255", "11.0.0.0-126.255.255.255", "128.0.0.0-169.253.255.255",
                 "169.255.0.0-172.15.255.255", "172.32.0.0-192.167.255.255", "192.169.0.0-223.255.255.255")
-New-NetFirewallRule -DisplayName "Isolation : pas d'Internet (IPv4)" -Group $Groupe -Direction Outbound `
+New-NetFirewallRule -DisplayName "Isolation: no Internet (IPv4)" -Group $Groupe -Direction Outbound `
     -Action Block -RemoteAddress $publiques4 -Profile Any | Out-Null
-New-NetFirewallRule -DisplayName "Isolation : pas d'Internet (IPv6)" -Group $Groupe -Direction Outbound `
+New-NetFirewallRule -DisplayName "Isolation: no Internet (IPv6)" -Group $Groupe -Direction Outbound `
     -Action Block -RemoteAddress "2000::/3" -Profile Any | Out-Null
 if (-not $GarderDns) {
-    New-NetFirewallRule -DisplayName "Isolation : pas de DNS (UDP)" -Group $Groupe -Direction Outbound `
+    New-NetFirewallRule -DisplayName "Isolation: no DNS (UDP)" -Group $Groupe -Direction Outbound `
         -Action Block -Protocol UDP -RemotePort 53 -Profile Any | Out-Null
-    New-NetFirewallRule -DisplayName "Isolation : pas de DNS (TCP)" -Group $Groupe -Direction Outbound `
+    New-NetFirewallRule -DisplayName "Isolation: no DNS (TCP)" -Group $Groupe -Direction Outbound `
         -Action Block -Protocol TCP -RemotePort 53 -Profile Any | Out-Null
 }
-Write-Host "Pare-feu : Internet bloque pour toute la machine$(if (-not $GarderDns) { ', DNS bloque' })."
+Write-Host "Firewall: Internet blocked for the whole machine$(if (-not $GarderDns) { ', DNS blocked' })."
 
-# 2. Serveur SSH : aucun tunnel pour le compte de l'agent
+# 2. SSH server: no tunnel for the agent's account
 $cfg = Join-Path $Dossier "sshd_config"
 if (Test-Path $cfg) {
-    Copy-Item $cfg "$cfg.avant-isolation-$stamp"
+    Copy-Item $cfg "$cfg.before-isolation-$stamp"
     $lignes = @(Get-Content $cfg)
     $match = @($lignes | Select-String -Pattern '^\s*Match\s')
     $dernier = if ($match.Count -gt 0) { $match[-1] } else { $null }
@@ -78,34 +78,34 @@ if (Test-Path $cfg) {
         }
         & "$env:WINDIR\System32\OpenSSH\sshd.exe" -t
         if ($LASTEXITCODE -ne 0) {
-            Copy-Item "$cfg.avant-isolation-$stamp" $cfg -Force
-            Write-Host "sshd_config refuse par 'sshd -t' : version precedente remise, serveur SSH inchange." -ForegroundColor Red
+            Copy-Item "$cfg.before-isolation-$stamp" $cfg -Force
+            Write-Host "sshd_config refused by 'sshd -t': previous version restored, SSH server unchanged." -ForegroundColor Red
         } else {
             Restart-Service sshd
-            Write-Host "Serveur SSH : tunnels interdits pour $Utilisateur (sauvegarde : $cfg.avant-isolation-$stamp)."
+            Write-Host "SSH server: tunnels forbidden for $Utilisateur (backup: $cfg.before-isolation-$stamp)."
         }
     } else {
-        Write-Host "ATTENTION : le dernier bloc de $cfg n'est pas 'Match User $Utilisateur'. Ajoute a la main, a la fin du bloc" -ForegroundColor Yellow
-        Write-Host "  de ce compte : AllowTcpForwarding no / AllowStreamLocalForwarding no / PermitTunnel no / AllowAgentForwarding no / X11Forwarding no"
+        Write-Host "WARNING: the last block of $cfg is not 'Match User $Utilisateur'. Add by hand, at the end of the block" -ForegroundColor Yellow
+        Write-Host "  of that account: AllowTcpForwarding no / AllowStreamLocalForwarding no / PermitTunnel no / AllowAgentForwarding no / X11Forwarding no"
     }
 } else {
-    Write-Host "ATTENTION : $cfg introuvable (serveur OpenSSH non installe ?)." -ForegroundColor Yellow
+    Write-Host "WARNING: $cfg not found (OpenSSH server not installed?)." -ForegroundColor Yellow
 }
 $cles = Join-Path $Dossier "$($Utilisateur)_authorized_keys"
 if (Test-Path $cles) {
     if (@(Get-Content $cles | Where-Object { $_ -match '^\s*ssh-' }).Count -gt 0) {
-        Write-Host "ATTENTION : une cle de $cles n'a pas l'option 'restrict' en tete de ligne." -ForegroundColor Yellow
-    } else { Write-Host "Cles de $Utilisateur : option 'restrict' presente." }
+        Write-Host "WARNING: a key in $cles does not start with the 'restrict' option." -ForegroundColor Yellow
+    } else { Write-Host "Keys of $($Utilisateur): 'restrict' option present." }
 }
 
-# 3. Verifications
+# 3. Checks
 function Test-Tcp([string]$h, [int]$p) {
     try { $c = New-Object Net.Sockets.TcpClient; $ok = $c.ConnectAsync($h, $p).Wait(4000); $c.Close(); return $ok }
     catch { return $false }
 }
-Write-Host "--- Verifications ---"
+Write-Host "--- Checks ---"
 $i = Test-Tcp "1.1.1.1" 443
-Write-Host ("Internet (1.1.1.1:443)      : " + $(if ($i) { "JOIGNABLE  <- probleme" } else { "bloque (bien)" }))
-$d = $false; try { $d = [Net.Dns]::GetHostAddressesAsync("example.com").Wait(5000) } catch { }   # 5 s au plus : DNS bloque = pas de reponse
-Write-Host ("Resolution DNS example.com  : " + $(if ($d) { if ($GarderDns) { "resolu (DNS garde volontairement)" } else { "RESOLU  <- probleme (cache ? relancer apres 'ipconfig /flushdns')" } } else { "bloquee (bien)" }))
+Write-Host ("Internet (1.1.1.1:443)      : " + $(if ($i) { "REACHABLE  <- problem" } else { "blocked (good)" }))
+$d = $false; try { $d = [Net.Dns]::GetHostAddressesAsync("example.com").Wait(5000) } catch { }   # 5 s at most: DNS blocked = no answer
+Write-Host ("DNS resolution example.com  : " + $(if ($d) { if ($GarderDns) { "resolved (DNS kept on purpose)" } else { "RESOLVED  <- problem (cache? run again after 'ipconfig /flushdns')" } } else { "blocked (good)" }))
 Get-NetFirewallRule -Group $Groupe | Format-Table DisplayName, Enabled, Direction, Action -AutoSize
