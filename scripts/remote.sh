@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
-# Donne à Hermes l'accès SSH à UNE machine de test, avec une clé dédiée et une empreinte vérifiée.
-# Appelé par `lab remote …` (voir docs/hermes-ssh.md).
+# Gives Hermes SSH access to ONE test machine, with a dedicated key and a verified fingerprint.
+# Called by `lab remote …` (see docs/hermes-ssh.md).
 #
-#   remote.sh add NOM UTILISATEUR@HOTE [PORT] [--windows] [--yes]   clé dédiée + empreinte épinglée + entrée de config ; affiche quoi faire sur la machine
-#   remote.sh show NOM [--windows]                      réaffiche ce qu'il faut faire sur la machine (clé incluse)
-#   remote.sh list                                      machines connues de Hermes
-#   remote.sh link NOM PROJET                           ajoute à l'AGENTS.md d'un projet existant les règles d'usage de cette machine
-#   remote.sh test NOM                                  essaie la connexion DEPUIS le conteneur Hermes (celle de l'agent)
-#   remote.sh remove NOM                                supprime clé, empreinte et entrée
+#   remote.sh add NAME USER@HOST [PORT] [--windows] [--yes]   dedicated key + pinned fingerprint + config entry; shows what to do on the machine
+#   remote.sh show NAME [--windows]                     shows again what to do on the machine (key included)
+#   remote.sh list                                      machines known to Hermes
+#   remote.sh link NAME PROJECT                         adds the rules for using this machine to an existing project's AGENTS.md
+#   remote.sh test NAME                                 tries the connection FROM the Hermes container (the agent's)
+#   remote.sh remove NAME                               removes key, fingerprint and entry
 set -uo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 HDIR="$ROOT/hermes"
 DATA="${HERMES_DATA:-$HDIR/data}"
-SSHD="$DATA/ssh"             # vu comme /opt/data/ssh dans le conteneur
+SSHD="$DATA/ssh"             # seen as /opt/data/ssh in the container
 INSIDE=/opt/data/ssh
-die() { echo "lab remote : $*" >&2; exit 1; }
+die() { echo "lab remote: $*" >&2; exit 1; }
 
-valid_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || die "nom invalide « $1 » (minuscules, chiffres et -, 31 caractères max)"; }
-# Ces valeurs finissent dans un fichier de configuration ssh : on n'accepte que des caractères inoffensifs
-# (sinon une valeur piégée pourrait ajouter une option ProxyCommand).
-valid_user() { [[ "$1" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "utilisateur invalide « $1 »"; }
-valid_host() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$ ]] || die "hôte invalide « $1 » (nom DNS ou adresse IPv4)"; }
-valid_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ] || die "port invalide « $1 »"; }
+valid_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] || die "invalid name \"$1\" (lower case, digits and -, 31 characters max)"; }
+# These values end up in an ssh configuration file: only harmless characters are accepted
+# (otherwise a trapped value could add a ProxyCommand option).
+valid_user() { [[ "$1" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "invalid user \"$1\""; }
+valid_host() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$ ]] || die "invalid host \"$1\" (DNS name or IPv4 address)"; }
+valid_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && [ "$1" -ge 1 ] && [ "$1" -le 65535 ] || die "invalid port \"$1\""; }
 exists() { [ -f "$SSHD/config" ] && grep -qx "Host $1" "$SSHD/config"; }
 
-# Affiche ce qu'il faut faire sur la machine (clé publique incluse). Utilisé par add et show.
+# Shows what to do on the machine (public key included). Used by add and show.
 print_instructions() {
   local name="$1" user="$2" host="$3" win="$4" key="$SSHD/id_ed25519_$1"
   local src=""; command -v ip >/dev/null && src="$(ip -4 route get "$host" 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n1)"
@@ -32,42 +32,42 @@ print_instructions() {
   echo
   local line="restrict,pty$from $(cat "$key.pub")"
   if [ -n "$win" ]; then
-    echo "Clé créée. À faire SUR le PC Windows « $name », dans PowerShell lancé en tant qu'administrateur :"
+    echo "Key created. To do ON the Windows PC \"$name\", in PowerShell run as administrator:"
     echo
     local t; t="$(cat <<'PS'
-# 1. Serveur SSH (ignore l'erreur s'il est déjà installé)
+# 1. SSH server (ignore the error if it is already installed)
 Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
 Set-Service sshd -StartupType Automatic; Start-Service sshd
-# 2. Utilisateur dédié : simple utilisateur (PAS administrateur), mot de passe aléatoire que personne ne connaît
+# 2. Dedicated user: plain user (NOT an administrator), random password nobody knows
 $g = (New-Guid).ToString('N')
 $pw = ConvertTo-SecureString ($g + 'aA1!') -AsPlainText -Force
 New-LocalUser -Name '@USER@' -Password $pw -PasswordNeverExpires -Description 'Acces SSH Hermes'
-Get-LocalGroup -SID S-1-5-32-545 | Add-LocalGroupMember -Member '@USER@'   # groupe « Utilisateurs », quelle que soit la langue de Windows
-# 3. Clé autorisée, rangée hors du profil
+Get-LocalGroup -SID S-1-5-32-545 | Add-LocalGroupMember -Member '@USER@'   # "Users" group, whatever the language of Windows
+# 3. Authorized key, stored outside the profile
 $f = 'C:\ProgramData\ssh\@USER@_authorized_keys'
 Set-Content -Path $f -Value '@LINE@' -Encoding ascii
-Test-Path $f   # doit afficher True
-# SYSTEM, Administrateurs : identifiants universels (SID), valables en français comme en anglais
+Test-Path $f   # must show True
+# SYSTEM, Administrators: universal identifiers (SID), valid whatever the language of Windows
 icacls $f /inheritance:r
 icacls $f /grant '*S-1-5-18:F'
 icacls $f /grant '*S-1-5-32-544:F'
 icacls $f /grant '@USER@:R'
-icacls $f   # doit lister seulement SYSTEM, Administrateurs et @USER@
-# 4. Pour cet utilisateur seulement : clé uniquement, pas de mot de passe
-# (et aucun tunnel : ni redirection de port, ni SOCKS, ni agent, ni X11)
+icacls $f   # must only list SYSTEM, Administrators and @USER@
+# 4. For this user only: key only, no password
+# (and no tunnel: no port forwarding, no SOCKS, no agent, no X11)
 Add-Content 'C:\ProgramData\ssh\sshd_config' "`nMatch User @USER@`n    AuthorizedKeysFile C:/ProgramData/ssh/@USER@_authorized_keys`n    PasswordAuthentication no`n    AllowTcpForwarding no`n    AllowStreamLocalForwarding no`n    PermitTunnel no`n    AllowAgentForwarding no`n    X11Forwarding no`n    GatewayPorts no"
 Restart-Service sshd
-# 5. Couper Internet sur cette machine (sinon l'agent pourrait y lancer des commandes qui sortent) :
-#    windows\outils\Isoler-machine-de-test.ps1, en administrateur (docs/agent-isolation.md)
+# 5. Cut the Internet on this machine (otherwise the agent could run commands there that go out):
+#    windows\outils\Isoler-machine-de-test.ps1, as administrator (docs/agent-isolation.md)
 PS
 )"
     t="${t//@USER@/$user}"; t="${t//@LINE@/$line}"
     echo "$t" | sed 's/^/  /'
     echo
-    echo "Pour comparer l'empreinte (à taper sur le PC) :  ssh-keygen -lf C:\\ProgramData\\ssh\\ssh_host_ed25519_key.pub"
-    echo "Le shell distant de Windows est cmd.exe. Les outils installés dans TON profil (PlatformIO, Python, Arduino…) ne sont pas visibles pour « $user » : installe-les pour tous les utilisateurs, ou dans son profil."
+    echo "To compare the fingerprint (type it on the PC):  ssh-keygen -lf C:\\ProgramData\\ssh\\ssh_host_ed25519_key.pub"
+    echo "The remote shell on Windows is cmd.exe. Tools installed in YOUR profile (PlatformIO, Python, Arduino…) are not visible to \"$user\": install them for all users, or in its profile."
   else
-    echo "Clé créée. À faire SUR la machine « $name » (en tant qu'administrateur) :"
+    echo "Key created. To do ON the machine \"$name\" (as an administrator):"
     echo
     echo "  sudo adduser --disabled-password --gecos '' $user"
     echo "  sudo install -d -m 700 -o $user -g $user /home/$user/.ssh"
@@ -75,40 +75,40 @@ PS
     echo "  sudo chown $user:$user /home/$user/.ssh/authorized_keys && sudo chmod 600 /home/$user/.ssh/authorized_keys"
   fi
   echo
-  echo "Puis : lab remote test $name"
-  [ -n "$src" ] || echo "(adresse source non déterminée : la restriction from=\"…\" n'a pas été ajoutée, tu peux la rajouter à la main)"
+  echo "Then: lab remote test $name"
+  [ -n "$src" ] || echo "(source address not determined: the from=\"…\" restriction was not added, you can add it by hand)"
 }
 
 cmd_add() {
   local yes="" win=""; local args=(); for a in "$@"; do case "$a" in --yes) yes=1;; --windows) win=1;; *) args+=("$a");; esac; done
   local name="${args[0]:-}" target="${args[1]:-}" port="${args[2]:-22}"
-  [ -n "$name" ] && [ -n "$target" ] || die "usage : lab remote add NOM UTILISATEUR@HOTE [PORT]"
-  [[ "$target" == *@* ]] || die "attendu : UTILISATEUR@HOTE"
+  [ -n "$name" ] && [ -n "$target" ] || die "usage: lab remote add NAME USER@HOST [PORT]"
+  [[ "$target" == *@* ]] || die "expected: USER@HOST"
   local user="${target%@*}" host="${target#*@}"
   valid_name "$name"; valid_user "$user"; valid_host "$host"; valid_port "$port"
-  command -v ssh-keygen >/dev/null || die "il manque ssh-keygen"
-  exists "$name" && die "« $name » existe déjà (lab remote remove $name pour la refaire)"
+  command -v ssh-keygen >/dev/null || die "ssh-keygen is missing"
+  exists "$name" && die "\"$name\" already exists (lab remote remove $name to redo it)"
   mkdir -p "$SSHD" && chmod 700 "$SSHD"; touch "$SSHD/config" "$SSHD/known_hosts"; chmod 600 "$SSHD/config" "$SSHD/known_hosts"
 
-  # 1. Empreinte de la machine, à vérifier AVANT de lui faire confiance.
+  # 1. The machine's fingerprint, to check BEFORE trusting it.
   local hk tmp; tmp="$(mktemp)"; trap 'rm -f "$tmp"' RETURN
   if [ -n "${REMOTE_HOSTKEY_FILE:-}" ]; then cp "$REMOTE_HOSTKEY_FILE" "$tmp"
-  else command -v ssh-keyscan >/dev/null || die "il manque ssh-keyscan"
+  else command -v ssh-keyscan >/dev/null || die "ssh-keyscan is missing"
        ssh-keyscan -T 8 -t ed25519 -p "$port" "$host" 2>/dev/null | grep -v '^#' > "$tmp"; fi
   hk="$(head -n1 "$tmp")"
-  [[ "$hk" =~ ^[^[:space:]]+[[:space:]]ssh-ed25519[[:space:]][A-Za-z0-9+/=]+$ ]] || die "pas de clé ed25519 reçue de $host:$port (machine éteinte, port fermé, ou pas de clé ed25519)"
+  [[ "$hk" =~ ^[^[:space:]]+[[:space:]]ssh-ed25519[[:space:]][A-Za-z0-9+/=]+$ ]] || die "no ed25519 key received from $host:$port (machine off, port closed, or no ed25519 key)"
   local pub="${hk#* }"
-  echo "Empreinte présentée par $host:$port :"
+  echo "Fingerprint presented by $host:$port:"
   echo "  $(echo "$pub" | ssh-keygen -lf - 2>/dev/null)"
-  echo "Compare-la avec celle de la machine (à taper SUR la machine) :"
+  echo "Compare it with the machine's (type this ON the machine):"
   echo "  ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub"
-  if [ -z "$yes" ]; then read -r -p "Ce sont les mêmes ? [o/N] " r; [[ "$r" =~ ^[oOyY]$ ]] || die "abandon : empreinte non confirmée"; fi
+  if [ -z "$yes" ]; then read -r -p "Are they the same? [y/N] " r; [[ "$r" =~ ^([yYoO]|yes|oui)$ ]] || die "aborted: fingerprint not confirmed"; fi
 
-  # 2. Clé dédiée à cette machine, sans phrase secrète (l'agent doit pouvoir s'en servir seul).
+  # 2. Key dedicated to this machine, without a passphrase (the agent must be able to use it alone).
   local key="$SSHD/id_ed25519_$name"
-  ssh-keygen -q -t ed25519 -N "" -C "hermes@aibeast-$name" -f "$key" || die "ssh-keygen a échoué"
+  ssh-keygen -q -t ed25519 -N "" -C "hermes@aibeast-$name" -f "$key" || die "ssh-keygen failed"
   chmod 600 "$key"
-  # Épingle l'empreinte : « [hôte]:port » si le port n'est pas 22, comme ssh l'attend.
+  # Pins the fingerprint: "[host]:port" if the port is not 22, as ssh expects.
   if [ "$port" = 22 ]; then echo "$host $pub" >> "$SSHD/known_hosts"; else echo "[$host]:$port $pub" >> "$SSHD/known_hosts"; fi
   {
     echo "Host $name"
@@ -125,8 +125,8 @@ cmd_add() {
 
 cmd_show() {
   local name="" win=""; for a in "$@"; do case "$a" in --windows) win=1;; *) name="$a";; esac; done
-  [ -n "$name" ] || die "usage : lab remote show NOM [--windows]"; valid_name "$name"; exists "$name" || die "« $name » inconnue (lab remote list)"
-  [ -f "$SSHD/id_ed25519_$name.pub" ] || die "clé de « $name » introuvable"
+  [ -n "$name" ] || die "usage: lab remote show NAME [--windows]"; valid_name "$name"; exists "$name" || die "\"$name\" unknown (lab remote list)"
+  [ -f "$SSHD/id_ed25519_$name.pub" ] || die "key of \"$name\" not found"
   local user host
   user="$(awk -v n="$name" '$1=="Host"{c=($2==n)} c&&$1=="User"{print $2}' "$SSHD/config")"
   host="$(awk -v n="$name" '$1=="Host"{c=($2==n)} c&&$1=="HostName"{print $2}' "$SSHD/config")"
@@ -135,69 +135,70 @@ cmd_show() {
 }
 
 cmd_list() {
-  [ -f "$SSHD/config" ] || { echo "Aucune machine."; return 0; }
+  [ -f "$SSHD/config" ] || { echo "No machine."; return 0; }
   awk '$1=="Host"{n=$2} $1=="HostName"{h=$2} $1=="User"{u=$2} $1=="Port"{p=$2} /^$/ && n{print n"\t"u"@"h":"p; n=""}' "$SSHD/config"
 }
 
 cmd_test() {
-  local name="${1:?usage : lab remote test NOM}"; valid_name "$name"; exists "$name" || die "« $name » inconnue (lab remote list)"
-  command -v docker >/dev/null || die "il manque docker"
+  local name="${1:?usage: lab remote test NAME}"; valid_name "$name"; exists "$name" || die "\"$name\" unknown (lab remote list)"
+  command -v docker >/dev/null || die "docker is missing"
   [ -f "$HDIR/.env" ] || printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > "$HDIR/.env"
-  echo "Connexion depuis le conteneur Hermes (c'est ce que verra l'agent)…"
-  # Test Internet/DNS lancé SUR la machine (Windows) ; encodé pour éviter tout problème de guillemets
+  echo "Connecting from the Hermes container (this is what the agent will see)…"
+  # Internet/DNS test run ON the machine (Windows); encoded to avoid any quoting problem
   local enc; enc="$(printf '%s' '$c=New-Object Net.Sockets.TcpClient;try{$o=$c.ConnectAsync("1.1.1.1",443).Wait(4000)}catch{$o=$false};$c.Close();try{$d=[Net.Dns]::GetHostAddressesAsync("example.com").Wait(5000)}catch{$d=$false};"internet="+$o+" dns="+$d' | iconv -t UTF-16LE | base64 -w0)"
-  local probe="command -v ssh >/dev/null || { echo 'ERREUR : pas de client ssh dans l image Hermes'; exit 3; }
+  local probe="command -v ssh >/dev/null || { echo 'ERROR: no ssh client in the Hermes image'; exit 3; }
 S='ssh -n -F $INSIDE/config $name'
-echo -n 'utilisateur : '; \$S whoami || exit 4
-echo -n 'machine     : '; \$S hostname
-if \$S 'whoami /groups' 2>/dev/null | grep -q 'S-1-5-32-544'; then echo 'ATTENTION : cet utilisateur est membre des administrateurs Windows'; fi
-if \$S 'sudo -n true' >/dev/null 2>&1; then echo 'ATTENTION : sudo possible sans mot de passe'; else echo 'pas de sudo sans mot de passe : bien'; fi
-if timeout 15 ssh -F $INSIDE/config -W 127.0.0.1:22 $name < /dev/null 2>&1 | grep -q 'SSH-2.0'; then echo 'ATTENTION : tunnel SSH possible (redirection de port) : voir docs/agent-isolation.md'; else echo 'tunnel SSH refusé : bien'; fi
+echo -n 'user    : '; \$S whoami || exit 4
+echo -n 'machine : '; \$S hostname
+if \$S 'whoami /groups' 2>/dev/null | grep -q 'S-1-5-32-544'; then echo 'WARNING: this user is a member of the Windows administrators'; fi
+if \$S 'sudo -n true' >/dev/null 2>&1; then echo 'WARNING: sudo possible without a password'; else echo 'no sudo without a password: good'; fi
+if timeout 15 ssh -F $INSIDE/config -W 127.0.0.1:22 $name < /dev/null 2>&1 | grep -q 'SSH-2.0'; then echo 'WARNING: SSH tunnel possible (port forwarding): see docs/agent-isolation.md'; else echo 'SSH tunnel refused: good'; fi
 if \$S ver 2>/dev/null | grep -qi windows; then
   r=\$(\$S powershell -NoProfile -NonInteractive -EncodedCommand $enc 2>/dev/null | tr -d '\\r')
-  case \"\$r\" in *internet=False*) echo 'Internet depuis la machine : bloqué, bien';; *) echo \"ATTENTION : la machine a accès à Internet (\$r) : windows/outils/Isoler-machine-de-test.ps1\";; esac
-  case \"\$r\" in *dns=False*) echo 'DNS depuis la machine : bloqué, bien';; *dns=True*) echo 'DNS depuis la machine : résolu (canal de sortie possible ; sauf -GarderDns voulu)';; esac
+  case \"\$r\" in *internet=False*) echo 'Internet from the machine: blocked, good';; *) echo \"WARNING: the machine has Internet access (\$r): windows/outils/Isoler-machine-de-test.ps1\";; esac
+  case \"\$r\" in *dns=False*) echo 'DNS from the machine: blocked, good';; *dns=True*) echo 'DNS from the machine: resolved (possible exit channel; unless -KeepDns was intended)';; esac
 fi"
-  # ssh refuse de tourner si l'identifiant numérique n'a pas d'entrée dans /etc/passwd (« No user exists for uid 1000 »).
-  # Ici on contourne le démarrage normal de l'image, qui crée cet utilisateur : on ajoute donc l'entrée dans une copie de /etc/passwd.
+  # ssh refuses to run if the numeric id has no entry in /etc/passwd ("No user exists for uid 1000").
+  # Here the image's normal start-up, which creates that user, is bypassed: so the entry is added to a copy of /etc/passwd.
   local pw; pw="$(mktemp)"; trap 'rm -f "$pw"' RETURN
   ( cd "$HDIR" && docker compose run --rm -T --entrypoint cat hermes /etc/passwd > "$pw" 2>/dev/null ) || true
   grep -q "^[^:]*:[^:]*:$(id -u):" "$pw" || echo "hermes-host:x:$(id -u):$(id -g):hermes:/opt/data:/bin/bash" >> "$pw"
   chmod 644 "$pw"
-  ( cd "$HDIR" && timeout 120 docker compose run --rm -T --user "$(id -u):$(id -g)" -v "$pw:/etc/passwd:ro" --entrypoint bash hermes -lc "$probe" < /dev/null )   # < /dev/null et ssh -n : rien ne doit attendre le clavier
+  ( cd "$HDIR" && timeout 120 docker compose run --rm -T --user "$(id -u):$(id -g)" -v "$pw:/etc/passwd:ro" --entrypoint bash hermes -lc "$probe" < /dev/null )   # < /dev/null and ssh -n: nothing must wait for the keyboard
   local rc=$?
-  [ $rc -eq 0 ] && echo "OK. L'agent s'y connecte avec : ssh -F $INSIDE/config $name '…'" || echo "Échec (code $rc). Causes fréquentes : clé pas encore installée sur la machine, pare-feu, empreinte changée."
+  [ $rc -eq 0 ] && echo "OK. The agent connects to it with: ssh -F $INSIDE/config $name '…'" || echo "Failed (code $rc). Common causes: key not yet installed on the machine, firewall, changed fingerprint."
   return $rc
 }
 
 cmd_link() {
-  local name="${1:?usage : lab remote link NOM PROJET}" proj="${2:?usage : lab remote link NOM PROJET}"
-  valid_name "$name"; [[ "$proj" =~ ^[a-z0-9][a-z0-9_-]{0,40}$ ]] || die "projet invalide « $proj »"
-  exists "$name" || die "« $name » inconnue (lab remote add d'abord)"
+  local name="${1:?usage: lab remote link NAME PROJECT}" proj="${2:?usage: lab remote link NAME PROJECT}"
+  valid_name "$name"; [[ "$proj" =~ ^[a-z0-9][a-z0-9_-]{0,40}$ ]] || die "invalid project \"$proj\""
+  exists "$name" || die "\"$name\" unknown (lab remote add first)"
   local P="$DATA/workspace/projects/$proj" F="$DATA/workspace/projects/$proj/AGENTS.md"
-  # L'agent écrit dans ce dossier : on refuse les liens symboliques, qui feraient écrire ailleurs sur AiBeast.
-  [ -d "$P" ] && [ ! -L "$P" ] || die "projet « $proj » introuvable (ou lien symbolique) dans $DATA/workspace/projects"
-  [ ! -L "$F" ] || die "$F est un lien symbolique : refus par sécurité"
+  # The agent writes in this folder: symbolic links are refused, they would make us write elsewhere on the AI machine.
+  [ -d "$P" ] && [ ! -L "$P" ] || die "project \"$proj\" not found (or a symbolic link) in $DATA/workspace/projects"
+  [ ! -L "$F" ] || die "$F is a symbolic link: refused for safety"
   local tpl="$HDIR/dev-template/AGENTS.md"
-  [ -f "$tpl" ] || die "modèle introuvable : $tpl"
-  if [ -f "$F" ] && grep -q "^Machine de test autorisée : \`$name\`" "$F"; then echo "Déjà fait pour $proj."; return 0; fi
+  [ -f "$tpl" ] || die "template not found: $tpl"
+    # Marker: the current English one, or the French one written by earlier versions.
+  if [ -f "$F" ] && grep -q -e "^Authorized test machine: \`$name\`" -e "^Machine de test autorisée : \`$name\`" "$F"; then echo "Already done for $proj."; return 0; fi
   {
     echo
-    sed -n '/^## Machines de test (SSH)/,$p' "$tpl" | sed "1a Machine de test autorisée : \`$name\`"
+    sed -n '/^## Test machines (SSH)/,$p' "$tpl" | sed "1a Authorized test machine: \`$name\`"
   } >> "$F"
-  echo "Règles ajoutées à $F. Dis à Hermes (dans sa session) :"
-  echo "  « Relis AGENTS.md. Tu peux te connecter à la machine $name avec ssh -F /opt/data/ssh/config $name 'commande'. »"
+  echo "Rules added to $F. Tell Hermes (in its session):"
+  echo "  \"Read AGENTS.md again. You can connect to the machine $name with ssh -F /opt/data/ssh/config $name 'command'.\""
 }
 
 cmd_remove() {
-  local name="${1:?usage : lab remote remove NOM}"; valid_name "$name"; exists "$name" || die "« $name » inconnue"
+  local name="${1:?usage: lab remote remove NAME}"; valid_name "$name"; exists "$name" || die "\"$name\" unknown"
   local host port; host="$(awk -v n="$name" '$1=="Host"{c=($2==n)} c&&$1=="HostName"{print $2}' "$SSHD/config")"
   port="$(awk -v n="$name" '$1=="Host"{c=($2==n)} c&&$1=="Port"{print $2}' "$SSHD/config")"
   awk -v n="$name" '$1=="Host"{skip=($2==n)} !skip' "$SSHD/config" > "$SSHD/config.new" && mv "$SSHD/config.new" "$SSHD/config"; chmod 600 "$SSHD/config"
   local pat="$host"; [ "$port" != 22 ] && pat="[$host]:$port"
   grep -vF -- "$pat " "$SSHD/known_hosts" > "$SSHD/known_hosts.new"; mv "$SSHD/known_hosts.new" "$SSHD/known_hosts"; chmod 600 "$SSHD/known_hosts"
   rm -f "$SSHD/id_ed25519_$name" "$SSHD/id_ed25519_$name.pub"
-  echo "Supprimé côté AiBeast. Pense à retirer la ligne « hermes@aibeast-$name » de ~/.ssh/authorized_keys sur la machine, ou à supprimer son utilisateur."
+  echo "Removed on the AI machine side. Remember to remove the \"hermes@aibeast-$name\" line from ~/.ssh/authorized_keys on the machine, or to delete its user."
 }
 
 case "${1:-}" in
