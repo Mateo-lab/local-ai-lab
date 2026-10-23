@@ -7,8 +7,8 @@ async function api(chemin, corps) {
   if (corps) { opts.method = "POST"; opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(corps); }
   const r = await fetch(chemin, opts);
   let data = {};
-  try { data = await r.json(); } catch (e) { /* pas de JSON */ }
-  if (!r.ok) throw new Error(data.erreur || ("erreur " + r.status));
+  try { data = await r.json(); } catch (e) { /* no JSON */ }
+  if (!r.ok) throw new Error(data.erreur || ("error " + r.status));
   return data;
 }
 
@@ -18,9 +18,9 @@ async function etat() {
   try {
     const d = await api("/api/etat");
     actions = d.actions; occupe = d.occupe;
-    statut("Mode actuel : " + d.mode + (d.occupe ? " — action en cours…" : ""), d.occupe ? "warn" : "");
+    statut("Current mode: " + d.mode + (d.occupe ? " — action running…" : ""), d.occupe ? "warn" : "");
     majBoutons();
-  } catch (e) { statut("Panneau injoignable : " + e.message, "ko"); }
+  } catch (e) { statut("Panel unreachable: " + e.message, "ko"); }
 }
 
 function majBoutons() {
@@ -44,7 +44,7 @@ function suivre() {
       if (j.aucun) return;
       if (j.sortie) { E("sortie").textContent += j.sortie; E("sortie").scrollTop = E("sortie").scrollHeight; }
       depuis = j.taille;
-      E("job").textContent = "— " + j.titre + (j.fini ? (j.code === 0 ? " : terminé" : " : code " + j.code) : " : en cours (" + Math.round(j.duree) + " s)");
+      E("job").textContent = "— " + j.titre + (j.fini ? (j.code === 0 ? ": done" : ": code " + j.code) : ": running (" + Math.round(j.duree) + " s)");
       if (!j.fini) { suivi = setTimeout(tour, 1000); return; }
     } catch (e) { statut(e.message, "ko"); }
     await etat(); await hermes();
@@ -57,7 +57,7 @@ async function hermes() {
   try {
     const d = await api("/api/hermes");
     zone.textContent = "";
-    if (!d.branches.length) { const p = document.createElement("p"); p.textContent = "Aucune branche d'agent à relire."; zone.appendChild(p); return; }
+    if (!d.branches.length) { const p = document.createElement("p"); p.textContent = "No agent branch to review."; zone.appendChild(p); return; }
     d.branches.forEach((b) => {
       const l = document.createElement("div"); l.className = "ligne";
       const n = document.createElement("span"); n.className = "nom"; n.textContent = b.projet + " — " + b.branche + " (" + b.commits + " commit(s))";
@@ -67,18 +67,18 @@ async function hermes() {
         bt.addEventListener("click", () => lancer({ action, projet: b.projet, branche: b.branche, confirme: conf ? true : undefined }, conf));
         l.appendChild(bt);
       };
-      mk("Relire", "hermes-revue");
-      mk("Diff complet", "hermes-diff");
-      mk("Fusionner", "hermes-fusion", "Fusionner " + b.branche + " dans main ?\nTu as relu le diff ? Les tests sont relancés d'abord ; s'ils échouent, rien n'est fusionné.", "danger");
+      mk("Review", "hermes-revue");
+      mk("Full diff", "hermes-diff");
+      mk("Merge", "hermes-fusion", "Merge " + b.branche + " into main?\nHave you reviewed the diff? The tests run again first; if they fail, nothing is merged.", "danger");
       zone.appendChild(l);
     });
-  } catch (e) { zone.textContent = "Liste indisponible : " + e.message; }
+  } catch (e) { zone.textContent = "List unavailable: " + e.message; }
 }
 
 document.querySelectorAll("button[data-action]").forEach((b) => {
   b.addEventListener("click", () => {
     const a = b.dataset.action; const info = actions[a] || {};
-    lancer({ action: a }, info.confirmer ? ("Lancer « " + (info.titre || a) + " » ? Cela peut prendre plusieurs minutes.") : null);
+    lancer({ action: a }, info.confirmer ? ("Run \"" + (info.titre || a) + "\"? This can take several minutes.") : null);
   });
 });
 

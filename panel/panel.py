@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Panneau de contrôle d'AiBeast : quelques boutons qui lancent des commandes `lab` prédéfinies.
+"""AiBeast control panel: a few buttons that run predefined `lab` commands.
 
-Sécurité (voir docs/web-panel.md) :
-  - écoute sur 127.0.0.1 uniquement (tu y accèdes par ton tunnel SSH) ;
-  - jeton secret (cookie HttpOnly SameSite=Strict) + en-tête X-Panel + contrôle de Host et d'Origin ;
-  - AUCUNE commande libre : seules les actions de ACTIONS existent ; projet et branche doivent être dans la liste réelle de `lab dev pending` ;
-  - une seule action à la fois ; sortie nettoyée (séquences d'échappement retirées) et affichée comme du texte.
-Bibliothèque standard seulement.
+Security (see docs/web-panel.md):
+  - listens on 127.0.0.1 only (you reach it through your SSH tunnel);
+  - secret token (HttpOnly SameSite=Strict cookie) + X-Panel header + Host and Origin checks;
+  - NO free-form command: only the actions in ACTIONS exist; project and branch must be in the real list of `lab dev pending`;
+  - one action at a time; output cleaned (escape sequences removed) and displayed as text.
+Standard library only. (Identifiers and API field names are in French, as in the original version.)
 """
 import hmac
 import http.server
@@ -39,15 +39,15 @@ RE_BRANCHE = re.compile(r"^agent/[A-Za-z0-9._-]+$")
 RE_ESC = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b.")
 RE_CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
-# nom -> (titre, arguments de `lab`, délai maximal en secondes, confirmation demandée par la page)
+# name -> (title, `lab` arguments, maximum duration in seconds, confirmation asked by the page)
 ACTIONS = {
-    "mode-images": ("Mode images", ["mode", "images"], 300, False),
-    "mode-normal": ("Mode normal", ["mode", "normal"], 120, False),
-    "mode-agents": ("Mode agents", ["mode", "agents"], 120, False),
-    "etat": ("État", ["mode", "status"], 60, False),
-    "doctor": ("Santé", ["doctor"], 180, False),
-    "update": ("Mise à jour", ["update"], 3600, True),
-    "backup": ("Sauvegarde", ["backup", "run"], 3600, True),
+    "mode-images": ("Images mode", ["mode", "images"], 300, False),
+    "mode-normal": ("Normal mode", ["mode", "normal"], 120, False),
+    "mode-agents": ("Agents mode", ["mode", "agents"], 120, False),
+    "etat": ("State", ["mode", "status"], 60, False),
+    "doctor": ("Health", ["doctor"], 180, False),
+    "update": ("Update", ["update"], 3600, True),
+    "backup": ("Backup", ["backup", "run"], 3600, True),
 }
 
 
@@ -76,7 +76,7 @@ class Job:
             if len(self.sortie) < MAX_OUT:
                 self.sortie += morceau
                 if len(self.sortie) >= MAX_OUT:
-                    self.sortie = self.sortie[:MAX_OUT] + "\n[… sortie tronquée]\n"
+                    self.sortie = self.sortie[:MAX_OUT] + "\n[… output truncated]\n"
 
     def lancer(self):
         threading.Thread(target=self._run, daemon=True).start()
@@ -96,21 +96,21 @@ class Job:
                 try:
                     texte, tampon = tampon.decode("utf-8"), b""
                 except UnicodeDecodeError:
-                    if len(tampon) < 8:      # caractère coupé au milieu : on attend la suite
+                    if len(tampon) < 8:      # character cut in the middle: wait for the rest
                         continue
                     texte, tampon = tampon.decode("utf-8", "replace"), b""
                 self.ajouter(nettoyer(texte))
             self.proc.wait()
             timer.cancel()
             code = self.proc.returncode
-        except Exception as e:  # jamais bloquant pour le serveur
-            self.ajouter(f"\n[erreur du panneau : {e}]\n")
+        except Exception as e:  # never blocks the server
+            self.ajouter(f"\n[panel error: {e}]\n")
             code = -1
         with self.lock:
             self.code, self.fini = code, True
 
     def _tuer(self):
-        self.ajouter("\n[délai dépassé : commande arrêtée]\n")
+        self.ajouter("\n[time limit exceeded: command stopped]\n")
         try:
             os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
         except Exception:
@@ -165,7 +165,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    # --- contrôles ---
+    # --- checks ---
     def hote_ok(self):
         h = (self.headers.get("Host") or "").lower()
         return h in (f"127.0.0.1:{PORT}", f"localhost:{PORT}")
@@ -195,7 +195,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def refuser(self, code=HTTPStatus.FORBIDDEN, msg="refusé"):
+    def refuser(self, code=HTTPStatus.FORBIDDEN, msg="refused"):
         self.repondre(code, {"erreur": msg})
 
     def api_ok(self):
@@ -205,16 +205,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         if not self.hote_ok():
-            return self.refuser(msg="hôte non autorisé")
+            return self.refuser(msg="host not allowed")
         if u.path == "/login":
             t = (parse_qs(u.query).get("t") or [""])[0]
             if not egal(t, self.jeton):
-                return self.refuser(msg="jeton invalide")
+                return self.refuser(msg="invalid token")
             return self.repondre(HTTPStatus.FOUND, b"", "text/plain", {
                 "Location": "/", "Set-Cookie": f"{COOKIE}={self.jeton}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000"})
         if u.path in ("/", "/index.html", "/app.js", "/style.css"):
             if not self.cookie_ok():
-                return self.repondre(HTTPStatus.UNAUTHORIZED, "Ouvre l'adresse avec le jeton : lab panel token", "text/plain; charset=utf-8")
+                return self.repondre(HTTPStatus.UNAUTHORIZED, "Open the address with the token: lab panel token", "text/plain; charset=utf-8")
             nom, type_ = {"/": ("index.html", "text/html; charset=utf-8"), "/index.html": ("index.html", "text/html; charset=utf-8"),
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"), "/style.css": ("style.css", "text/css; charset=utf-8")}[u.path]
             return self.repondre(HTTPStatus.OK, (HERE / nom).read_bytes(), type_)
@@ -236,51 +236,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.repondre(HTTPStatus.OK, j.etat(depuis))
         if u.path == "/api/hermes":
             return self.repondre(HTTPStatus.OK, {"branches": branches_a_relire()})
-        return self.refuser(HTTPStatus.NOT_FOUND, "inconnu")
+        return self.refuser(HTTPStatus.NOT_FOUND, "unknown")
 
     def do_POST(self):
         u = urlparse(self.path)
         if not self.api_ok():
             return self.refuser()
         if u.path != "/api/run":
-            return self.refuser(HTTPStatus.NOT_FOUND, "inconnu")
+            return self.refuser(HTTPStatus.NOT_FOUND, "unknown")
         try:
             n = int(self.headers.get("Content-Length") or 0)
             if n > 4096:
-                return self.refuser(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "trop gros")
+                return self.refuser(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "too large")
             corps = json.loads(self.rfile.read(n) or b"{}")
             action = corps.get("action")
         except Exception:
-            return self.refuser(HTTPStatus.BAD_REQUEST, "requête invalide")
+            return self.refuser(HTTPStatus.BAD_REQUEST, "invalid request")
         if action in ACTIONS:
             titre, args, delai, _ = ACTIONS[action]
             argv, dl = [LAB, *args], delai
         elif action in ("hermes-revue", "hermes-diff", "hermes-fusion"):
             projet, branche = corps.get("projet"), corps.get("branche")
             if not (isinstance(projet, str) and isinstance(branche, str) and RE_PROJET.match(projet) and RE_BRANCHE.match(branche)):
-                return self.refuser(HTTPStatus.BAD_REQUEST, "projet ou branche invalide")
+                return self.refuser(HTTPStatus.BAD_REQUEST, "invalid project or branch")
             if not any(b["projet"] == projet and b["branche"] == branche for b in branches_a_relire()):
-                return self.refuser(HTTPStatus.BAD_REQUEST, "cette branche n'est pas dans la liste à relire")
+                return self.refuser(HTTPStatus.BAD_REQUEST, "this branch is not in the list to review")
             if action == "hermes-revue":
-                titre, argv, dl = f"Revue {projet} {branche}", [DEV, "review", projet, branche], 120
+                titre, argv, dl = f"Review {projet} {branche}", [DEV, "review", projet, branche], 120
             elif action == "hermes-diff":
                 titre, argv, dl = f"Diff {projet} {branche}", [DEV, "review", projet, branche, "--diff"], 120
             else:
                 if corps.get("confirme") is not True:
-                    return self.refuser(HTTPStatus.BAD_REQUEST, "confirmation requise")
-                titre, argv, dl = f"Fusion {projet} {branche}", [DEV, "merge", projet, branche, "--yes"], 1200
+                    return self.refuser(HTTPStatus.BAD_REQUEST, "confirmation required")
+                titre, argv, dl = f"Merge {projet} {branche}", [DEV, "merge", projet, branche, "--yes"], 1200
         else:
-            return self.refuser(HTTPStatus.BAD_REQUEST, "action inconnue")
+            return self.refuser(HTTPStatus.BAD_REQUEST, "unknown action")
         job = demarrer(action, titre, argv, dl)
         if job is None:
-            return self.repondre(HTTPStatus.CONFLICT, {"erreur": "une action est déjà en cours"})
+            return self.repondre(HTTPStatus.CONFLICT, {"erreur": "an action is already running"})
         return self.repondre(HTTPStatus.ACCEPTED, {"ok": True, "titre": titre})
 
 
 def main():
     Handler.jeton = lire_jeton()
     srv = http.server.ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Panneau AiBeast sur http://{HOST}:{PORT}", flush=True)
+    print(f"AiBeast panel on http://{HOST}:{PORT}", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

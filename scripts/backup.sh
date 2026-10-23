@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Sauvegardes chiffrées (restic) de ce qui ne se retrouve pas sur Internet :
-#   bases PostgreSQL (n8n, Langfuse), volumes Open WebUI / n8n / Qdrant, fichiers .env, données Hermes, résultats du banc.
-# NON sauvegardé (se retélécharge) : modèles Ollama, images Docker, cache ComfyUI.
+# Encrypted backups (restic) of what cannot be found again on the Internet:
+#   PostgreSQL databases (n8n, Langfuse), Open WebUI / n8n / Qdrant volumes, .env files, Hermes data, benchmark results.
+# NOT backed up (can be downloaded again): Ollama models, Docker images, ComfyUI cache.
 #
-#   scripts/backup.sh init        crée le dépôt chiffré + le mot de passe (une seule fois)
-#   scripts/backup.sh run         fait une sauvegarde
-#   scripts/backup.sh list        liste les sauvegardes
-#   scripts/backup.sh check       vérifie l'intégrité du dépôt
-#   scripts/backup.sh restore ID CIBLE   restaure l'instantané ID dans le dossier CIBLE (jamais en place)
-#   scripts/backup.sh schedule    installe une sauvegarde quotidienne à 03:30 (timer systemd, demande sudo) ; `schedule off` la retire
-#   scripts/backup.sh last        âge de la dernière sauvegarde (utilisé par `lab doctor`)
-#   scripts/backup.sh repo        affiche l'emplacement du dépôt (utilisé par la copie hors machine depuis Windows)
+#   scripts/backup.sh init        creates the encrypted repository + the password (once)
+#   scripts/backup.sh run         makes a backup
+#   scripts/backup.sh list        lists the backups
+#   scripts/backup.sh check       checks the repository's integrity
+#   scripts/backup.sh restore ID TARGET   restores snapshot ID into the TARGET folder (never in place)
+#   scripts/backup.sh schedule    installs a daily backup at 03:30 (systemd timer, asks for sudo); `schedule off` removes it
+#   scripts/backup.sh last        age of the last backup (used by `lab doctor`)
+#   scripts/backup.sh repo        prints the repository's location (used by the off-machine copy from Windows)
 #
-# Variables : BACKUP_REPO (défaut $LAB_DATA_DIR/backups/restic, soit /data/backups/restic), BACKUP_PASSWORD_FILE (défaut ~/.config/aibeast-backup/password)
-# Dépôt sur le MÊME disque que les données : protège d'une erreur de manipulation, PAS de la perte du disque.
-# Pour une vraie protection, pointe BACKUP_REPO vers un autre disque ou un serveur (voir docs/backups.md).
+# Variables: BACKUP_REPO (default $LAB_DATA_DIR/backups/restic, i.e. /data/backups/restic), BACKUP_PASSWORD_FILE (default ~/.config/aibeast-backup/password)
+# Repository on the SAME disk as the data: protects against a handling mistake, NOT against losing the disk.
+# For real protection, point BACKUP_REPO to another disk or a server (see docs/backups.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,15 +25,15 @@ export RESTIC_PASSWORD_FILE="${BACKUP_PASSWORD_FILE:-$HOME/.config/aibeast-backu
 STAGE="${BACKUP_STAGE:-$LAB_DATA_DIR/backups/staging}"
 KEEP=(--keep-daily 7 --keep-weekly 4 --keep-monthly 6)
 
-need() { command -v "$1" >/dev/null 2>&1 || { echo "Il manque '$1' (sudo apt install $1)." >&2; exit 1; }; }
+need() { command -v "$1" >/dev/null 2>&1 || { echo "'$1' is missing (sudo apt install $1)." >&2; exit 1; }; }
 need restic; need docker
 
-cid() { # cid PROJET SERVICE -> id du conteneur (par étiquettes compose, indépendant des noms)
+cid() { # cid PROJECT SERVICE -> container id (through compose labels, independent of names)
   docker ps -q --filter "label=com.docker.compose.project=$1" --filter "label=com.docker.compose.service=$2" | head -n1
 }
 
-cid_in() { # cid_in SOUS-DOSSIER SERVICE -> id du conteneur dont le compose vit dans ROOT/SOUS-DOSSIER
-  # (Langfuse est cloné dans langfuse/app : Docker nomme alors le projet « app », pas « langfuse »)
+cid_in() { # cid_in SUBFOLDER SERVICE -> id of the container whose compose file lives in ROOT/SUBFOLDER
+  # (Langfuse is cloned into langfuse/app: Docker then names the project "app", not "langfuse")
   local id wd
   for id in $(docker ps -q --filter "label=com.docker.compose.service=$2"); do
     wd="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}' "$id" 2>/dev/null || true)"
@@ -44,40 +44,40 @@ cid_in() { # cid_in SOUS-DOSSIER SERVICE -> id du conteneur dont le compose vit 
 cmd="${1:-}"; shift || true
 case "$cmd" in
   init)
-    if [ -f "$RESTIC_PASSWORD_FILE" ]; then echo "Mot de passe déjà présent : $RESTIC_PASSWORD_FILE"
+    if [ -f "$RESTIC_PASSWORD_FILE" ]; then echo "Password already present: $RESTIC_PASSWORD_FILE"
     else
       mkdir -p "$(dirname "$RESTIC_PASSWORD_FILE")"; umask 077
       openssl rand -base64 33 > "$RESTIC_PASSWORD_FILE"
-      echo "Mot de passe généré : $RESTIC_PASSWORD_FILE"
-      echo "!! COPIE-LE MAINTENANT dans un gestionnaire de mots de passe, hors d'AiBeast. Sans lui, les sauvegardes sont illisibles."
+      echo "Password generated: $RESTIC_PASSWORD_FILE"
+      echo "!! COPY IT NOW into a password manager, off the AI machine. Without it, the backups are unreadable."
     fi
     mkdir -p "$RESTIC_REPOSITORY" "$STAGE"
-    restic cat config >/dev/null 2>&1 && echo "Dépôt déjà initialisé : $RESTIC_REPOSITORY" || restic init
+    restic cat config >/dev/null 2>&1 && echo "Repository already initialised: $RESTIC_REPOSITORY" || restic init
     ;;
 
   run)
     mkdir -p "$STAGE"; rm -rf "${STAGE:?}"/*
     ok=1
 
-    # 1. Bases PostgreSQL : pg_dump (cohérent, contrairement à une copie de fichiers pendant l'écriture)
+    # 1. PostgreSQL databases: pg_dump (consistent, unlike a copy of files during writes)
     c="$(cid ai-stack postgres-n8n)"
     if [ -n "$c" ]; then
-      docker exec "$c" pg_dump -U n8n -d n8n --clean --if-exists > "$STAGE/n8n.sql" && echo "✓ base n8n" || { echo "✗ pg_dump n8n"; ok=0; }
-    else echo "· postgres-n8n arrêté : ignoré"; fi
+      docker exec "$c" pg_dump -U n8n -d n8n --clean --if-exists > "$STAGE/n8n.sql" && echo "✓ n8n database" || { echo "✗ pg_dump n8n"; ok=0; }
+    else echo "· postgres-n8n stopped: skipped"; fi
     c="$(cid_in langfuse/app postgres)"
     if [ -n "$c" ]; then
-      docker exec "$c" pg_dumpall -U postgres > "$STAGE/langfuse.sql" && echo "✓ base Langfuse" || { echo "✗ pg_dumpall Langfuse"; ok=0; }
-    else echo "· Langfuse arrêté ou absent : ignoré"; fi
+      docker exec "$c" pg_dumpall -U postgres > "$STAGE/langfuse.sql" && echo "✓ Langfuse database" || { echo "✗ pg_dumpall Langfuse"; ok=0; }
+    else echo "· Langfuse stopped or missing: skipped"; fi
 
-    # 2. Volumes (fichiers) : Open WebUI (comptes, conversations, documents), n8n (clé, identifiants), Qdrant (vecteurs)
+    # 2. Volumes (files): Open WebUI (accounts, conversations, documents), n8n (key, credentials), Qdrant (vectors)
     for v in ai-stack_open_webui_data ai-stack_n8n_data ai-stack_qdrant_data; do
       if docker volume inspect "$v" >/dev/null 2>&1; then
         docker run --rm -v "$v":/src:ro -v "$STAGE":/out alpine tar -C /src -cf "/out/$v.tar" . \
           && echo "✓ volume $v" || { echo "✗ volume $v"; ok=0; }
-      else echo "· volume $v absent : ignoré"; fi
+      else echo "· volume $v missing: skipped"; fi
     done
 
-    # 3. Fichiers de configuration et secrets (chiffrés par restic)
+    # 3. Configuration files and secrets (encrypted by restic)
     paths=("$STAGE")
     for f in ai-stack/.env alerting/.env monitoring/.env langfuse/app/.env hermes/.env hermes/data openclaw/.env bench/results; do
       [ -e "$ROOT/$f" ] && paths+=("$ROOT/$f")
@@ -86,7 +86,7 @@ case "$cmd" in
     restic backup --tag aibeast --host aibeast "${paths[@]}"
     restic forget --tag aibeast "${KEEP[@]}" --prune
     rm -rf "${STAGE:?}"/*
-    [ "$ok" = 1 ] && echo "Sauvegarde terminée." || { echo "Sauvegarde terminée AVEC des erreurs (voir ✗ ci-dessus)." >&2; exit 2; }
+    [ "$ok" = 1 ] && echo "Backup finished." || { echo "Backup finished WITH errors (see ✗ above)." >&2; exit 2; }
     ;;
 
   repo)  echo "$RESTIC_REPOSITORY" ;;
@@ -94,20 +94,20 @@ case "$cmd" in
   check) restic check ;;
 
   restore)
-    id="${1:?usage : restore ID CIBLE}"; target="${2:?usage : restore ID CIBLE}"
-    [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ] && { echo "La cible doit être vide ou absente : $target" >&2; exit 1; }
+    id="${1:?usage: restore ID TARGET}"; target="${2:?usage: restore ID TARGET}"
+    [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ] && { echo "The target must be empty or missing: $target" >&2; exit 1; }
     restic restore "$id" --target "$target"
-    echo "Restauré dans $target. Rien n'a été remplacé : voir docs/backups.md pour remettre les données en place."
+    echo "Restored into $target. Nothing was replaced: see docs/backups.md to put the data back in place."
     ;;
 
   last)
     t="$(restic snapshots --tag aibeast --latest 1 --json 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d[-1]["time"] if d else "")' 2>/dev/null || true)"
-    [ -z "$t" ] && { echo "aucune"; exit 1; }
+    [ -z "$t" ] && { echo "none"; exit 1; }
     python3 - "$t" <<'PY'
 import sys,datetime as d
 t=d.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00"))
 h=(d.datetime.now(d.timezone.utc)-t).total_seconds()/3600
-print(f"il y a {h:.0f} h" if h<48 else f"il y a {h/24:.0f} jours")
+print(f"{h:.0f} h ago" if h<48 else f"{h/24:.0f} days ago")
 sys.exit(0 if h<48 else 1)
 PY
     ;;
@@ -116,12 +116,12 @@ PY
     if [ "${1:-on}" = off ]; then
       sudo systemctl disable --now aibeast-backup.timer 2>/dev/null || true
       sudo rm -f /etc/systemd/system/aibeast-backup.service /etc/systemd/system/aibeast-backup.timer
-      sudo systemctl daemon-reload; echo "Sauvegarde planifiée retirée."; exit 0
+      sudo systemctl daemon-reload; echo "Scheduled backup removed."; exit 0
     fi
-    [ -f "$RESTIC_PASSWORD_FILE" ] || { echo "Lance d'abord : scripts/backup.sh init" >&2; exit 1; }
+    [ -f "$RESTIC_PASSWORD_FILE" ] || { echo "Run this first: scripts/backup.sh init" >&2; exit 1; }
     sudo tee /etc/systemd/system/aibeast-backup.service >/dev/null <<UNIT
 [Unit]
-Description=Sauvegarde chiffrée AiBeast
+Description=AiBeast encrypted backup
 RequiresMountsFor=$LAB_DATA_DIR
 After=docker.service
 
@@ -134,7 +134,7 @@ ExecStart=$ROOT/scripts/backup.sh run
 UNIT
     sudo tee /etc/systemd/system/aibeast-backup.timer >/dev/null <<'UNIT'
 [Unit]
-Description=Sauvegarde quotidienne AiBeast
+Description=AiBeast daily backup
 
 [Timer]
 OnCalendar=*-*-* 03:30:00

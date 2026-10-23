@@ -1,26 +1,26 @@
-# EXEMPLE : ne pas copier tel quel. Sur la machine IA, « lab client » génère ce bloc avec TES valeurs (lab.conf).
-# À AJOUTER à la fin de ton fichier de configuration SSH :
-#   Windows : %USERPROFILE%\.ssh\config      macOS / Linux : ~/.ssh/config
-# Le créer s'il n'existe pas. Puis : ssh aibeast
+# EXAMPLE: do not copy as is. On the AI machine, "lab client" generates this block with YOUR values (lab.conf).
+# ADD it at the end of your SSH configuration file:
+#   Windows: %USERPROFILE%\.ssh\config      macOS / Linux: ~/.ssh/config
+# Create the file if it does not exist. Then: ssh aibeast
 Host aibeast
-  HostName ADRESSE_DE_LA_MACHINE_IA
+  HostName AI_MACHINE_ADDRESS
   Port 22
-  User utilisateur
+  User user
   IdentityFile ~/.ssh/id_ed25519
   ServerAliveInterval 30
   ServerAliveCountMax 3
   ExitOnForwardFailure yes
-  # Tunnels joignables depuis CE PC seulement (jamais depuis son réseau), même si GatewayPorts est activé ailleurs
+  # Tunnels reachable from THIS PC only (never from its network), even if GatewayPorts is enabled elsewhere
   GatewayPorts no
-  # Portail (page d'accueil) et panneau de boutons
+  # Portal (home page) and button panel
   LocalForward 127.0.0.1:3010 127.0.0.1:3010
   LocalForward 127.0.0.1:3011 127.0.0.1:3011
-  # Interfaces : Open WebUI, n8n, Qdrant, ComfyUI
+  # Interfaces: Open WebUI, n8n, Qdrant, ComfyUI
   LocalForward 127.0.0.1:3000 127.0.0.1:3000
   LocalForward 127.0.0.1:5678 127.0.0.1:5678
   LocalForward 127.0.0.1:6333 127.0.0.1:6333
   LocalForward 127.0.0.1:8188 127.0.0.1:8188
-  # Observabilité : Grafana, Prometheus, Langfuse
+  # Observability: Grafana, Prometheus, Langfuse
   LocalForward 127.0.0.1:3001 127.0.0.1:3001
   LocalForward 127.0.0.1:9090 127.0.0.1:9090
   LocalForward 127.0.0.1:3002 127.0.0.1:3002
@@ -28,5 +28,5 @@ Host aibeast
   LocalForward 127.0.0.1:2586 127.0.0.1:2586
   LocalForward 127.0.0.1:9093 127.0.0.1:9093
   LocalForward 127.0.0.1:18789 127.0.0.1:18789
-  # Bureau à distance (RDP) : sur ton PC, connecte-toi à 127.0.0.1:13389
+  # Remote desktop (RDP): on your PC, connect to 127.0.0.1:13389
   LocalForward 127.0.0.1:13389 127.0.0.1:3389

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Teste panel/panel.py avec de faux `lab` et `dev.sh` (aucun Docker, aucun modèle).
+# Tests panel/panel.py with fake `lab` and `dev.sh` (no Docker, no model).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 T="$(mktemp -d)"; trap 'kill $PID 2>/dev/null; rm -rf "$T"' EXIT
@@ -7,7 +7,7 @@ fail=0; ok() { echo "  ✓ $1"; }; ko() { echo "  ✗ $1"; fail=1; }
 mkdir -p "$T/state"; echo images > "$T/state/mode"
 cat > "$T/lab" <<'S'
 #!/usr/bin/env bash
-echo "lab $*"; printf '\033[31mrouge\033[0m\033]0;titre\007fin\n'
+echo "lab $*"; printf '\033[31mred\033[0m\033]0;title\007end\n'
 [ "$1" = update ] && sleep 3
 exit 0
 S
@@ -24,39 +24,39 @@ PANEL_LAB="$T/lab" PANEL_DEV="$T/dev.sh" PANEL_STATE="$T/state" PANEL_TOKEN_FILE
 for _ in $(seq 40); do curl -s -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 0.25; done
 TOK="$(cat "$T/cfg/token")"; U="http://127.0.0.1:$PORT"; J="$T/jar"
 code() { curl -s -o "$T/out" -w '%{http_code}' "$@"; }
-[ "$(stat -c %a "$T/cfg/token")" = 600 ] && ok "jeton en 0600" || ko "droits du jeton"
-[ "$(code "$U/")" = 401 ] && ok "page refusée sans cookie" || ko "page sans cookie"
-[ "$(code "$U/api/etat" -H 'X-Panel: 1')" = 403 ] && ok "API refusée sans cookie" || ko "API sans cookie"
-[ "$(code "$U/login?t=mauvais")" = 403 ] && ok "mauvais jeton refusé" || ko "mauvais jeton"
-[ "$(code "$U/login?t=é")" = 403 ] && ok "jeton non ASCII sans plantage" || ko "jeton non ASCII"
-[ "$(code -c "$J" "$U/login?t=$TOK")" = 302 ] && ok "login accepté" || ko "login"
+[ "$(stat -c %a "$T/cfg/token")" = 600 ] && ok "token in 0600" || ko "token permissions"
+[ "$(code "$U/")" = 401 ] && ok "page refused without cookie" || ko "page without cookie"
+[ "$(code "$U/api/etat" -H 'X-Panel: 1')" = 403 ] && ok "API refused without cookie" || ko "API without cookie"
+[ "$(code "$U/login?t=wrong")" = 403 ] && ok "wrong token refused" || ko "wrong token"
+[ "$(code "$U/login?t=é")" = 403 ] && ok "non-ASCII token without crash" || ko "non-ASCII token"
+[ "$(code -c "$J" "$U/login?t=$TOK")" = 302 ] && ok "login accepted" || ko "login"
 grep -q HttpOnly "$J" && ok "cookie HttpOnly" || ko "cookie HttpOnly"
-[ "$(code -b "$J" "$U/")" = 200 ] && ok "page servie avec cookie" || ko "page avec cookie"
-[ "$(code -b "$J" "$U/" -H 'Host: evil.example')" = 403 ] && ok "Host étranger refusé (DNS rebinding)" || ko "Host étranger"
-[ "$(code -b "$J" "$U/api/etat")" = 403 ] && ok "API sans X-Panel refusée" || ko "X-Panel"
-[ "$(code -b "$J" "$U/api/etat" -H 'X-Panel: 1' -H 'Origin: http://evil.example')" = 403 ] && ok "Origin étrangère refusée" || ko "Origin"
-[ "$(code -b "$J" "$U/api/etat" -H 'X-Panel: 1')" = 200 ] && grep -q '"mode": "images"' "$T/out" && ok "état + mode lu" || ko "état"
+[ "$(code -b "$J" "$U/")" = 200 ] && ok "page served with cookie" || ko "page with cookie"
+[ "$(code -b "$J" "$U/" -H 'Host: evil.example')" = 403 ] && ok "foreign Host refused (DNS rebinding)" || ko "foreign Host"
+[ "$(code -b "$J" "$U/api/etat")" = 403 ] && ok "API without X-Panel refused" || ko "X-Panel"
+[ "$(code -b "$J" "$U/api/etat" -H 'X-Panel: 1' -H 'Origin: http://evil.example')" = 403 ] && ok "foreign Origin refused" || ko "Origin"
+[ "$(code -b "$J" "$U/api/etat" -H 'X-Panel: 1')" = 200 ] && grep -q '"mode": "images"' "$T/out" && ok "state + mode read" || ko "state"
 P() { code -b "$J" -X POST "$U/api/run" -H 'X-Panel: 1' -H 'Content-Type: application/json' -d "$1"; }
-[ "$(P '{"action":"rm -rf /"}')" = 400 ] && ok "action hors liste refusée" || ko "allowlist"
-[ "$(P '{"action":"mode-agents"}')" = 202 ] && ok "action lancée" || ko "lancement"
+[ "$(P '{"action":"rm -rf /"}')" = 400 ] && ok "action outside the list refused" || ko "allowlist"
+[ "$(P '{"action":"mode-agents"}')" = 202 ] && ok "action started" || ko "start"
 sleep 1
 curl -s -b "$J" -H 'X-Panel: 1' "$U/api/job?depuis=0" > "$T/job"
-grep -q 'lab mode agents' "$T/job" && ok "sortie diffusée" || ko "sortie"
-grep -q 'u001b\|\\u0007' "$T/job" && ko "séquences d'échappement non filtrées" || ok "séquences d'échappement retirées"
-[ "$(P '{"action":"update"}')" = 202 ] && ok "update lancée" || ko "update"
-[ "$(P '{"action":"doctor"}')" = 409 ] && ok "deuxième action refusée (409)" || ko "verrou"
+grep -q 'lab mode agents' "$T/job" && ok "output streamed" || ko "output"
+grep -q 'u001b\|\\u0007' "$T/job" && ko "escape sequences not filtered" || ok "escape sequences removed"
+[ "$(P '{"action":"update"}')" = 202 ] && ok "update started" || ko "update"
+[ "$(P '{"action":"doctor"}')" = 409 ] && ok "second action refused (409)" || ko "lock"
 sleep 4
-[ "$(P '{"action":"hermes-revue","projet":"essai","branche":"agent/slugify"}')" = 202 ] && ok "revue d'une branche listée" || ko "revue"
+[ "$(P '{"action":"hermes-revue","projet":"essai","branche":"agent/slugify"}')" = 202 ] && ok "review of a listed branch" || ko "review"
 sleep 1
-[ "$(P '{"action":"hermes-revue","projet":"essai","branche":"agent/$(touch /tmp/PWNED)"}')" = 400 ] && ok "branche piégée refusée" || ko "branche piégée"
-[ "$(P '{"action":"hermes-revue","projet":"essai","branche":"agent/inconnue"}')" = 400 ] && ok "branche absente de la liste refusée" || ko "branche inconnue"
-[ "$(P '{"action":"hermes-revue","projet":"../x","branche":"agent/a"}')" = 400 ] && ok "projet invalide refusé" || ko "projet invalide"
-[ "$(P '{"action":"hermes-fusion","projet":"essai","branche":"agent/slugify"}')" = 400 ] && ok "fusion sans confirmation refusée" || ko "fusion sans confirmation"
-[ "$(P '{"action":"hermes-fusion","projet":"essai","branche":"agent/slugify","confirme":true}')" = 202 ] && ok "fusion confirmée" || ko "fusion"
-sleep 1; curl -s -b "$J" -H 'X-Panel: 1' "$U/api/job" | grep -q 'merge essai agent/slugify --yes' && ok "fusion appelle merge --yes" || ko "arguments de fusion"
+[ "$(P '{"action":"hermes-revue","projet":"essai","branche":"agent/$(touch /tmp/PWNED)"}')" = 400 ] && ok "trapped branch refused" || ko "trapped branch"
+[ "$(P '{"action":"hermes-revue","projet":"essai","branche":"agent/unknown"}')" = 400 ] && ok "branch absent from the list refused" || ko "unknown branch"
+[ "$(P '{"action":"hermes-revue","projet":"../x","branche":"agent/a"}')" = 400 ] && ok "invalid project refused" || ko "invalid project"
+[ "$(P '{"action":"hermes-fusion","projet":"essai","branche":"agent/slugify"}')" = 400 ] && ok "merge without confirmation refused" || ko "merge without confirmation"
+[ "$(P '{"action":"hermes-fusion","projet":"essai","branche":"agent/slugify","confirme":true}')" = 202 ] && ok "merge confirmed" || ko "merge"
+sleep 1; curl -s -b "$J" -H 'X-Panel: 1' "$U/api/job" | grep -q 'merge essai agent/slugify --yes' && ok "merge calls merge --yes" || ko "merge arguments"
 curl -s -b "$J" -H 'X-Panel: 1' "$U/api/hermes" > "$T/h"
-[ "$(grep -o '"projet"' "$T/h" | wc -l)" = 1 ] && ok "liste Hermes filtrée (1 branche valide sur 3 lignes)" || ko "liste Hermes"
-[ ! -e /tmp/PWNED ] && ok "aucune injection exécutée" || ko "injection exécutée"
-[ "$(code -b "$J" -X POST "$U/api/run" -H 'X-Panel: 1' -d "$(head -c 9000 /dev/zero | tr '\0' a)")" = 413 ] && ok "corps trop gros refusé" || ko "taille du corps"
-curl -si -b "$J" "$U/" | grep -qi 'content-security-policy' && ok "en-tête CSP présent" || ko "CSP"
-[ $fail = 0 ] && echo "Tous les tests du panneau passent." || { echo "ÉCHECS"; cat "$T/log"; exit 1; }
+[ "$(grep -o '"projet"' "$T/h" | wc -l)" = 1 ] && ok "Hermes list filtered (1 valid branch out of 3 lines)" || ko "Hermes list"
+[ ! -e /tmp/PWNED ] && ok "no injection run" || ko "injection run"
+[ "$(code -b "$J" -X POST "$U/api/run" -H 'X-Panel: 1' -d "$(head -c 9000 /dev/zero | tr '\0' a)")" = 413 ] && ok "body too large refused" || ko "body size"
+curl -si -b "$J" "$U/" | grep -qi 'content-security-policy' && ok "CSP header present" || ko "CSP"
+[ $fail = 0 ] && echo "All panel tests pass." || { echo "FAILURES"; cat "$T/log"; exit 1; }
