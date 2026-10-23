@@ -1,311 +1,313 @@
-# Accès à distance : SSH, tunnels et bureau à distance
+# Remote access: SSH, tunnels and remote desktop
 
-Objectif : utiliser toutes les interfaces du lab depuis ton PC, chez toi comme à l'extérieur, **sans rien exposer sur
-Internet**, sans jamais te retrouver bloqué dehors, et sans payer ≈ 100 W de plus en continu pour un bureau à distance.
+Goal: use every interface of the lab from your PC, at home as well as outside, **without exposing anything to the
+Internet**, without ever locking yourself out, and without paying ≈ 100 W more continuously for a remote desktop.
 
-## 1. Le principe
+## 1. The principle
 
 ```
- TON PC                                   RÉSEAU                         MACHINE IA (AiBeast)
- navigateur → 127.0.0.1:3010 ─┐
- navigateur → 127.0.0.1:3000 ─┤
- client RDP → 127.0.0.1:13389 ┤   un seul canal chiffré :     ┌→ 127.0.0.1:3010  portail
+ YOUR PC                                   NETWORK                        AI MACHINE (AiBeast)
+ browser    → 127.0.0.1:3010 ─┐
+ browser    → 127.0.0.1:3000 ─┤
+ RDP client → 127.0.0.1:13389 ┤   a single encrypted channel: ┌→ 127.0.0.1:3010  portal
  terminal   → ssh aibeast   ──┴── SSH (port 22) ─────────────→ sshd ─┼→ 127.0.0.1:3000  Open WebUI
-                                  réseau local, VPN ou Tailscale     ├→ …                (toutes les interfaces)
-                                                                     └→ 127.0.0.1:3389  bureau à distance (RDP)
+                                  local network, VPN or Tailscale    ├→ …                (every interface)
+                                                                     └→ 127.0.0.1:3389  remote desktop (RDP)
 ```
 
-- Sur la machine IA, **toutes les interfaces écoutent seulement sur `127.0.0.1`** : personne sur le réseau ne peut
-  les joindre directement, même pas toi.
-- **SSH est la seule porte d'entrée.** Une fois connecté, SSH transporte des « tunnels » : ton PC écoute sur ses propres
-  ports (`127.0.0.1:3000` sur le PC) et fait suivre chaque connexion vers le même port de la machine IA. Dans ton
-  navigateur, tu tapes donc `http://127.0.0.1:3000` comme si tu étais assis devant la machine IA.
-- Le **bureau à distance** (voir l'écran graphique de la machine IA) passe par le même canal : il n'est jamais ouvert
-  directement sur le réseau.
+- On the AI machine, **every interface only listens on `127.0.0.1`**: nobody on the network can reach them directly,
+  not even you.
+- **SSH is the only way in.** Once connected, SSH carries "tunnels": your PC listens on its own ports (`127.0.0.1:3000`
+  on the PC) and forwards each connection to the same port of the AI machine. In your browser, you therefore type
+  `http://127.0.0.1:3000` as if you were sitting in front of the AI machine.
+- The **remote desktop** (seeing the AI machine's graphical screen) goes through the same channel: it is never opened
+  directly on the network.
 
-| Chemin | À quoi il sert | Coût | Dépend de |
+| Path | What it is for | Cost | Depends on |
 |---|---|---|---|
-| **SSH par clé** | Administration (terminal, `lab`), et transport de tout le reste | nul | réseau + clé |
-| **Tunnels SSH** | Ouvrir les interfaces web dans le navigateur du PC | nul | SSH |
-| **Bureau à distance** (GNOME Remote Desktop, RDP) | Voir et utiliser l'écran de la machine IA | **≈ 100 W** pendant une session (GPU maintenu en P2, mesuré) | SSH + service activé |
+| **Key-based SSH** | Administration (terminal, `lab`), and carrying everything else | none | network + key |
+| **SSH tunnels** | Opening the web interfaces in the PC's browser | none | SSH |
+| **Remote desktop** (GNOME Remote Desktop, RDP) | Seeing and using the AI machine's screen | **≈ 100 W** during a session (GPU kept in P2, measured) | SSH + service enabled |
 
-SSH est aussi le chemin de **secours** : si tout le reste est cassé, SSH permet de réparer. Il ne faut jamais le
-rendre inutilisable (voir §6 avant de durcir).
+SSH is also the **fallback** path: if everything else is broken, SSH lets you repair it. Never make it unusable (see §6
+before hardening).
 
-## 2. Comment ton PC joint la machine IA (`LAB_HOST`)
+## 2. How your PC reaches the AI machine (`LAB_HOST`)
 
-Choisis **une** façon, puis note l'adresse correspondante dans `lab.conf` (`LAB_HOST=…`) :
+Choose **one** way, then write the matching address in `lab.conf` (`LAB_HOST=…`):
 
-| Situation | Adresse à mettre dans `LAB_HOST` | Remarques |
+| Situation | Address to put in `LAB_HOST` | Notes |
 |---|---|---|
-| Même réseau local (maison) | IP locale de la machine IA : `hostname -I` sur la machine IA | Réserve cette IP dans ta box (bail DHCP fixe), sinon elle peut changer |
-| VPN existant (box, routeur, entreprise) | IP de la machine IA vue à travers le VPN | C'est le cas de la machine de référence |
-| Tailscale (VPN maillé, gratuit pour un usage personnel) | Nom ou IP Tailscale de la machine IA (`tailscale ip -4`) | À installer sur la machine IA **et** sur le PC ; aucun port à ouvrir sur la box |
-| WireGuard que tu gères | IP de la machine IA dans le tunnel WireGuard | Demande d'ouvrir un port UDP sur la box pour WireGuard, pas pour SSH |
+| Same local network (home) | Local IP of the AI machine: `hostname -I` on the AI machine | Reserve this IP in your router (fixed DHCP lease), otherwise it may change |
+| Existing VPN (router, company) | IP of the AI machine as seen through the VPN | This is the reference machine's case |
+| Tailscale (mesh VPN, free for personal use) | Tailscale name or IP of the AI machine (`tailscale ip -4`) | To install on the AI machine **and** on the PC; no port to open on the router |
+| WireGuard you manage | IP of the AI machine inside the WireGuard tunnel | Requires opening a UDP port on the router for WireGuard, not for SSH |
 
-**N'ouvre jamais le port 22 (SSH) ni 3389 (bureau à distance) de ta box vers Internet.** Passe par le réseau local
-ou par un VPN.
+**Never open port 22 (SSH) or 3389 (remote desktop) of your router to the Internet.** Go through the local network or a
+VPN.
 
-## 3. Installer le serveur SSH sur la machine IA
+## 3. Installing the SSH server on the AI machine
 
 ```bash
 sudo apt install openssh-server
-systemctl status ssh          # doit afficher « active (running) »
+systemctl status ssh          # must show "active (running)"
 ```
 
-À ce stade, la connexion par **mot de passe** est encore permise : elle sert une seule fois, pour copier ta clé.
+At this stage, **password** login is still allowed: it is used only once, to copy your key.
 
-## 4. La clé SSH de ton PC
+## 4. Your PC's SSH key
 
-Une clé SSH est une paire de fichiers créée **sur ton PC** :
-- la clé **privée** (`id_ed25519`) reste sur le PC, ne se copie jamais, ne s'envoie jamais ;
-- la clé **publique** (`id_ed25519.pub`) se copie sur la machine IA, dans `~/.ssh/authorized_keys`.
+An SSH key is a pair of files created **on your PC**:
+- the **private** key (`id_ed25519`) stays on the PC, is never copied, never sent;
+- the **public** key (`id_ed25519.pub`) is copied to the AI machine, into `~/.ssh/authorized_keys`.
 
 ### Windows (PowerShell)
 
-Le client SSH est inclus dans Windows 10 et 11. `ssh-copy-id` n'existe pas sous Windows ; la 2ᵉ commande fait la même
-chose. Remplace `UTILISATEUR` et `ADRESSE` (ou copie la commande toute prête affichée par `lab client`).
+The SSH client is included in Windows 10 and 11. `ssh-copy-id` does not exist on Windows; the 2nd command does the same
+thing. Replace `USER` and `ADDRESS` (or copy the ready-made command shown by `lab client`).
 
 ```powershell
-# 1. Créer la clé (Entrée pour l'emplacement par défaut ; une phrase secrète est recommandée)
+# 1. Create the key (Enter for the default location; a passphrase is recommended)
 ssh-keygen -t ed25519
 
-# 2. Copier la clé PUBLIQUE sur la machine IA (le mot de passe du compte Linux est demandé cette fois)
-type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh UTILISATEUR@ADRESSE "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+# 2. Copy the PUBLIC key to the AI machine (the Linux account password is asked this time)
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh USER@ADDRESS "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 
-# 3. Tester : doit se connecter SANS demander le mot de passe du compte
-ssh UTILISATEUR@ADRESSE
+# 3. Test: must connect WITHOUT asking for the account password
+ssh USER@ADDRESS
 ```
 
 ### macOS / Linux (Terminal)
 
 ```bash
 ssh-keygen -t ed25519
-ssh-copy-id UTILISATEUR@ADRESSE
-ssh UTILISATEUR@ADRESSE        # doit se connecter sans mot de passe du compte
+ssh-copy-id USER@ADDRESS
+ssh USER@ADDRESS        # must connect without the account password
 ```
 
-Si tu as mis une phrase secrète, elle est demandée à chaque connexion. Pour ne la taper qu'une fois par session :
-agent SSH (Windows : service « OpenSSH Authentication Agent » puis `ssh-add` ; macOS : `ssh-add --apple-use-keychain`).
+If you set a passphrase, it is asked at every connection. To type it only once per session: SSH agent (Windows: the
+"OpenSSH Authentication Agent" service then `ssh-add`; macOS: `ssh-add --apple-use-keychain`).
 
-## 5. La configuration SSH du PC (`lab client`)
+## 5. The PC's SSH configuration (`lab client`)
 
-Pour ne pas retaper l'adresse et la liste des tunnels, ton PC garde un **raccourci** nommé `aibeast` dans son fichier
-de configuration SSH. Tous les scripts de `windows/` utilisent ce nom.
+So that you do not retype the address and the list of tunnels, your PC keeps a **shortcut** named `aibeast` in its SSH
+configuration file. Every script in `windows/` uses that name.
 
-Sur la machine IA :
+On the AI machine:
 
 ```bash
 lab client
 ```
 
-La commande lit `lab.conf` (`LAB_HOST`, `LAB_USER`, `LAB_SSH_PORT`, `LAB_SSH_KEY`, `LAB_RDP_LOCAL_PORT`), affiche le bloc
-de configuration, l'écrit aussi dans `windows/ssh_config_aibeast.txt` (fichier propre à ta machine, ignoré par git),
-et rappelle la marche à suivre. Exemple de bloc : `windows/ssh_config_aibeast.example`.
+The command reads `lab.conf` (`LAB_HOST`, `LAB_USER`, `LAB_SSH_PORT`, `LAB_SSH_KEY`, `LAB_RDP_LOCAL_PORT`), prints the
+configuration block, also writes it to `windows/ssh_config_aibeast.txt` (a file specific to your machine, ignored by
+git), and reminds you of the steps. Example block: `windows/ssh_config_aibeast.example`.
 
-**Sous Windows, le plus simple** : copie `windows/ssh_config_aibeast.txt` dans le dossier `windows\` du PC (par exemple
-`scp aibeast:Documents/ai-lab/windows/ssh_config_aibeast.txt windows\` si l'ancien raccourci marche encore), puis
-double-clic sur `windows\outils\Installer-config-SSH.bat` : il sauvegarde ta configuration, remplace l'ancien bloc
-`aibeast` (ou l'ajoute) sans toucher aux autres. Sinon, à la main :
+**On Windows, the simplest**: copy `windows/ssh_config_aibeast.txt` into the PC's `windows\` folder (for example
+`scp aibeast:Documents/ai-lab/windows/ssh_config_aibeast.txt windows\` if the old shortcut still works), then
+double-click `windows\outils\Installer-config-SSH.bat`: it backs up your configuration, replaces the old `aibeast` block
+(or adds it) without touching the others. Otherwise, by hand:
 
-Sur ton PC, **ajoute ce bloc à la fin** du fichier de configuration SSH (le créer s'il n'existe pas, sans extension) :
-- Windows : `C:\Users\TON_NOM\.ssh\config` (dans PowerShell : `notepad $env:USERPROFILE\.ssh\config`) ;
-- macOS / Linux : `~/.ssh/config`.
+On your PC, **add this block at the end** of the SSH configuration file (create it if it does not exist, no extension):
+- Windows: `C:\Users\YOUR_NAME\.ssh\config` (in PowerShell: `notepad $env:USERPROFILE\.ssh\config`);
+- macOS / Linux: `~/.ssh/config`.
 
-Ce que signifie chaque ligne :
+What each line means:
 
-| Ligne | Rôle |
+| Line | Role |
 |---|---|
-| `Host aibeast` | Le nom du raccourci : `ssh aibeast` remplace `ssh -p PORT UTILISATEUR@ADRESSE` |
-| `HostName`, `Port`, `User` | Adresse, port SSH et compte Linux de la machine IA |
-| `IdentityFile` | La clé privée **du PC** à utiliser |
-| `ServerAliveInterval 30`, `ServerAliveCountMax 3` | Détecte une connexion morte en ≈ 90 s au lieu de rester figé |
-| `GatewayPorts no` | Les tunnels n'écoutent que sur ton PC (`127.0.0.1`) : une autre machine de ton réseau ne peut pas s'en servir |
-| `ExitOnForwardFailure yes` | Si un port local est déjà pris, la connexion échoue avec un message clair au lieu d'ouvrir des tunnels à moitié |
-| `LocalForward 127.0.0.1:3000 127.0.0.1:3000` | Tunnel : le port 3000 **du PC** (sur `127.0.0.1` seulement) mène au port 3000 **de la machine IA** |
-| `LocalForward 127.0.0.1:13389 127.0.0.1:3389` | Tunnel du bureau à distance : port 13389 du PC → 3389 de la machine IA (voir §8) |
+| `Host aibeast` | The shortcut's name: `ssh aibeast` replaces `ssh -p PORT USER@ADDRESS` |
+| `HostName`, `Port`, `User` | Address, SSH port and Linux account of the AI machine |
+| `IdentityFile` | The **PC's** private key to use |
+| `ServerAliveInterval 30`, `ServerAliveCountMax 3` | Detects a dead connection in ≈ 90 s instead of staying frozen |
+| `GatewayPorts no` | The tunnels only listen on your PC (`127.0.0.1`): another machine on your network cannot use them |
+| `ExitOnForwardFailure yes` | If a local port is already taken, the connection fails with a clear message instead of opening half the tunnels |
+| `LocalForward 127.0.0.1:3000 127.0.0.1:3000` | Tunnel: port 3000 **of the PC** (on `127.0.0.1` only) leads to port 3000 **of the AI machine** |
+| `LocalForward 127.0.0.1:13389 127.0.0.1:3389` | Remote desktop tunnel: port 13389 of the PC → 3389 of the AI machine (see §9) |
 
-Test : `ssh aibeast` doit ouvrir un terminal sur la machine IA, sans mot de passe du compte.
+Test: `ssh aibeast` must open a terminal on the AI machine, without the account password.
 
-## 6. Interdire le mot de passe (durcissement) — seulement quand la clé marche
+## 6. Forbidding passwords (hardening) — only once the key works
 
-**Avant** : garde une session SSH ouverte, et vérifie `ssh aibeast` dans une **seconde** fenêtre. Idéalement, installe
-aussi une clé sur un **second appareil** (§7). Puis, sur la machine IA :
+**Before**: keep an SSH session open, and check `ssh aibeast` in a **second** window. Ideally, also install a key on a
+**second device** (§7). Then, on the AI machine:
 
 ```bash
 sudo tee /etc/ssh/sshd_config.d/10-durcissement.conf >/dev/null <<'EOF'
 PasswordAuthentication no
 PermitRootLogin no
-# Tes tunnels (LocalForward = ssh -L) restent permis ; les redirections inverses (ssh -R), les tunnels VPN,
-# l'agent et X11 ne servent pas ici : interdits. GatewayPorts no (défaut) : rien ne s'ouvre au réseau d'AiBeast.
+# Your tunnels (LocalForward = ssh -L) stay allowed; reverse forwarding (ssh -R), VPN tunnels,
+# the agent and X11 are not used here: forbidden. GatewayPorts no (default): nothing opens to the AI machine's network.
 AllowTcpForwarding local
 GatewayPorts no
 PermitTunnel no
 AllowAgentForwarding no
 X11Forwarding no
 EOF
-sudo sshd -t && sudo systemctl reload ssh      # `sshd -t` vérifie la syntaxe avant de recharger
+sudo sshd -t && sudo systemctl reload ssh      # `sshd -t` checks the syntax before reloading
 ```
 
-Annuler : `sudo rm /etc/ssh/sshd_config.d/10-durcissement.conf && sudo systemctl reload ssh`.
+(*durcissement* = hardening; the file name is kept as on existing installations.)
+Undo: `sudo rm /etc/ssh/sshd_config.d/10-durcissement.conf && sudo systemctl reload ssh`.
 
-Leçon de la machine de référence : le mot de passe a été interdit **avant** qu'une clé existe sur le PC, et plus aucun
-accès à distance n'était possible. D'où l'ordre ci-dessus.
+Lesson from the reference machine: passwords were forbidden **before** a key existed on the PC, and remote access was no
+longer possible at all. Hence the order above.
 
-## 7. Une deuxième clé (secours)
+## 7. A second key (fallback)
 
-Une clé = un appareil. Fais §4 depuis **un second appareil** (autre PC, téléphone avec un client SSH) : tu auras deux
-chemins indépendants. Liste des clés autorisées sur la machine IA : `cat ~/.ssh/authorized_keys` (une ligne par clé ;
-le commentaire en fin de ligne indique l'appareil). Retirer un appareil perdu : supprimer sa ligne.
+One key = one device. Do §4 from **a second device** (another PC, a phone with an SSH client): you will have two
+independent paths. List of the keys allowed on the AI machine: `cat ~/.ssh/authorized_keys` (one line per key; the
+comment at the end of the line tells the device). Remove a lost device: delete its line.
 
-## 8. Les tunnels vers les interfaces
+## 8. Tunnels to the interfaces
 
-### Ouvrir et fermer
+### Opening and closing
 
-| Système | Ouvrir | Fermer |
+| System | Open | Close |
 |---|---|---|
-| Windows | double-clic sur `windows\outils\Ouvrir-AiBeast.bat` (ouvre aussi le portail), ou la console `windows\AiBeast.bat` | `windows\outils\Fermer-tunnels-AiBeast.bat` |
-| Tous | `ssh -N aibeast` dans un terminal (le laisser ouvert ; `-N` = tunnels seulement, pas de terminal) | `Ctrl+C` dans ce terminal |
+| Windows | double-click `windows\outils\Ouvrir-AiBeast.bat` (also opens the portal), or the console `windows\AiBeast.bat` | `windows\outils\Fermer-tunnels-AiBeast.bat` |
+| All | `ssh -N aibeast` in a terminal (leave it open; `-N` = tunnels only, no terminal) | `Ctrl+C` in that terminal |
 
-Puis, dans le navigateur du PC :
+Then, in the PC's browser:
 
-| Adresse sur le PC | Service |
+| Address on the PC | Service |
 |---|---|
-| http://127.0.0.1:3010 | **Portail** (point d'entrée, liens vers tout le reste) |
-| http://127.0.0.1:3011 | Panneau de boutons (`lab panel install`) |
+| http://127.0.0.1:3010 | **Portal** (entry point, links to everything else) |
+| http://127.0.0.1:3011 | Button panel (`lab panel install`) |
 | http://127.0.0.1:3000 | Open WebUI (chat) |
 | http://127.0.0.1:5678 | n8n |
 | http://127.0.0.1:6333/dashboard | Qdrant |
-| http://127.0.0.1:8188 | ComfyUI (seulement en `lab mode images`) |
+| http://127.0.0.1:8188 | ComfyUI (only in `lab mode images`) |
 | http://127.0.0.1:3001 | Grafana |
 | http://127.0.0.1:9090 | Prometheus |
-| http://127.0.0.1:3002 | Langfuse (si installé) |
-| http://127.0.0.1:2586 | ntfy (alertes) |
+| http://127.0.0.1:3002 | Langfuse (if installed) |
+| http://127.0.0.1:2586 | ntfy (alerts) |
 | http://127.0.0.1:9093 | Alertmanager |
-| http://127.0.0.1:18789 | OpenClaw (si installé) |
+| http://127.0.0.1:18789 | OpenClaw (if installed) |
 
-### Problèmes fréquents
+### Common problems
 
 | Message | Cause | Solution |
 |---|---|---|
-| `bind [127.0.0.1]:3000: Address already in use` puis arrêt | Un programme du PC utilise déjà ce port (ou des tunnels sont déjà ouverts) | Fermer les anciens tunnels ; sinon changer le **premier** nombre de la ligne `LocalForward` (ex. `LocalForward 13000 127.0.0.1:3000`) et utiliser ce port dans le navigateur |
-| La page ne s'ouvre pas, SSH marche | Le service est arrêté sur la machine IA | `lab status`, `lab start` (ComfyUI : `lab mode images`) |
-| `Connection timed out` | Machine éteinte, VPN coupé, mauvaise adresse | §11 |
+| `bind [127.0.0.1]:3000: Address already in use` then stop | A program on the PC already uses this port (or tunnels are already open) | Close the old tunnels; otherwise change the **first** number of the `LocalForward` line (e.g. `LocalForward 13000 127.0.0.1:3000`) and use that port in the browser |
+| The page does not open, SSH works | The service is stopped on the AI machine | `lab status`, `lab start` (ComfyUI: `lab mode images`) |
+| `Connection timed out` | Machine off, VPN down, wrong address | §11 |
 
-## 9. Le bureau à distance (RDP)
+## 9. The remote desktop (RDP)
 
-### À quoi il sert, ce qu'il coûte
+### What it is for, what it costs
 
-Il affiche l'écran graphique de la machine IA dans une fenêtre de ton PC. **Il n'est pas nécessaire au lab** : tout se
-pilote par SSH et par les interfaces web. Il est utile pour une application graphique ou un réglage du bureau Ubuntu.
+It shows the AI machine's graphical screen in a window on your PC. **It is not needed by the lab**: everything is driven
+over SSH and the web interfaces. It is useful for a graphical application or a setting of the Ubuntu desktop.
 
-Coût mesuré sur la machine de référence : pendant une session de bureau à distance, la carte reste en état **P2**
-(≈ 123 W au repos) au lieu de **P8** (≈ 17 à 43 W), soit **≈ 100 W de plus** ([remote-desktop-gpu.md](remote-desktop-gpu.md)).
-D'où la règle : on l'active à la demande et on ferme la session dès qu'on a fini.
+Cost measured on the reference machine: during a remote desktop session, the card stays in state **P2** (≈ 123 W at
+idle) instead of **P8** (≈ 17 to 43 W), i.e. **≈ 100 W more** ([remote-desktop-gpu.md](remote-desktop-gpu.md)).
+Hence the rule: enable it on demand and close the session as soon as you are done.
 
-### Quel mode GNOME
+### Which GNOME mode
 
-Ubuntu propose deux modes, dans **Paramètres → Système → Bureau à distance** (intitulés exacts selon la version) :
+Ubuntu offers two modes, in **Settings → System → Remote Desktop** (exact labels depend on the version):
 
-| Mode | Ce qu'il fait | Service |
+| Mode | What it does | Service |
 |---|---|---|
-| **Connexion à distance** (*Remote Login*) — **celui utilisé ici** | Ouvre l'écran de connexion GNOME : marche même si personne n'est connecté devant la machine | service **système** `gnome-remote-desktop.service` (celui que pilote `lab bureau`) |
-| Partage du bureau (*Desktop Sharing*) | Partage la session déjà ouverte devant la machine | service **utilisateur** ; pas géré par `lab bureau` |
+| **Remote Login** — **the one used here** | Opens the GNOME login screen: works even if nobody is logged in at the machine | **system** service `gnome-remote-desktop.service` (the one driven by `lab desktop`) |
+| Desktop Sharing | Shares the session already open at the machine | **user** service; not handled by `lab desktop` |
 
-### Mise en place (une fois, sur la machine IA)
+### Setup (once, on the AI machine)
 
-**Avec l'interface graphique** (devant la machine) : Paramètres → Système → Bureau à distance → onglet
-**Connexion à distance** : activer, puis définir le **nom d'utilisateur et le mot de passe RDP**. Ces identifiants sont
-propres au bureau à distance (ce ne sont pas forcément ceux de ton compte Linux). Ubuntu crée lui-même le certificat.
+**With the graphical interface** (at the machine): Settings → System → Remote Desktop → **Remote Login** tab: enable,
+then set the **RDP user name and password**. These credentials are specific to the remote desktop (not necessarily
+those of your Linux account). Ubuntu creates the certificate itself.
 
-**Ou en ligne de commande** (par SSH, sans écran) — procédure de la documentation Red Hat pour GNOME, non testée sur
-Ubuntu :
+**Or on the command line** (over SSH, without a screen) — procedure from Red Hat's GNOME documentation, not tested on
+Ubuntu:
 
 ```bash
 sudo -u gnome-remote-desktop mkdir -p ~gnome-remote-desktop/.local/share/gnome-remote-desktop
 sudo -u gnome-remote-desktop winpr-makecert -silent -rdp -path ~gnome-remote-desktop/.local/share/gnome-remote-desktop tls
 sudo grdctl --system rdp set-tls-key ~gnome-remote-desktop/.local/share/gnome-remote-desktop/tls.key
 sudo grdctl --system rdp set-tls-cert ~gnome-remote-desktop/.local/share/gnome-remote-desktop/tls.crt
-sudo grdctl --system rdp set-credentials        # demande le nom d'utilisateur et le mot de passe RDP
+sudo grdctl --system rdp set-credentials        # asks for the RDP user name and password
 sudo grdctl --system rdp enable
 sudo systemctl enable --now gnome-remote-desktop.service
-sudo grdctl --system status                     # vérifier
+sudo grdctl --system status                     # check
 ```
 
-**N'ouvre pas le port 3389 dans le pare-feu** : le bureau à distance passe par le tunnel SSH (ligne
-`LocalForward 127.0.0.1:13389 127.0.0.1:3389` de la configuration générée par `lab client`).
+**Do not open port 3389 in the firewall**: the remote desktop goes through the SSH tunnel (line
+`LocalForward 127.0.0.1:13389 127.0.0.1:3389` of the configuration generated by `lab client`).
 
-### Se connecter depuis le PC
+### Connecting from the PC
 
-1. Ouvrir les tunnels (§8).
-2. Lancer le client RDP vers **`127.0.0.1:13389`** (le port local choisi par `LAB_RDP_LOCAL_PORT`) :
-   - Windows : « Connexion Bureau à distance » (`mstsc`), ordinateur `127.0.0.1:13389` ;
-   - macOS : application **Windows App** de Microsoft (ex-« Microsoft Remote Desktop »), PC `127.0.0.1:13389` ;
-   - Linux : **Remmina**, protocole RDP, serveur `127.0.0.1:13389`.
-3. Accepter le certificat (il est auto-signé ; à la première connexion seulement).
-4. Saisir les **identifiants RDP** (mise en place ci-dessus), puis, sur l'écran de connexion GNOME, ton **compte Linux**.
+1. Open the tunnels (§8).
+2. Start the RDP client to **`127.0.0.1:13389`** (the local port chosen by `LAB_RDP_LOCAL_PORT`):
+   - Windows: "Remote Desktop Connection" (`mstsc`), computer `127.0.0.1:13389`;
+   - macOS: Microsoft's **Windows App** (formerly "Microsoft Remote Desktop"), PC `127.0.0.1:13389`;
+   - Linux: **Remmina**, RDP protocol, server `127.0.0.1:13389`.
+3. Accept the certificate (it is self-signed; at the first connection only).
+4. Enter the **RDP credentials** (setup above), then, on the GNOME login screen, your **Linux account**.
 
-Pourquoi 13389 et pas 3389 ? Sous Windows, le port 3389 du PC peut être occupé par son propre service de bureau à
-distance ; le tunnel échouerait alors (`ExitOnForwardFailure`).
+Why 13389 and not 3389? On Windows, the PC's port 3389 may be taken by its own remote desktop service; the tunnel would
+then fail (`ExitOnForwardFailure`).
 
-### L'allumer et l'éteindre : `lab bureau`
+### Turning it on and off: `lab desktop`
 
 ```bash
-lab bureau status          # actif ou non, démarrage automatique ou non, état du GPU (P2/P8, watts)
-lab bureau on              # démarre le service
-lab bureau off             # l'arrête : la carte peut redescendre en P8
-lab bureau off --boot      # l'arrête et l'empêche de démarrer au boot
-lab bureau on --boot       # le démarre et le réactive au boot
+lab desktop status          # active or not, started at boot or not, GPU state (P2/P8, watts)
+lab desktop on              # starts the service
+lab desktop off             # stops it: the card can go back down to P8
+lab desktop off --boot      # stops it and prevents it from starting at boot
+lab desktop on --boot       # starts it and re-enables it at boot
 ```
 
-**Ne tape `lab bureau off` que depuis une session SSH**, jamais depuis le bureau à distance lui-même : la session se
-couperait sous tes doigts. La commande le rappelle et demande confirmation si elle ne détecte pas de session SSH.
-`lab doctor` signale le service actif (`!`), et l'alerte `GpuBloqueEnP2AuRepos` prévient si la carte reste en P2 sans
-travail.
+(`lab bureau` is the original name of the command and still works.)
 
-## 10. Démarrage de la machine : qui revient tout seul ?
+**Only type `lab desktop off` from an SSH session**, never from the remote desktop itself: the session would be cut
+under your fingers. The command reminds you and asks for confirmation if it does not detect an SSH session.
+`lab doctor` reports the service as active (`!`), and the `GpuStuckInP2AtIdle` alert warns if the card stays in P2
+without work.
 
-Les conteneurs de la stack ont `restart: unless-stopped` : Docker les relance **seul** après un redémarrage, sauf ceux
-arrêtés à la main (`docker stop`, `lab stop`).
+## 10. Machine start-up: what comes back by itself?
 
-| Projet | Revient seul au boot ? |
+The stack's containers have `restart: unless-stopped`: Docker restarts them **by itself** after a reboot, except those
+stopped by hand (`docker stop`, `lab stop`).
+
+| Project | Comes back by itself at boot? |
 |---|---|
-| `ai-stack` (Ollama, Open WebUI, n8n, Qdrant, SearXNG, Kokoro, Tika, Postgres) | Oui |
-| `monitoring`, `portail`, `alerting` | Oui |
-| `comfyui` | **Non** (`restart: "no"` : il prend la VRAM ; `lab mode images` au besoin) |
-| `hermes` | **Non** (lancé à la demande) |
-| `langfuse`, `openclaw` | Selon leur compose officiel (non vérifié) |
+| `ai-stack` (Ollama, Open WebUI, n8n, Qdrant, SearXNG, Kokoro, Tika, Postgres) | Yes |
+| `monitoring`, `portail`, `alerting` | Yes |
+| `comfyui` | **No** (`restart: "no"`: it takes VRAM; `lab mode images` when needed) |
+| `hermes` | **No** (started on demand) |
+| `langfuse`, `openclaw` | Depending on their official compose (not verified) |
 
-Avec un second disque (`8-stockage.sh docker`), Docker attend le montage du disque de données
-(`RequiresMountsFor=`) : si le disque manque, Docker ne démarre pas, au lieu de repartir sur un dossier vide.
+With a second disk (`8-stockage.sh docker`), Docker waits for the data disk to be mounted (`RequiresMountsFor=`): if
+the disk is missing, Docker does not start, instead of starting again on an empty folder.
 
-Après un redémarrage : `lab doctor`.
+After a reboot: `lab doctor`.
 
-## 11. Secours si tu es bloqué dehors
+## 11. Fallback if you are locked out
 
-Symptôme : `Permission denied (publickey)`, `Connection timed out` ou plus de réponse.
+Symptom: `Permission denied (publickey)`, `Connection timed out` or no more answer.
 
-1. Le réseau : Windows `Test-NetConnection ADRESSE -Port 22` ; macOS/Linux `nc -vz ADRESSE 22`.
-   Échec = machine éteinte, VPN coupé, mauvaise adresse ou SSH arrêté. Réussite = SSH répond, le problème est la clé.
-2. La clé : `ssh -v aibeast` et cherche « Offering public key » ; aucune ligne = pas de clé trouvée sur cet appareil
-   (`IdentityFile` faux ?).
-3. Essaie ton **second appareil** (§7).
-4. Dernier recours, devant la machine (clavier et écran) :
+1. The network: Windows `Test-NetConnection ADDRESS -Port 22`; macOS/Linux `nc -vz ADDRESS 22`.
+   Failure = machine off, VPN down, wrong address or SSH stopped. Success = SSH answers, the problem is the key.
+2. The key: `ssh -v aibeast` and look for "Offering public key"; no such line = no key found on this device (wrong
+   `IdentityFile`?).
+3. Try your **second device** (§7).
+4. Last resort, at the machine (keyboard and screen):
 
 ```bash
-sudo rm /etc/ssh/sshd_config.d/10-durcissement.conf     # rétablit la connexion par mot de passe
+sudo rm /etc/ssh/sshd_config.d/10-durcissement.conf     # restores password login
 sudo systemctl reload ssh
 ```
 
-Puis refais §4 depuis ton PC.
+Then redo §4 from your PC.
 
-## 12. Ce qui n'est pas vérifié
+## 12. What is not verified
 
-- `lab client` : testé seulement en générant le fichier ; la configuration produite n'a pas encore été collée sur un
-  nouveau PC. Elle reprend les mêmes tunnels que la configuration de la machine de référence, plus la ligne RDP.
-- Le tunnel RDP (`127.0.0.1:13389`) et la mise en place en ligne de commande (`grdctl --system`) n'ont pas été testés ;
-  sur la machine de référence, le service système `gnome-remote-desktop` est actif, mais la façon dont il a été activé
-  n'est pas documentée. Intitulés des menus Ubuntu repris de mémoire : ils peuvent varier selon la version.
-- Le coût de ≈ 100 W vient d'une seule machine (RTX 3090, pilote 595) ; le mécanisme exact n'est pas prouvé.
-- `Ouvrir-AiBeast.ps1` et la console Windows n'ont jamais été exécutés par l'assistant qui les a écrits.
-- Clients RDP macOS et Linux : cités d'après leur usage courant, non testés avec ce lab.
+- `lab client`: the generated configuration was installed on the reference PC with `Installer-config-SSH.bat` and its
+  tunnels are in use; it has not been tried on a second, new PC.
+- The RDP tunnel (`127.0.0.1:13389`) and the command-line setup (`grdctl --system`) have not been tested; on the
+  reference machine, the system service `gnome-remote-desktop` is active, but how it was enabled is not documented.
+  Ubuntu menu labels quoted from memory: they may vary with the version.
+- The ≈ 100 W cost comes from a single machine (RTX 3090, driver 595); the exact mechanism is not proven.
+- RDP clients for macOS and Linux: quoted from common usage, not tested with this lab.
