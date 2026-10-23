@@ -1,188 +1,187 @@
-# Isolation réseau des agents (Hermes, OpenClaw)
+# Network isolation of the agents (Hermes, OpenClaw)
 
-Objectif : un agent peut être manipulé par ce qu'il lit (injection de prompt) ou mal réglé (le premier message de test
-d'OpenClaw est parti vers `api.openai.com`, voir [openclaw.md](openclaw.md)). On lui retire donc tout accès réseau
-dont il n'a pas besoin : **ni Internet, ni le réseau local, ni la machine IA elle-même**. Il ne garde que le modèle
-local (Ollama), le suivi (Langfuse), et, pour Hermes, SSH vers les machines de test que tu as explicitement autorisées.
+Goal: an agent can be manipulated by what it reads (prompt injection) or badly configured (OpenClaw's first test message
+went to `api.openai.com`, see [openclaw.md](openclaw.md)). So it loses every network access it does not need: **no
+Internet, no local network, not even the AI machine itself**. It only keeps the local model (Ollama), tracing
+(Langfuse), and, for Hermes, SSH to the test machines you have explicitly allowed.
 
-## 1. Ce que chaque agent peut joindre
+## 1. What each agent can reach
 
 | Destination | Hermes | OpenClaw |
 |---|---|---|
-| Ollama (`http://ollama:11434`) | oui (réseau `hermes-net`) | oui (réseau `llm-net`) |
-| Langfuse (`http://langfuse-web:3000`) | oui (réseau `obs-net`) | non |
-| Machines de test de `LAB_AGENT_SSH_ALLOW` (SSH) | oui, ces adresses et ports seulement | non |
-| Internet | **non** | **non** |
-| Réseau local, VPN, autres machines | **non** | **non** |
-| La machine IA elle-même (SSH, bureau à distance, ports de services) | **non** | **non** |
-| Son interface web depuis ton PC (tunnel SSH) | sans objet | oui (`127.0.0.1:18789`, connexion entrante) |
+| Ollama (`http://ollama:11434`) | yes (`hermes-net` network) | yes (`llm-net` network) |
+| Langfuse (`http://langfuse-web:3000`) | yes (`obs-net` network) | no |
+| Test machines in `LAB_AGENT_SSH_ALLOW` (SSH) | yes, only these addresses and ports | no |
+| Internet | **no** | **no** |
+| Local network, VPN, other machines | **no** | **no** |
+| The AI machine itself (SSH, remote desktop, service ports) | **no** | **no** |
+| Its web interface from your PC (SSH tunnel) | not applicable | yes (`127.0.0.1:18789`, incoming connection) |
 
-Ollama, Open WebUI, SearXNG, n8n… ne sont pas concernés : ils gardent leur accès normal (téléchargement de modèles,
-recherche web), par le réseau `ai-net`.
+Ollama, Open WebUI, SearXNG, n8n… are not affected: they keep their normal access (model downloads, web search),
+through the `ai-net` network.
 
-## 2. Comment c'est fait
+## 2. How it is done
 
-Deux mécanismes complémentaires :
+Two complementary mechanisms:
 
-1. **Réseaux Docker « internes »** (`ai-stack/docker-compose.yml`) : `llm-net`, `hermes-net` et `obs-net` ont
-   `internal: true`. Docker ne leur donne aucune route vers l'extérieur ; les conteneurs reliés ne s'y parlent
-   qu'entre eux. Ollama et Open WebUI, reliés aussi à `ai-net`, sortent par celui-ci.
-2. **Pare-feu** (`scripts/isolation-agents.sh`, commande `lab isolation`) pour les deux réseaux qui ne peuvent pas être
-   internes :
-   - `hermes-sortie` (interface `br-hermes-out`, `hermes/docker-compose.yml`) : la seule route de Hermes vers
-     l'extérieur. Tout y est bloqué sauf les adresses de `LAB_AGENT_SSH_ALLOW` (TCP, port 22 par défaut).
-   - `openclaw_default` (créé par le compose officiel d'OpenClaw) : nécessaire pour publier l'interface web. Toute
-     connexion **sortante** y est bloquée ; les connexions **entrantes** (ton tunnel) et leurs réponses passent.
+1. **"Internal" Docker networks** (`ai-stack/docker-compose.yml`): `llm-net`, `hermes-net` and `obs-net` have
+   `internal: true`. Docker gives them no route to the outside; the connected containers can only talk to each other
+   there. Ollama and Open WebUI, also connected to `ai-net`, go out through that one.
+2. **Firewall** (`scripts/isolation-agents.sh`, `lab isolation` command) for the two networks that cannot be internal:
+   - `hermes-sortie` (*sortie* = exit; interface `br-hermes-out`, `hermes/docker-compose.yml`): Hermes's only route to
+     the outside. Everything is blocked there except the addresses in `LAB_AGENT_SSH_ALLOW` (TCP, port 22 by default).
+   - `openclaw_default` (created by OpenClaw's official compose): needed to publish the web interface. Every
+     **outgoing** connection is blocked there; **incoming** connections (your tunnel) and their replies go through.
 
-   Les règles sont dans deux chaînes iptables : `AI-LAB-AGENTS` (appelée par `DOCKER-USER`, trafic qui traverse la
-   machine) et `AI-LAB-AGENTS-HOTE` (appelée par `INPUT`, trafic vers la machine elle-même, bloqué depuis les réseaux
-   des agents sauf réponses). Les paquets bloqués sont journalisés (au plus 6 par minute) avec le préfixe
-   `ai-lab agent bloque:` : `sudo journalctl -k | grep "ai-lab agent"`.
+   The rules are in two iptables chains: `AI-LAB-AGENTS` (called from `DOCKER-USER`, traffic crossing the machine) and
+   `AI-LAB-AGENTS-HOTE` (*hôte* = host; called from `INPUT`, traffic to the machine itself, blocked from the agents'
+   networks except replies). Blocked packets are logged (at most 6 per minute) with the prefix
+   `ai-lab agent blocked:`: `sudo journalctl -k | grep "ai-lab agent"`.
 
-Le service systemd `ai-lab-isolation` réapplique les règles à chaque démarrage de Docker.
+The systemd service `ai-lab-isolation` reapplies the rules every time Docker starts.
 
-## 3. Mise en place
+## 3. Setup
 
-1. Dans `lab.conf`, les machines de test que Hermes doit pouvoir joindre en SSH (sinon, laisser vide) :
+1. In `lab.conf`, the test machines Hermes must be able to reach over SSH (otherwise, leave empty):
    ```
-   LAB_AGENT_SSH_ALLOW="192.168.1.60"            # plusieurs : "192.168.1.60 192.168.1.61:2222"
+   LAB_AGENT_SSH_ALLOW="192.168.1.60"            # several: "192.168.1.60 192.168.1.61:2222"
    ```
-2. Réseaux internes : sur une **nouvelle** installation, rien à faire (`./3-demarrer.sh` les crée ainsi). Sur une
-   installation **existante**, Docker ne modifie pas un réseau déjà créé : il faut le recréer (§7).
-3. Pare-feu :
+2. Internal networks: on a **new** installation, nothing to do (`./3-demarrer.sh` creates them that way). On an
+   **existing** installation, Docker does not change a network already created: it must be recreated (§7).
+3. Firewall:
    ```bash
-   lab isolation install     # service systemd + application immédiate (demande sudo)
-   lab isolation test        # vérifie depuis les conteneurs
+   lab isolation install     # systemd service + immediate application (asks for sudo)
+   lab isolation test        # checks from inside the containers
    ```
-4. `lab doctor` contrôle ensuite que les trois réseaux sont internes et que le service est actif.
+4. `lab doctor` then checks that the three networks are internal and that the service is active.
 
-## 4. Vérifier : `lab isolation test`
+## 4. Checking: `lab isolation test`
 
-Le test ouvre de vraies connexions depuis l'intérieur des conteneurs et compare au résultat attendu :
+The test opens real connections from inside the containers and compares them with the expected result:
 
-| Contrôle | Attendu |
+| Check | Expected |
 |---|---|
-| Ollama (`ollama:11434`) | joignable |
-| Internet (`1.1.1.1:443`, `example.com:443`) | bloqué |
-| La machine IA (son adresse sur le réseau, et son adresse sur le réseau Docker), port 22 | bloqué |
-| Chaque machine de `LAB_AGENT_SSH_ALLOW` (Hermes) | joignable (si elle est allumée et que SSH y tourne) |
+| Ollama (`ollama:11434`) | reachable |
+| Internet (`1.1.1.1:443`, `example.com:443`) | blocked |
+| The AI machine (its address on the network, and its address on the Docker network), port 22 | blocked |
+| Each machine in `LAB_AGENT_SSH_ALLOW` (Hermes) | reachable (if it is on and runs SSH) |
 
-Pour Hermes, le test lance un conteneur temporaire (`docker compose run --rm`) avec `python3` ; pour OpenClaw, il
-s'exécute dans la passerelle avec `node`. `lab isolation status` affiche les règles et le nombre de paquets bloqués.
+For Hermes, the test starts a temporary container (`docker compose run --rm`) with `python3`; for OpenClaw, it runs
+inside the gateway with `node`. `lab isolation status` shows the rules and the number of blocked packets.
 
-## 5. La machine de test (lien SSH de Hermes)
+## 5. The test machine (Hermes's SSH link)
 
-Le pare-feu d'AiBeast laisse Hermes ouvrir SSH vers les machines de `LAB_AGENT_SSH_ALLOW`. Par ce lien, Hermes
-pourrait encore joindre Internet de deux façons ; les deux sont fermées :
+The AI machine's firewall lets Hermes open SSH to the machines in `LAB_AGENT_SSH_ALLOW`. Through that link, Hermes could
+still reach the Internet in two ways; both are closed:
 
-| Chemin | Protection |
+| Path | Protection |
 |---|---|
-| **Tunnel SSH** (redirection de port `-L`, proxy SOCKS `-D`, `-W`) à travers la machine de test | Option `restrict` sur la clé de Hermes (posée par `lab remote add`) **et**, côté serveur SSH, pour son compte : `AllowTcpForwarding no`, `AllowStreamLocalForwarding no`, `PermitTunnel no`, `AllowAgentForwarding no`, `X11Forwarding no`, `GatewayPorts no` (une redirection inverse `-R` ne peut pas s'ouvrir au réseau de la machine ; déjà exclue par `AllowTcpForwarding no`, gardée en double protection) |
-| **Commandes lancées sur la machine de test** (PowerShell, `curl`…) qui sortent par sa connexion | Internet coupé pour **toute** la machine par son pare-feu : règles de blocage sortant vers toutes les adresses publiques (IPv4 et IPv6) et du DNS (port 53, qui permettrait de faire sortir des données par des requêtes à la box). Le réseau local reste joignable |
+| **SSH tunnel** (port forwarding `-L`, SOCKS proxy `-D`, `-W`) through the test machine | `restrict` option on Hermes's key (set by `lab remote add`) **and**, on the SSH server side, for its account: `AllowTcpForwarding no`, `AllowStreamLocalForwarding no`, `PermitTunnel no`, `AllowAgentForwarding no`, `X11Forwarding no`, `GatewayPorts no` (a reverse forward `-R` cannot be opened to the machine's network; already excluded by `AllowTcpForwarding no`, kept as a second layer) |
+| **Commands run on the test machine** (PowerShell, `curl`…) that go out through its connection | Internet cut for the **whole** machine by its firewall: outbound block rules to every public address (IPv4 and IPv6) and to DNS (port 53, which would allow data to leave through queries to the router). The local network stays reachable |
 
-Pourquoi toute la machine ? Le pare-feu de Windows ne sait pas bloquer Internet pour un seul compte local
-(le filtrage par utilisateur ne vaut que pour du trafic authentifié par IPsec) : seule une règle pour toute la
-machine est fiable. Un compte sans droits d'administrateur, comme celui de Hermes, ne peut pas la modifier.
+Why the whole machine? The Windows firewall cannot block the Internet for a single local account (per-user filtering
+only applies to traffic authenticated by IPsec): only a machine-wide rule is reliable. An account without administrator
+rights, like Hermes's, cannot change it.
 
-**Mise en place**, sur la machine de test Windows, dans PowerShell **en administrateur**, avec le fichier
-`windows\outils\Isoler-machine-de-test.ps1` copié sur cette machine :
+**Setup**, on the Windows test machine, in PowerShell **as administrator**, with the file
+`windows\outils\Isoler-machine-de-test.ps1` copied to that machine:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1            # compte de l'agent : hermes
-powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -Annuler   # rendre Internet à la machine
+powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1          # agent account: hermes
+powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -Undo    # give the Internet back to the machine
 ```
 
-Le script sauvegarde la configuration du pare-feu et `sshd_config` (dans `C:\ProgramData\ssh`), pose les règles
-(groupe « local-ai-lab isolation »), ajoute les options SSH au bloc `Match User hermes` (vérifié par `sshd -t`,
-version précédente remise en cas d'erreur), puis vérifie qu'Internet et le DNS sont bloqués.
+The script backs up the firewall configuration and `sshd_config` (in `C:\ProgramData\ssh`), adds the rules (group
+"local-ai-lab isolation"), adds the SSH options to the `Match User hermes` block (checked by `sshd -t`, previous version
+restored on error), then checks that the Internet and DNS are blocked.
 
-**Vérification depuis AiBeast**, avec les yeux de Hermes : `lab remote test NOM`. Lignes attendues :
-`tunnel SSH refusé : bien`, `Internet depuis la machine : bloqué, bien`, `DNS depuis la machine : bloqué, bien`.
+**Check from the AI machine**, through Hermes's eyes: `lab remote test NAME`. Expected lines:
+`SSH tunnel refused: good`, `Internet from the machine: blocked, good`, `DNS from the machine: blocked, good`.
 
-**Conséquences** : plus d'Internet pour personne sur cette machine (mises à jour Windows comprises). Pour une mise à
-jour : `-Annuler`, la mise à jour, puis relancer le script. Si la machine de test n'est joignable que par un client VPN
-installé sur elle-même, ce client ne pourra plus se connecter : vérifier avant.
+**Consequences**: no more Internet for anyone on this machine (Windows updates included). For an update: `-Undo`, the
+update, then run the script again. If the test machine is only reachable through a VPN client installed on the machine
+itself, that client will no longer be able to connect: check before.
 
-## 6. Conséquences à connaître
+## 6. Consequences to know
 
-- **Hermes** : plus de recherche web, de téléchargement de paquets (`pip`, `npm`), d'outils navigateur, ni
-  d'installation de plugin depuis Internet (par exemple `plugins install langfuse`). Pour une installation ponctuelle :
-  `lab isolation remove`, l'installation, puis `lab isolation apply` aussitôt après. `hermes-net` et `obs-net`
-  restent internes pendant ce temps : seule la route `hermes-sortie` est ouverte.
-- **OpenClaw** : plus de recherche web, de canaux de messagerie (Discord, Telegram…), ni de modèle hébergé, même
-  sélectionné par erreur : la requête est bloquée avant de quitter la machine.
-- **Mises à jour** : les images et le code (`docker pull`, `git pull`) sont téléchargés par la machine, pas par les
-  agents : elles continuent de marcher.
-- **OpenClaw recréé** (mise à jour, `docker compose down`) : son réseau peut changer d'identifiant. `openclaw/install.sh`
-  réapplique les règles ; sinon `lab isolation apply`. `lab isolation status` signale un réseau non couvert.
+- **Hermes**: no more web search, package downloads (`pip`, `npm`), browser tools, or plugin installation from the
+  Internet (for example `plugins install langfuse`). For a one-off installation: `lab isolation remove`, the
+  installation, then `lab isolation apply` right after. `hermes-net` and `obs-net` stay internal meanwhile: only the
+  `hermes-sortie` route is opened.
+- **OpenClaw**: no more web search, messaging channels (Discord, Telegram…), or hosted model, even selected by mistake:
+  the request is blocked before leaving the machine.
+- **Updates**: images and code (`docker pull`, `git pull`) are downloaded by the machine, not by the agents: they keep
+  working.
+- **OpenClaw recreated** (update, `docker compose down`): its network may get a new identifier. `openclaw/install.sh`
+  reapplies the rules; otherwise `lab isolation apply`. `lab isolation status` reports a network that is not covered.
 
-## 7. Passer une installation existante en réseaux internes
+## 7. Switching an existing installation to internal networks
 
-Les réseaux `llm-net`, `hermes-net` et `obs-net` doivent être supprimés puis recréés. Les **données ne sont pas
-touchées** (elles sont dans les volumes, et ce que Hermes conserve est dans `hermes/data`) ; les services concernés
-redémarrent (≈ 1 minute) : `ai-stack` (Ollama, Open WebUI…), le portail, Langfuse, la passerelle OpenClaw.
+The `llm-net`, `hermes-net` and `obs-net` networks must be deleted then recreated. The **data is not touched** (it is
+in the volumes, and what Hermes keeps is in `hermes/data`); the services concerned restart (≈ 1 minute): `ai-stack`
+(Ollama, Open WebUI…), the portal, Langfuse, the OpenClaw gateway.
 
-Piège rencontré sur la machine de référence : des **sessions Hermes orphelines** (conteneurs `hermes-hermes-run-…`
-restés en marche des jours après la fermeture de leur terminal) bloquaient la suppression des réseaux. Le script
-ci-dessous les retire, puis vérifie chaque étape et **s'arrête** au premier problème. Coller tout le bloc :
+Pitfall met on the reference machine: **orphan Hermes sessions** (`hermes-hermes-run-…` containers still running days
+after their terminal was closed) prevented the networks from being deleted. The script below removes them, then checks
+each step and **stops** at the first problem. Paste the whole block:
 
 ```bash
 bash <<'EOF'
 set -euo pipefail
 cd ~/Documents/ai-lab
-interne() { [ "$(docker network inspect -f '{{.Internal}}' "$1" 2>/dev/null)" = true ]; }
-echo "1. Sessions Hermes encore en marche (hermes/data n'est pas touché)"
+internal() { [ "$(docker network inspect -f '{{.Internal}}' "$1" 2>/dev/null)" = true ]; }
+echo "1. Hermes sessions still running (hermes/data is not touched)"
 docker ps -a --filter name=hermes-hermes-run --format '   {{.Names}}  {{.Status}}'
 docker ps -aq --filter name=hermes-hermes-run | xargs -r docker rm -f
-echo "2. Arrêt de ce qui est relié aux réseaux (SANS -v : volumes et données restent)"
+echo "2. Stopping what is connected to the networks (WITHOUT -v: volumes and data stay)"
 (cd ~/openclaw 2>/dev/null && docker compose -f docker-compose.yml down) || true
 [ ! -f langfuse/app/docker-compose.yml ] || (cd langfuse/app && docker compose down)
 (cd portail && docker compose down)
 (cd ai-stack && docker compose down)
-echo "3. Suppression des réseaux non internes"
+echo "3. Deleting the non-internal networks"
 for n in llm-net hermes-net obs-net; do
-  if docker network inspect "$n" >/dev/null 2>&1 && ! interne "$n"; then
-    docker network rm "$n" || { echo "ARRÊT : $n encore utilisé par : $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$n")"; exit 1; }
+  if docker network inspect "$n" >/dev/null 2>&1 && ! internal "$n"; then
+    docker network rm "$n" || { echo "STOP: $n still used by: $(docker network inspect -f '{{range .Containers}}{{.Name}} {{end}}' "$n")"; exit 1; }
   fi
 done
-echo "4. Redémarrage"
+echo "4. Restarting"
 lab start
-for n in llm-net hermes-net obs-net; do interne "$n" || { echo "ARRÊT : $n n'est pas interne"; exit 1; }; done
-[ -n "$(docker ps -q --filter name=^ollama$)" ] || { echo "ARRÊT : Ollama ne tourne pas (lab logs ollama)"; exit 1; }
+for n in llm-net hermes-net obs-net; do internal "$n" || { echo "STOP: $n is not internal"; exit 1; }; done
+[ -n "$(docker ps -q --filter name=^ollama$)" ] || { echo "STOP: Ollama is not running (lab logs ollama)"; exit 1; }
 if [ -d ~/openclaw ]; then
   (cd ~/openclaw && docker compose -f docker-compose.yml up -d --force-recreate openclaw-gateway)
   docker network connect llm-net openclaw-openclaw-gateway-1 2>/dev/null || true
 fi
-echo "5. Pare-feu et vérification"
+echo "5. Firewall and check"
 if systemctl is-active --quiet ai-lab-isolation.service; then lab isolation apply; else lab isolation install; fi
 lab isolation test
 lab doctor | tail -9
 EOF
 ```
 
-Si un `ARRÊT` apparaît, rien d'autre n'est fait après ce point ; `lab start` relance les services sur les réseaux
-existants (sans isolation) le temps de corriger.
+If a `STOP` appears, nothing else is done after that point; `lab start` restarts the services on the existing networks
+(without isolation) while you fix it.
 
-**Jamais `docker compose down -v`** : `-v` supprimerait les volumes (modèles, conversations, workflows).
+**Never `docker compose down -v`**: `-v` would delete the volumes (models, conversations, workflows).
 
-## 8. Revenir en arrière
+## 8. Reverting
 
-- Pare-feu seul : `lab isolation uninstall`.
-- Réseaux : retirer les trois lignes `internal: true` d'`ai-stack/docker-compose.yml` et refaire §7.
+- Firewall only: `lab isolation uninstall`.
+- Networks: remove the three `internal: true` lines from `ai-stack/docker-compose.yml` and redo §7.
 
-## Ce qui n'est pas vérifié
+## What is not verified
 
-- **Vérifié le 22 octobre 2026 sur la machine de référence** (Docker 29.9, iptables) : `lab isolation test` réussit
-  pour OpenClaw et Hermes (Ollama joignable ; Internet par IP et par nom bloqué ; machine hôte bloquée ; machine de
-  test autorisée joignable en SSH). Le script du §7 est la version corrigée après le premier passage (sessions
-  Hermes orphelines) : sa forme complète n'a pas été rejouée.
-- Le redémarrage de la machine (réapplication des règles par le service systemd) n'a pas encore été observé.
-- Le comportement de l'assistant d'installation d'OpenClaw (`setup.sh`) quand l'isolation est déjà active : s'il a
-  besoin d'Internet, désactiver le temps de l'installation (`lab isolation remove`).
-- IPv6 n'est pas filtré : les réseaux Docker du lab n'ont pas d'IPv6 activé. Si tu l'actives, ces règles ne suffisent
-  plus.
-- **Machine de test : vérifié le 22 octobre 2026** sur la machine Windows de référence, avec `lab remote test` :
-  tunnel SSH refusé, Internet et DNS bloqués depuis la machine, connexion SSH de l'agent toujours possible. Avant le
-  script, le même test montrait `internet=True dns=True`.
-- Les règles visent le pare-feu iptables de Docker (cas d'Ubuntu par défaut) ; avec le pare-feu nftables natif de
-  Docker, elles ne s'appliqueraient pas.
+- **Verified on the reference machine** (Docker 29.9, iptables): `lab isolation test` succeeds for OpenClaw and Hermes
+  (Ollama reachable; Internet by IP and by name blocked; host machine blocked; allowed test machine reachable over SSH).
+  The §7 script is the version fixed after the first pass (orphan Hermes sessions): its complete form has not been
+  replayed.
+- A reboot of the machine (rules reapplied by the systemd service) has not been observed yet.
+- The behaviour of OpenClaw's installation wizard (`setup.sh`) when isolation is already active: if it needs the
+  Internet, disable it for the time of the installation (`lab isolation remove`).
+- IPv6 is not filtered: the lab's Docker networks do not have IPv6 enabled. If you enable it, these rules are no longer
+  enough.
+- **Test machine: verified** on the reference Windows machine, with `lab remote test`: SSH tunnel refused, Internet and
+  DNS blocked from the machine, the agent's SSH connection still possible. Before the script, the same test showed
+  `internet=True dns=True`.
+- The rules target Docker's iptables firewall (Ubuntu's default case); with Docker's native nftables firewall, they
+  would not apply.

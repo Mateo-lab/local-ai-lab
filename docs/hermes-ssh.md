@@ -1,147 +1,175 @@
-# Hermes : accès SSH à une machine de test
+# Hermes: SSH access to a test machine
 
-Pour que Hermes déploie et exécute du code sur une machine de test (VM ou PC à toi), sans lui donner tes propres clés ni un accès large.
+So that Hermes can deploy and run code on a test machine (a VM or a PC of yours), without giving it your own keys or
+broad access.
 
-## Principe
+## Principle
 
-- **Une clé par machine**, créée pour Hermes (`hermes@aibeast-NOM`), valable seulement sur cette machine.
-- **Un utilisateur dédié** sur la machine, sans `sudo`, qui ne voit que son dossier. Le pire cas est donc limité à cet utilisateur et à ce qu'il atteint par le réseau.
-- **Empreinte de la machine épinglée** (`StrictHostKeyChecking yes`) : on la vérifie une fois, à la création.
-- **Clé restreinte côté machine** : `restrict,pty,from="adresse d'AiBeast"` : pas de redirection de ports, pas d'agent SSH, connexion acceptée seulement depuis AiBeast.
-- L'agent ne reçoit que la commande `ssh -F /opt/data/ssh/config NOM …` (règle écrite dans `AGENTS.md` des nouveaux projets).
+- **One key per machine**, created for Hermes (`hermes@aibeast-NAME`), valid only on that machine.
+- **A dedicated user** on the machine, without `sudo`, who only sees their own folder. The worst case is therefore
+  limited to that user and to what it can reach over the network.
+- **Machine fingerprint pinned** (`StrictHostKeyChecking yes`): it is checked once, at creation.
+- **Key restricted on the machine side**: `restrict,pty,from="AiBeast's address"`: no port forwarding, no SSH agent,
+  connection only accepted from the AI machine.
+- The agent is only given the command `ssh -F /opt/data/ssh/config NAME …` (rule written in the `AGENTS.md` of new
+  projects).
 
-## Mise en place
+## Setup
 
-Sur AiBeast :
+On the AI machine:
 
 ```
-lab remote add NOM hermes@ADRESSE_DE_LA_MACHINE   # ajoute --windows pour un PC Windows
+lab remote add NAME hermes@MACHINE_ADDRESS   # add --windows for a Windows PC
 ```
 
-1. La commande affiche l'empreinte présentée par la machine. Sur la machine, tape `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` et compare. Réponds `o` si elles sont identiques.
-2. Elle crée la clé dans `hermes/data/ssh/` et affiche **4 commandes à taper sur la machine** (création de l'utilisateur et de `authorized_keys`).
-3. `lab remote test NOM` essaie la connexion **depuis le conteneur Hermes** et signale si l'utilisateur a un `sudo` (il ne devrait pas).
+1. The command shows the fingerprint presented by the machine. On the machine, type
+   `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` and compare. Answer `y` if they are identical.
+2. It creates the key in `hermes/data/ssh/` and shows **4 commands to type on the machine** (creating the user and
+   `authorized_keys`).
+3. `lab remote test NAME` tries the connection **from the Hermes container** and reports whether the user has `sudo`
+   (it should not).
+4. For an **existing** project (for example `my_project`): `lab remote link NAME my_project` adds the rules for using
+   the machine to its `AGENTS.md` (without touching the rest of the file) and shows the sentence to say to Hermes.
 
-4. Pour un projet **déjà existant** (par exemple `mon_projet`) : `lab remote link NOM mon_projet` ajoute à son `AGENTS.md` les règles d'usage de la machine (sans toucher au reste du fichier) et affiche la phrase à dire à Hermes.
+`lab remote show NAME [--windows]` shows again what to do on the machine, with your key already in it (useful if you
+lost the output or a step failed).
 
-`lab remote show NOM [--windows]` réaffiche ce qu'il faut faire sur la machine, avec ta clé déjà dedans (utile si tu as perdu l'affichage ou si une étape a échoué).
+Other commands: `lab remote list`, `lab remote remove NAME`.
 
-Autres commandes : `lab remote list`, `lab remote remove NOM`.
+New projects get these rules at creation; for older ones, use `lab remote link`.
 
-Les nouveaux projets reçoivent ces règles à la création ; pour les anciens, c'est `lab remote link`.
+## If the machine is a Windows PC
 
-## Si la machine est un PC Windows
+Add `--windows`: `lab remote add NAME hermes@ADDRESS --windows`. Instead of Linux commands, the command shows a
+**PowerShell block to run as administrator on the PC**: installs the OpenSSH server, creates a `hermes` user who is a
+plain user (not an administrator, unknown random password), key stored outside its profile, key-only login for that
+account. Fingerprint to compare: `ssh-keygen -lf C:\ProgramData\ssh\ssh_host_ed25519_key.pub`.
 
-Ajoute `--windows` : `lab remote add NOM hermes@ADRESSE --windows`. Au lieu des commandes Linux, la commande affiche un bloc **PowerShell à lancer en administrateur sur le PC** : installation du serveur OpenSSH, création d'un utilisateur `hermes` qui est un simple utilisateur (pas administrateur, mot de passe aléatoire inconnu), clé rangée hors de son profil, connexion par clé seulement pour ce compte. Empreinte à comparer : `ssh-keygen -lf C:\ProgramData\ssh\ssh_host_ed25519_key.pub`.
+Good to know on Windows:
+- The remote shell is `cmd.exe`; Hermes runs `powershell -NoProfile -Command "…"` for the rest (it is written in its
+  rules).
+- Tools installed in **your** profile (Python, PlatformIO, Arduino…) are invisible to `hermes`: install them for all
+  users.
+- If the PC is **your main PC**, the dedicated user does not see your profile, but it does see shared folders
+  (`C:\Users\Public`, drives without restrictions). Put the working files in its `work\<project>` folder and check what
+  it can read before trusting it with anything.
+- The Windows firewall can restrict SSH access to the AI machine's address:
+  `Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -RemoteAddress AIBEAST_ADDRESS`.
+- The AI machine must **reach** the PC (same network, or a VPN in both directions): `ping -c 2 ADDRESS` from the AI
+  machine.
 
-À savoir sous Windows :
-- Le shell distant est `cmd.exe` ; Hermes lance `powershell -NoProfile -Command "…"` pour le reste (c'est écrit dans ses règles).
-- Les outils installés dans **ton** profil (Python, PlatformIO, Arduino…) sont invisibles pour `hermes` : installe-les pour tous les utilisateurs.
-- Si le PC est **ton PC principal**, l'utilisateur dédié ne voit pas ton profil, mais il voit les dossiers partagés (`C:\Users\Public`, disques sans restriction). Mets les fichiers de travail dans son dossier `work\<projet>` et vérifie ce qu'il peut lire avant de lui confier quoi que ce soit.
-- Le pare-feu Windows peut limiter l'accès SSH à l'adresse d'AiBeast : `Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -RemoteAddress ADRESSE_AIBEAST`.
-- Il faut qu'AiBeast **atteigne** le PC (même réseau, ou VPN dans les deux sens) : `ping -c 2 ADRESSE` depuis AiBeast.
+## Administrator scripts (Windows machine)
 
-## Scripts en administrateur (machine Windows)
-
-L'agent n'est **jamais** administrateur de la machine de test : sinon il pourrait désactiver le pare-feu qui coupe
-Internet ou réactiver les tunnels SSH ([agent-isolation.md](agent-isolation.md) §5). Pour les scripts `.bat`/`.cmd`
-qui doivent tourner en administrateur, il passe par **des scripts que tu as approuvés** :
+The agent is **never** an administrator of the test machine: otherwise it could disable the firewall that cuts the
+Internet or re-enable SSH tunnels ([agent-isolation.md](agent-isolation.md) §5). For the `.bat`/`.cmd` scripts that
+must run as administrator, it goes through **scripts you have approved**:
 
 ```mermaid
 flowchart LR
-    H["Hermes (compte standard)"] -- "1. écrit test.bat dans son dossier work" --> W["C:\Users\hermes\work"]
-    U["Toi (administrateur)"] -- "2. relis puis Approuver-script-hermes.ps1" --> A["C:\ProgramData\hermes-admin\approuves<br/>lecture seule pour Hermes"]
-    H -- "3. lancer.ps1 test.bat COM3" --> D["demandes\ (seul dossier où il écrit)"]
-    H -- "déclenche (pas de modification possible)" --> T["Tâche planifiée Hermes-admin<br/>compte SYSTEM"]
-    T -- "exécute UNIQUEMENT un script approuvé,<br/>arguments filtrés" --> A
-    T -- "sortie + code" --> R["resultats\ (lecture seule pour Hermes)"]
+    H["Hermes (standard account)"] -- "1. writes test.bat in its work folder" --> W["C:\Users\hermes\work"]
+    U["You (administrator)"] -- "2. review then Approuver-script-hermes.ps1" --> A["C:\ProgramData\hermes-admin\approuves<br/>read-only for Hermes"]
+    H -- "3. lancer.ps1 test.bat COM3" --> D["demandes\ (the only folder it writes to)"]
+    H -- "triggers (cannot modify)" --> T["Scheduled task Hermes-admin<br/>SYSTEM account"]
+    T -- "runs ONLY an approved script,<br/>filtered arguments" --> A
+    T -- "output + exit code" --> R["resultats\ (read-only for Hermes)"]
     R --> H
 ```
 
-**Installation** (une fois, sur la machine de test, PowerShell en administrateur, fichiers copiés depuis
-`windows\outils\`) :
+The folders keep their original names on the machine: `approuves` = approved, `demandes` = requests, `resultats` =
+results, `outils` = tools; `lancer.ps1` = run.
+
+**Installation** (once, on the test machine, PowerShell as administrator, files copied from `windows\outils\`):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Installer-admin-hermes.ps1                 # compte : hermes
-powershell -ExecutionPolicy Bypass -File .\Installer-admin-hermes.ps1 -Desinstaller   # tout retirer
+powershell -ExecutionPolicy Bypass -File .\Installer-admin-hermes.ps1              # account: hermes
+powershell -ExecutionPolicy Bypass -File .\Installer-admin-hermes.ps1 -Uninstall   # remove everything
 ```
 
-**Approuver un script** (à chaque nouveau script ou nouvelle version) : le script est affiché en entier, les lignes
-sensibles sont signalées (pare-feu, SSH, comptes, droits, tâches, services, registre, téléchargements, fichiers que
-l'agent peut modifier), puis il faut taper `oui`.
+**Approving a script** (for every new script or new version): the script is shown in full, sensitive lines are flagged
+(firewall, SSH, accounts, rights, tasks, services, registry, downloads, files the agent can modify), then you must type
+`yes`.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Fichier C:\Users\hermes\work\projet\test.bat
-powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Lister      # scripts approuvés (empreinte)
-powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Retirer test.bat
-powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Journal     # dernières exécutions
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Script C:\Users\hermes\work\project\test.bat
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -List        # approved scripts (hash)
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Remove test.bat
+powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Log         # latest runs
 ```
 
-Ce qu'il faut vérifier en relisant : le script ne doit appeler **que des fichiers placés à côté de lui** (`%~dp0`) ou des
-programmes du système, jamais un fichier du profil de l'agent (il pourrait le modifier après ton approbation), et ne
-doit pas toucher au pare-feu, à SSH, aux comptes ni à `C:\ProgramData\hermes-admin`. Ce qui est approuvé s'exécute
-avec les droits **SYSTEM**.
+What to check when reviewing: the script must only call **files placed next to it** (`%~dp0`) or system programs,
+never a file in the agent's profile (it could change it after your approval), and must not touch the firewall, SSH,
+accounts or `C:\ProgramData\hermes-admin`. What is approved runs with **SYSTEM** rights.
 
-**Côté agent** : règle 6 de son `AGENTS.md` (`hermes/dev-template/AGENTS.md`). Historique : `approbations.log` et
-`resultats\journal.log` dans `C:\ProgramData\hermes-admin`. Durée maximale d'une exécution : 1 heure.
+**On the agent side**: rule 6 of its `AGENTS.md` (`hermes/dev-template/AGENTS.md`). History: `approbations.log` and
+`resultats\journal.log` in `C:\ProgramData\hermes-admin`. Maximum duration of a run: 1 hour.
 
-Constaté le 22 octobre 2026 sur la machine Windows de référence : installation, approbation d'un script de test et
-lancement par Hermes fonctionnent ; Hermes reste un compte standard.
+Seen on the reference Windows machine: installation, approval of a test script and launch by Hermes work; Hermes stays
+a standard account.
 
-## Bonnes pratiques
+## Good practice
 
-- **Isolation** : Hermes n'a aucun accès réseau sauf ceux que tu autorises. Ajoute l'adresse de la machine à
-  `LAB_AGENT_SSH_ALLOW` dans `lab.conf`, puis `lab isolation apply` : sinon la connexion SSH est bloquée
+- **Isolation**: Hermes has no network access except those you allow. Add the machine's address to
+  `LAB_AGENT_SSH_ALLOW` in `lab.conf`, then `lab isolation apply`: otherwise the SSH connection is blocked
   ([agent-isolation.md](agent-isolation.md)).
-- **Jamais administrateur** : pour les scripts qui en ont besoin, voir « Scripts en administrateur » ci-dessus.
-- **Pas d'Internet par la machine de test** : lance `windows\outils\Isoler-machine-de-test.ps1` en administrateur sur
-  la machine (Internet et DNS coupés pour toute la machine, tunnels SSH interdits au compte de Hermes), puis
-  `lab remote test NOM` (section 5 d'[agent-isolation.md](agent-isolation.md)).
+- **Never an administrator**: for scripts that need it, see "Administrator scripts" above.
+- **No Internet through the test machine**: run `windows\outils\Isoler-machine-de-test.ps1` as administrator on the
+  machine (Internet and DNS cut for the whole machine, SSH tunnels forbidden for Hermes's account), then
+  `lab remote test NAME` (section 5 of [agent-isolation.md](agent-isolation.md)).
+- **Take a snapshot of the VM** before each session: the agent can break the machine, by mistake or because something
+  it read pushed it to.
+- **Use a machine without secrets**: no tokens, no keys to other machines, no mounted network shares, and if possible
+  isolated from your sensitive network. Hermes can only reach what the machine reaches.
+- If the tests need packages installed, install them yourself beforehand; do not give `sudo` to the user. If it is
+  essential, a `sudoers` rule limited to one precise command is better than full `sudo`.
+- This access is **on demand**: Hermes only runs when you start it. If you no longer need it, `lab remote remove NAME`
+  then remove the key on the machine.
 
-- **Prends un instantané de la VM** avant chaque séance : l'agent peut casser la machine, par erreur ou parce qu'un texte lu l'y a poussé.
-- **Utilise une machine sans secret** : pas de jetons, pas de clés d'autres machines, pas de partage réseau monté, et si possible isolée de ton réseau sensible. Hermes, lui, ne peut atteindre que ce que la machine atteint.
-- Si les tests ont besoin d'installer des paquets, installe-les toi-même avant ; ne donne pas `sudo` à l'utilisateur. Si c'est indispensable, une règle `sudoers` limitée à une commande précise vaut mieux qu'un `sudo` complet.
-- Ces accès sont **à la demande** : Hermes ne tourne que quand tu le lances. Si tu n'en as plus besoin, `lab remote remove NOM` puis retire la clé sur la machine.
+## Limits
 
-## Limites
+- **Hermes reads the key**: it is in its data folder, it must be able to use it. If a malicious text manipulates it, it
+  can use the key on that machine, hence the user without rights. It cannot send the key out: its container has no
+  Internet access (`lab isolation`), and neither has the test machine once isolated.
+- The firewall of the AI machine only lets Hermes reach the addresses in `LAB_AGENT_SSH_ALLOW`; other machines on your
+  local network are blocked.
+- The rules in `AGENTS.md` guide the agent, they do not force it.
 
-- **Hermes lit la clé** : elle est dans son dossier de données, il doit pouvoir s'en servir. Si un texte malveillant le manipule, il peut l'utiliser sur cette machine, d'où l'utilisateur sans droits. Il ne la sortira de l'ordinateur que s'il a aussi un accès à Internet : le conteneur n'est pas coupé du réseau.
-- Rien n'empêche techniquement l'agent de joindre d'autres machines de ton réseau local, mais sa clé n'y marche pas. Pour l'en empêcher aussi, il faudrait une règle de pare-feu sur AiBeast (chaîne `DOCKER-USER`) : possible, non fournie.
-- Les règles d'`AGENTS.md` guident l'agent, elles ne l'obligent pas.
+## Lessons learned: from creation to the first successful test
 
-## Retour d'expérience : de la création au premier test réussi
+Real setup on a Windows test PC (`pc-test`, project `my_project`, Hermes has to send I²C commands to it). Final result:
+`lab remote test pc-test` succeeds, with a `hermes` user without administrator rights or `sudo`. Here, in order, is what
+caused problems, and the solution.
 
-Mise en place réelle sur un PC Windows de test (`pc-test`, projet `mon_projet`, Hermes doit y envoyer des commandes I²C). Résultat final : `lab remote test pc-test` réussit, avec un utilisateur `hermes` sans administrateur ni `sudo`. Voici dans l'ordre ce qui a posé problème, et la solution.
+### On the AI machine
 
-### Sur AiBeast
-
-| Symptôme | Cause | Solution |
+| Symptom | Cause | Solution |
 |---|---|---|
-| `lab remote test` : « No user exists for uid 1000 » | `ssh` refuse de tourner si l'identifiant du conteneur n'a pas d'entrée dans `/etc/passwd` (conteneur lancé avec `--entrypoint bash`) | Le test monte une copie de `/etc/passwd` où cette entrée est ajoutée |
-| `lab remote test` reste bloqué après la dernière ligne | `ssh` attend l'entrée standard | `ssh -n` et `< /dev/null` dans le test |
-| `lab remote add` refuse : « existe déjà » | Une machine du même nom est déjà enregistrée | `lab remote remove NOM`, puis `add`. **Attention : une nouvelle clé est alors générée.** La clé affichée par `lab remote show NOM --windows` change donc après un `remove`/`add`, et celle déjà collée sur le PC ne marche plus : recolle le bloc affiché par `show` |
+| `lab remote test`: "No user exists for uid 1000" | `ssh` refuses to run if the container's user id has no entry in `/etc/passwd` (container started with `--entrypoint bash`) | The test mounts a copy of `/etc/passwd` with that entry added |
+| `lab remote test` hangs after the last line | `ssh` waits for standard input | `ssh -n` and `< /dev/null` in the test |
+| `lab remote add` refuses: "already exists" | A machine with the same name is already registered | `lab remote remove NAME`, then `add`. **Careful: a new key is then generated.** The key shown by `lab remote show NAME --windows` therefore changes after a `remove`/`add`, and the one already pasted on the PC no longer works: paste the block shown by `show` again |
 
-### Sur le PC Windows
+### On the Windows PC
 
-| Symptôme | Cause | Solution |
+| Symptom | Cause | Solution |
 |---|---|---|
-| `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` : fichier introuvable | Chemin Linux | `ssh-keygen -lf C:\ProgramData\ssh\ssh_host_ed25519_key.pub` |
-| « unexpected newguid » | `[guid]::NewGuid()` mal collé dans le terminal | `(New-Guid).ToString('N')` |
-| `icacls` : « invalid parameter /inheritancer » | Faute de frappe (`:` manquant) | `/inheritance:r` |
-| « the system cannot find the specified file » | Nom d'utilisateur : l'aide affichait `hermes-test` alors que le compte créé s'appelle `hermes` | Utiliser le même nom partout : `hermes` |
-| « Access denied » en modifiant le fichier de clés | PowerShell non lancé en administrateur, ou fichier appartenant à un autre compte | Lancer PowerShell **en administrateur** ; au besoin `takeown /f $f` |
-| `Permission denied (publickey,password,keyboard-interactive)` côté AiBeast, alors que tout semblait correct | Voir ci-dessous | Voir ci-dessous |
+| `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`: file not found | Linux path | `ssh-keygen -lf C:\ProgramData\ssh\ssh_host_ed25519_key.pub` |
+| "unexpected newguid" | `[guid]::NewGuid()` badly pasted into the terminal | `(New-Guid).ToString('N')` |
+| `icacls`: "invalid parameter /inheritancer" | Typo (missing `:`) | `/inheritance:r` |
+| "the system cannot find the specified file" | User name: the help showed `hermes-test` whereas the account created is called `hermes` | Use the same name everywhere: `hermes` |
+| "Access denied" when editing the key file | PowerShell not run as administrator, or file owned by another account | Run PowerShell **as administrator**; if needed `takeown /f $f` |
+| `Permission denied (publickey,password,keyboard-interactive)` on the AI machine side, although everything looked right | See below | See below |
 
-**Cause finale du refus de clé.** Le journal du PC (`Get-WinEvent -LogName OpenSSH/Operational -MaxEvents 20`) indiquait :
+**Final cause of the key refusal.** The PC's log (`Get-WinEvent -LogName OpenSSH/Operational -MaxEvents 20`) said:
 
 ```
 Authentication refused: bad ownership or modes for file C:\ProgramData\ssh\hermes_authorized_keys
 Bad permissions … Administrator
 ```
 
-Avec `StrictModes yes` (par défaut), `sshd` refuse un fichier de clés dont la liste de droits contient un compte autre que : `SYSTEM`, le groupe Administrateurs et l'utilisateur concerné. Une entrée **`Administrator`** (le compte, pas le groupe) y figurait. Le journal est le seul endroit où cette cause apparaît : côté AiBeast on ne voit que « Permission denied ».
+With `StrictModes yes` (the default), `sshd` refuses a key file whose access list contains an account other than:
+`SYSTEM`, the Administrators group and the user concerned. An **`Administrator`** entry (the account, not the group)
+was there. The log is the only place where this cause appears: on the AI machine side you only see "Permission denied".
 
-Correction :
+Fix:
 
 ```
 icacls $f /remove 'Administrator'
@@ -149,23 +177,25 @@ icacls $f /grant 'hermes:R'
 icacls $f
 ```
 
-`icacls $f` ne doit lister que `SYSTEM`, `Administrators` et `hermes`. Ensuite `Restart-Service sshd`.
+`icacls $f` must only list `SYSTEM`, `Administrators` and `hermes`. Then `Restart-Service sshd`.
 
-**Pistes qui ne sont pas la cause** (pour ne pas y repasser du temps) :
-- La ligne `AuthorizedKeysFile C:/ProgramData/ssh/administrators_authorized_keys` vue dans `sshd -T` vient du bloc `Match Group administrators` de Windows. Elle ne concerne pas un utilisateur qui n'est pas administrateur.
-- `sshd -T` seul affiche « ga_init, unable to resolve user hermes » : la commande doit recevoir l'utilisateur, par exemple `sshd -T -C user=hermes,host=x,addr=x`.
-- Le niveau de log `DEBUG3` dans `sshd_config` a servi au diagnostic et n'est pas à laisser en service.
+**Leads that are not the cause** (so as not to spend time on them again):
+- The line `AuthorizedKeysFile C:/ProgramData/ssh/administrators_authorized_keys` seen in `sshd -T` comes from Windows's
+  `Match Group administrators` block. It does not concern a user who is not an administrator.
+- `sshd -T` alone shows "ga_init, unable to resolve user hermes": the command must be given the user, for example
+  `sshd -T -C user=hermes,host=x,addr=x`.
+- The `DEBUG3` log level in `sshd_config` was used for the diagnosis and is not to be left on.
 
-### Commandes de diagnostic à garder
+### Diagnostic commands to keep
 
-Sur AiBeast :
+On the AI machine:
 
 ```
-lab remote test NOM
-ssh -v -F hermes/data/ssh/config NOM       # trace détaillée côté client
+lab remote test NAME
+ssh -v -F hermes/data/ssh/config NAME       # detailed client-side trace
 ```
 
-Sur le PC (PowerShell administrateur) :
+On the PC (PowerShell as administrator):
 
 ```
 Get-WinEvent -LogName OpenSSH/Operational -MaxEvents 20 | Format-List TimeCreated,Message
@@ -173,27 +203,33 @@ icacls C:\ProgramData\ssh\hermes_authorized_keys
 Get-Service sshd
 ```
 
-### Après un redémarrage du PC
+### After a reboot of the PC
 
-Le service est réglé en démarrage automatique (`Set-Service sshd -StartupType Automatic`) : la connexion revient toute seule. Seule condition : **le PC garde la même adresse IP**. Si elle change, `lab remote remove` puis `add` avec la nouvelle adresse, ou réserve l'adresse dans le routeur.
+The service is set to start automatically (`Set-Service sshd -StartupType Automatic`): the connection comes back by
+itself. Only condition: **the PC keeps the same IP address**. If it changes, `lab remote remove` then `add` with the new
+address, or reserve the address in the router.
 
-### Remise en état après le diagnostic
+### Clean-up after the diagnosis
 
-Si le niveau de log a été monté pour chercher la panne, remets la configuration d'origine :
+If the log level was raised to look for the fault, restore the original configuration:
 
 ```
 Copy-Item C:\ProgramData\ssh\sshd_config.bak C:\ProgramData\ssh\sshd_config -Force
 Restart-Service sshd
 ```
 
-(à faire avec la sauvegarde que tu as prise ; vérifie ensuite que la ligne `Match User hermes` y est toujours, sinon `lab remote show NOM --windows` la redonne).
+(with the backup you took; then check that the `Match User hermes` line is still there, otherwise
+`lab remote show NAME --windows` gives it again).
 
-## Ce qui reste à vérifier
+## What remains to be verified
 
-- **Session Hermes réelle.** Le test passe depuis un conteneur lancé exprès. Dans une vraie session, demande à Hermes d'exécuter `ssh -F /opt/data/ssh/config NOM whoami` et attends `hermes`. Si `ssh` manque dans l'image, `lab remote test` le signale.
-- **`lab remote link NOM PROJET`** (ajoute les règles à l'`AGENTS.md` du projet) n'a pas été confirmé sur `mon_projet`.
-- **Pas de garde-fou sur les commandes I²C.** Hermes peut envoyer ce qu'il veut au bus avec les droits de `hermes`. Un script d'enveloppe limitant les adresses et les commandes serait une étape suivante.
-- **Adresse source `from="…"`** : déduite de la route d'AiBeast vers la machine. Avec un VPN ou du NAT, le PC peut voir une autre adresse ; retire alors `from=` ou corrige-le.
-- **Règle de pare-feu** limitant l'accès SSH à l'adresse d'AiBeast : non faite.
-- `lab remote link` refuse un projet ou un `AGENTS.md` qui serait un lien symbolique (testé).
-- Les tests automatiques (`scripts/test-remote.sh`) utilisent une **simulation de `ssh-keygen`** : ils vérifient la validation des noms (contre l'injection dans la config ssh), les droits de fichiers, l'épinglage et la suppression. La vraie connexion a été validée à la main, comme décrit plus haut.
+- **`lab remote link NAME PROJECT`** (adds the rules to the project's `AGENTS.md`) has been confirmed with the old
+  French marker; the English version accepts both markers (tested by `scripts/test-remote.sh`).
+- **No safeguard on the I²C commands.** Hermes can send whatever it wants to the bus with `hermes`'s rights. A wrapper
+  script limiting addresses and commands would be a next step.
+- **Source address `from="…"`**: deduced from the AI machine's route to the machine. With a VPN or NAT, the PC may see
+  another address; then remove `from=` or correct it.
+- `lab remote link` refuses a project or an `AGENTS.md` that is a symbolic link (tested).
+- The automated tests (`scripts/test-remote.sh`) use a **simulated `ssh-keygen`**: they check name validation (against
+  injection into the ssh config), file permissions, pinning and removal. The real connection was validated by hand, as
+  described above.
