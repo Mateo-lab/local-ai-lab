@@ -1,141 +1,146 @@
-# Sauvegardes chiffrées
+# Encrypted backups
 
-Outil : [restic](https://restic.net) (chiffré, dédupliqué, incrémental). Script : `scripts/backup.sh` (commande `lab backup`).
+Tool: [restic](https://restic.net) (encrypted, deduplicated, incremental). Script: `scripts/backup.sh` (`lab backup`
+command).
 
-## 1. Ce qui est sauvegardé
+## 1. What is backed up
 
-| Élément | Méthode | Pourquoi |
+| Item | Method | Why |
 |---|---|---|
-| Base n8n (workflows, identifiants, historique) | `pg_dump` | copie cohérente, restaurable sur une autre version |
-| Base Langfuse (si lancé) : comptes, clés API, prompts | `pg_dumpall` | idem |
-| Volumes Open WebUI, n8n, Qdrant | archive `tar` du volume (conteneur `alpine` temporaire) | comptes, conversations, documents, vecteurs, clé de chiffrement de n8n |
-| `ai-stack/.env`, `alerting/.env`, `monitoring/.env`, `langfuse/app/.env`, `hermes/.env`, `openclaw/.env` | copie | secrets : **sans eux, les bases restaurées sont inutilisables** (ex. `N8N_ENCRYPTION_KEY`) |
-| `hermes/data`, `bench/results` | copie | historique de l'agent, mesures |
+| n8n database (workflows, credentials, history) | `pg_dump` | consistent copy, restorable on another version |
+| Langfuse database (if running): accounts, API keys, prompts | `pg_dumpall` | same |
+| Open WebUI, n8n, Qdrant volumes | `tar` archive of the volume (temporary `alpine` container) | accounts, conversations, documents, vectors, n8n encryption key |
+| `ai-stack/.env`, `alerting/.env`, `monitoring/.env`, `langfuse/app/.env`, `hermes/.env`, `openclaw/.env` | copy | secrets: **without them, the restored databases are useless** (e.g. `N8N_ENCRYPTION_KEY`) |
+| `hermes/data`, `bench/results` | copy | agent history, measurements |
 
-**Non sauvegardé** (se retélécharge) : modèles Ollama, images Docker, ComfyUI (modèles, cache).
-Rétention : 7 quotidiennes, 4 hebdomadaires, 6 mensuelles.
+**Not backed up** (can be downloaded again): Ollama models, Docker images, ComfyUI (models, cache).
+Retention: 7 daily, 4 weekly, 6 monthly.
 
-Volume Qdrant et Open WebUI copiés pendant qu'ils tournent : possible incohérence si une écriture est en cours à cet
-instant. Pour une copie parfaite : `lab stop` avant, `lab start` après. Les bases PostgreSQL n'ont pas ce souci.
+The Qdrant and Open WebUI volumes are copied while running: possible inconsistency if a write is in progress at that
+moment. For a perfect copy: `lab stop` before, `lab start` after. The PostgreSQL databases do not have this problem.
 
-## 2. Mise en place (une fois)
+## 2. Setup (once)
 
 ```bash
 sudo apt install restic
-lab backup init          # crée le dépôt /data/backups/restic et le mot de passe ~/.config/aibeast-backup/password
+lab backup init          # creates the repository /data/backups/restic and the password ~/.config/aibeast-backup/password
 ```
-**Copie ce mot de passe tout de suite dans un gestionnaire de mots de passe, ailleurs que sur AiBeast.** Il n'y a pas
-de récupération possible.
+**Copy this password right away into a password manager, somewhere other than the AI machine.** There is no way to
+recover it.
 ```bash
-lab backup run           # première sauvegarde, à la main
-lab backup list          # elle apparaît
-lab backup check         # intégrité
-scripts/backup.sh schedule   # (facultatif) tous les jours à 03:30
+lab backup run           # first backup, by hand
+lab backup list          # it appears
+lab backup check         # integrity
+lab backup schedule      # (optional) every day at 03:30
 ```
 
-## 3. Limite importante : même disque
+## 3. Important limit: same disk
 
-Par défaut le dépôt est sur `/data`, **le même SSD** que les données. Il protège contre une suppression par erreur, une
-mise à jour qui casse une base, un conteneur corrompu. Il ne protège **pas** contre la perte du SSD, un vol, un incendie.
+By default the repository is on `/data`, **the same SSD** as the data. It protects against an accidental deletion, an
+update that breaks a database, a corrupted container. It does **not** protect against losing the SSD, theft, fire.
 
-Copie hors-site, quand tu en auras une : `BACKUP_REPO=sftp:utilisateur@serveur:/chemin lab backup run` (restic gère
-aussi S3, Backblaze B2, un disque USB monté…). Un disque USB monté sur `/mnt/usb` : `BACKUP_REPO=/mnt/usb/restic`
-(`init` d'abord avec la même variable). Non testé ici.
+Off-site copy, when you have one: `BACKUP_REPO=sftp:user@server:/path lab backup run` (restic also handles S3,
+Backblaze B2, a mounted USB disk…). A USB disk mounted on `/mnt/usb`: `BACKUP_REPO=/mnt/usb/restic` (`init` first with
+the same variable). Not tested here.
 
-### Copie sur le PC Windows (script exécuté et restauration testée le 2026-10-18)
+### Copy to the Windows PC (script run and restore tested on the reference installation)
 
-Le PC tire le dépôt restic (déjà chiffré) depuis AiBeast : `windows\outils\Sauvegarder-AiBeast-hors-machine.bat` (double-clic, VPN
-connecté, clé SSH chargée). Destination par défaut : `aibeast-backup\restic-repo`, à côté du dossier `windows\` (paramètre `-Destination` pour en choisir une autre).
-L'emplacement du dépôt sur AiBeast est demandé à AiBeast (`lab backup repo`).
-Le script :
-1. lit sur AiBeast le nombre de fichiers et la taille totale du dépôt ;
-2. copie par `scp` dans `restic-repo.nouveau` ;
-3. compare : si les chiffres diffèrent (une sauvegarde de 03:30 tournait ?), il **ne remplace rien** ;
-4. sinon garde l'ancienne copie sous `restic-repo.precedent` et installe la nouvelle ; écrit `derniere-copie.txt`.
+The PC pulls the (already encrypted) restic repository from the AI machine:
+`windows\outils\Sauvegarder-AiBeast-hors-machine.bat` (double-click, VPN connected, SSH key loaded). Default
+destination: `aibeast-backup\restic-repo`, next to the `windows\` folder (`-Destination` parameter to choose another
+one). The location of the repository is asked from the AI machine (`lab backup repo`).
+The script:
+1. reads on the AI machine the number of files and the total size of the repository;
+2. copies with `scp` into `restic-repo.nouveau` (*new*);
+3. compares: if the numbers differ (was the 03:30 backup running?), it **replaces nothing**;
+4. otherwise keeps the old copy as `restic-repo.precedent` (*previous*) and installs the new one; writes
+   `derniere-copie.txt` (*last copy*).
 
-**Décision de l'utilisateur (2026-10-18) : le fichier `password` reste dans `aibeast-backup`**, à côté de la copie, parce que
-le PC est un poste d'entreprise sécurisé. Conséquence à connaître : sur ce PC, quiconque accède au dossier lit tout le
-dépôt (mots de passe, `N8N_ENCRYPTION_KEY`, clés Langfuse), et la copie ne protège plus contre le vol ou l'accès du
-poste. En contrepartie, la restauration depuis le PC ne dépend de rien d'autre. Si ce choix change : mettre le mot de passe
-dans un gestionnaire, puis supprimer le fichier du dossier.
+These folder and file names keep their original spelling so that existing copies keep working.
 
-Pour restaurer depuis le PC : recopier `restic-repo` sur AiBeast, puis
-`BACKUP_REPO=/chemin/restic-repo BACKUP_PASSWORD_FILE=... scripts/backup.sh list` (même procédure qu'au §4).
-**Testé le 2026-10-18 : restauration depuis la copie du PC.** La copie `restic-repo` du PC et son fichier `password` ont été
-renvoyés sur AiBeast (dans `~/restore-test`, `scp`), puis `restic restore latest --include` a extrait les deux dumps :
-`n8n.sql` (568 042 octets, 157 `CREATE TABLE`) et `langfuse.sql` (314 814 octets, en-tête `PostgreSQL database cluster dump`).
-La copie du PC est donc lisible avec son propre mot de passe.
-Vérifié aussi : `restic snapshots` sur la copie liste les **5 mêmes instantanés** qu'AiBeast (`0a93351f`, `27f69dab`,
-`5a298200`, `1c7b3a39`, `282530e8`) ; `restic check --read-data-subset=10%` : « no errors were found » (9 paquets sur 9 lus,
-soit un dixième des données seulement).
-Non vérifié : une lecture complète de la copie (`restic check --read-data`), le rechargement des deux dumps dans une base
-(fait seulement pour Langfuse, depuis le dépôt d'origine, voir §4), et la restauration complète des volumes (Open WebUI,
-n8n, Qdrant).
+**Where to keep the `password` file.** On the reference installation, the owner chose to keep it in `aibeast-backup`,
+next to the copy, because the PC is a secured workstation. Consequence to know: on that PC, anyone who can access the
+folder can read the whole repository (passwords, `N8N_ENCRYPTION_KEY`, Langfuse keys), and the copy no longer protects
+against theft of or access to the workstation. On the other hand, restoring from the PC depends on nothing else. The
+safer choice: keep the password in a password manager and not in the folder.
 
-**Taille : 1,156 Gio le 17 octobre, 3,539 Gio le 18.** Cause probable (vue dans `restic ls`, pas mesurée au total) : Hermes a
-installé des outils sous `hermes/data/installs/…/workspace/tools/` (Chromium ≈ 270 Mo, Python, Node, ffmpeg…), qui sont
-sauvegardés avec le reste. Ce sont a priori des binaires re-téléchargeables par Hermes (non vérifié : à confirmer avant d'exclure quoi que ce soit). Le plus gros fichier
-stable est `ai-stack_open_webui_data.tar` (1,12 Go, identique d'un jour à l'autre, donc dédupliqué par restic).
-Décision en attente : exclure ces outils de la sauvegarde (gain attendu ≈ 2,4 Gio, soit l'écart constaté, sur `/data` et sur le PC), ou les garder.
-À lancer à la main (ou à planifier dans le Planificateur de tâches Windows) ; la copie n'est pas automatique.
+To restore from the PC: copy `restic-repo` back to the AI machine, then
+`BACKUP_REPO=/path/restic-repo BACKUP_PASSWORD_FILE=... scripts/backup.sh list` (same procedure as §4).
+**Tested: restore from the PC copy.** The PC's `restic-repo` copy and its `password` file were sent back to the AI
+machine (into `~/restore-test`, `scp`), then `restic restore latest --include` extracted the two dumps: `n8n.sql`
+(568,042 bytes, 157 `CREATE TABLE`) and `langfuse.sql` (314,814 bytes, header `PostgreSQL database cluster dump`). The PC
+copy is therefore readable with its own password.
+Also verified: `restic snapshots` on the copy lists **the same 5 snapshots** as the AI machine;
+`restic check --read-data-subset=10%`: "no errors were found" (9 packs out of 9 read, i.e. only a tenth of the data).
+Not verified: a full read of the copy (`restic check --read-data`), reloading both dumps into a database (done only for
+Langfuse, from the original repository, see §4), and the full restore of the volumes (Open WebUI, n8n, Qdrant).
 
-## 4. Restaurer
+**Size: 1.156 GiB one day, 3.539 GiB the next on the reference machine.** Probable cause (seen with `restic ls`, not
+measured in total): Hermes installed tools under `hermes/data/installs/…/workspace/tools/` (Chromium ≈ 270 MB, Python,
+Node, ffmpeg…), which are backed up with the rest. These are presumably binaries Hermes can download again (not
+verified: confirm before excluding anything). The largest stable file is `ai-stack_open_webui_data.tar` (1.12 GB,
+identical from one day to the next, hence deduplicated by restic).
+Pending decision: exclude these tools from the backup (expected gain ≈ 2.4 GiB, the observed difference, on `/data` and
+on the PC), or keep them.
+To run by hand (or to schedule in the Windows Task Scheduler); the copy is not automatic.
 
-La restauration ne remplace **jamais** les données en place : elle les dépose dans un dossier, à toi de remettre ce qui
-est nécessaire.
+## 4. Restoring
+
+Restoring **never** replaces the data in place: it puts it into a folder, and it is up to you to put back what is
+needed.
 
 ```bash
-lab backup list                                  # repère l'ID
-scripts/backup.sh restore <ID> ~/restauration    # dossier vide
-ls ~/restauration/data/backups/staging ~/restauration/home/...   # n8n.sql, *.tar
+lab backup list                                  # find the ID
+scripts/backup.sh restore <ID> ~/restore         # empty folder
+ls ~/restore/data/backups/staging ~/restore/home/...   # n8n.sql, *.tar
 ```
 
-**Base n8n** (n8n arrêté pendant l'opération) :
+**n8n database** (n8n stopped during the operation):
 ```bash
 docker stop n8n
-docker exec -i postgres-n8n psql -U n8n -d n8n < ~/restauration/data/backups/staging/n8n.sql
+docker exec -i postgres-n8n psql -U n8n -d n8n < ~/restore/data/backups/staging/n8n.sql
 docker start n8n
 ```
-**Volume** (exemple Open WebUI) :
+**Volume** (Open WebUI example):
 ```bash
 docker stop open-webui
-docker run --rm -v ai-stack_open_webui_data:/dst -v ~/restauration/data/backups/staging:/in alpine \
+docker run --rm -v ai-stack_open_webui_data:/dst -v ~/restore/data/backups/staging:/in alpine \
   sh -c 'rm -rf /dst/* /dst/.[!.]* 2>/dev/null; tar -C /dst -xf /in/ai-stack_open_webui_data.tar'
 docker start open-webui
 ```
-**Fichiers `.env`** : copie-les depuis `~/restauration/home/.../ai-lab/` vers leur emplacement d'origine.
-**Langfuse** : `docker exec -i <conteneur postgres> psql -U postgres < langfuse.sql` sur une base neuve.
-Test sans risque (fait le 2026-10-18) : charger `langfuse.sql` dans un PostgreSQL jetable de même image, puis compter les lignes.
+**`.env` files**: copy them from `~/restore/home/.../ai-lab/` to their original location.
+**Langfuse**: `docker exec -i <postgres container> psql -U postgres < langfuse.sql` on a fresh database.
+Risk-free test (done on the reference machine): load `langfuse.sql` into a throwaway PostgreSQL with the same image,
+then count the rows.
 ```bash
 IMG=$(docker inspect app-postgres-1 --format '{{.Config.Image}}')
 docker run -d --rm --name pg-restore-test -e POSTGRES_PASSWORD=test "$IMG"; sleep 10
-docker exec -i pg-restore-test psql -U postgres -q < ~/restore-test/.../langfuse.sql > /dev/null 2> ~/restore-test.err; echo "code : $?"
+docker exec -i pg-restore-test psql -U postgres -q < ~/restore-test/.../langfuse.sql > /dev/null 2> ~/restore-test.err; echo "code: $?"
 docker exec pg-restore-test psql -U postgres -d postgres -c 'select count(*) from users;' -c 'select count(*) from projects;' -c 'select count(*) from api_keys;'
 docker rm -f pg-restore-test
 ```
-Les erreurs « already exists » (rôles déjà présents dans la base neuve) sont sans gravité.
+"already exists" errors (roles already present in the fresh database) are harmless.
 
-Teste une restauration **maintenant**, sur un dossier de test, avant d'en avoir besoin : une sauvegarde jamais restaurée
-n'est pas prouvée.
+Test a restore **now**, into a test folder, before you need it: a backup that was never restored is not proven.
 
-## 5. Sauvegardes de sécurité des livraisons (`avant-*.tgz`)
+## 5. Safety backups of deliveries (`avant-*.tgz`)
 
-`Deployer-sur-AiBeast` écrit `~/avant-AAAAMMJJ-HHMM.tgz` avant chaque extraction (≈ 1 Mo depuis le 21 octobre 2026 :
-`bench/.venv` et `bench/results` sont exclus). Depuis le dépôt git, le vrai retour arrière du code est `git checkout`.
-Les anciennes sauvegardes (≈ 128 Mo chacune, 17 fichiers au 21 octobre) ont été déplacées dans
-`/data/backups/avant-deploiement/` (rien n'a été supprimé). Ce dossier n'est pas inclus dans restic.
-Y déplacer de temps en temps les nouvelles : `mv -n ~/avant-*.tgz /data/backups/avant-deploiement/`.
+`Deployer-sur-AiBeast` writes `~/avant-YYYYMMDD-HHMM.tgz` (*avant* = before) before each extraction (≈ 1 MB:
+`bench/.venv` and `bench/results` are excluded). Since the project is a git repository, the real rollback of the code is
+`git checkout`. Move them from time to time out of your home folder, for example:
+`mkdir -p /data/backups/avant-deploiement && mv -n ~/avant-*.tgz /data/backups/avant-deploiement/`. That folder is not
+included in restic.
 
-## 6. Ce qui n'est pas vérifié
+## 6. What is not verified
 
-- Vérifié sur ta machine : sauvegarde, liste, contrôle d'intégrité, restauration de n8n, programmation quotidienne (03:30) et,
-  depuis le 2026-10-18, restauration de la base Langfuse dans un PostgreSQL jetable (code 0 ; 1 utilisateur, 2 projets, 2 clés API).
-- **Non vérifié** : remettre réellement une base restaurée en service (n8n ou Langfuse) ; restaurer les volumes Open WebUI/Qdrant ;
-  le script de copie vers le PC Windows (§3) et une restauration depuis cette copie.
-- Les chemins exacts dans l'instantané (`data/backups/staging`, `home/...`) dépendent de restic ; liste avec
-  `restic ls <ID>` si besoin (`export RESTIC_REPOSITORY=… RESTIC_PASSWORD_FILE=…`).
-- Le conteneur Langfuse est trouvé par le dossier de son compose (`langfuse/app`, service `postgres`), pas par le nom de projet
-  (Docker le nomme `app`). Corrigé le 2026-10-17 : la première version cherchait le projet `langfuse` et ignorait la base.
-- **Ce que Langfuse sauvegarde** : la base PostgreSQL (comptes, projets, clés API, prompts) et son `.env`. **Pas** ClickHouse
-  (les traces elles-mêmes) ni MinIO : un suivi d'agents se reconstitue, les clés et réglages non.
-- Le nom des volumes (`ai-stack_*`) suppose le nom de projet `ai-stack` (il est fixé dans le compose).
+- Verified on the reference machine: backup, list, integrity check, n8n restore, daily schedule (03:30) and restore of
+  the Langfuse database into a throwaway PostgreSQL (code 0; 1 user, 2 projects, 2 API keys).
+- **Not verified**: actually putting a restored database back into service (n8n or Langfuse); restoring the Open
+  WebUI/Qdrant volumes.
+- The exact paths in the snapshot (`data/backups/staging`, `home/...`) depend on restic; list them with
+  `restic ls <ID>` if needed (`export RESTIC_REPOSITORY=… RESTIC_PASSWORD_FILE=…`).
+- The Langfuse container is found through the folder of its compose file (`langfuse/app`, service `postgres`), not
+  through the project name (Docker names it `app`).
+- **What is backed up for Langfuse**: the PostgreSQL database (accounts, projects, API keys, prompts) and its `.env`.
+  **Not** ClickHouse (the traces themselves) nor MinIO: agent traces can be rebuilt, keys and settings cannot.
+- The volume names (`ai-stack_*`) assume the project name `ai-stack` (it is set in the compose file).

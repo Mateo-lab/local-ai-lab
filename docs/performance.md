@@ -1,159 +1,178 @@
-# Performance : régler avec des mesures, pas au feeling
+# Performance: tune with measurements, not by feel
 
-Principe : chaque réglage important a une **expérience du banc d'essai** qui le mesure (`lab bench ...`). On change un
-réglage seulement quand une mesure le justifie, et on note le résultat ici.
+Principle: every important setting has a **benchmark experiment** that measures it (`lab bench ...`). A setting is only
+changed when a measurement justifies it, and the result is written down here. The figures below come from the reference
+machine.
 
-## 1. Limite de puissance du GPU
+## 1. GPU power limit
 
-### Mesure (power-sweep, 15 octobre 2026)
-RTX 3090, `qwen3.8:27b`, 2048 tokens de contexte rempli, 256 tokens générés, 7 répétitions par niveau.
-Référence : 350 W (réglage d'usine). **Mesuré avec le bureau à distance actif** (voir `remote-desktop-gpu.md`).
+### Measurement (power-sweep)
+RTX 3090, `qwen3.8:27b`, 2048 tokens of filled context, 256 tokens generated, 7 repetitions per level.
+Baseline: 350 W (factory setting). **Measured with the remote desktop active** (see `remote-desktop-gpu.md`).
 
-| Limite | Génération | vs 350 W | Prefill | J/token | Fréquence SM |
+| Limit | Generation | vs 350 W | Prefill | J/token | SM clock |
 |---|---|---|---|---|---|
-| 350 W | 55,1 tok/s | référence | 1 238 tok/s | 7,6 | 1 591 MHz |
-| **300 W** | **50,3** | **−9 %** [−13 ; −3] | 1 166 | **6,8 (−10 %)** | 1 419 |
-| 250 W | 40,7 | −26 % | 1 059 | 7,4 (≈ 350 W) | 1 088 |
-| 220 W | 29,8 | −46 % | 889 | 8,5 | 855 |
-| 200 W | 24,8 | −55 % | 750 | 9,2 | 662 |
-| 180 W | 19,0 | −66 % | 575 | 10,9 | 506 |
-| 150 W | 9,6 | −83 % | 316 | 17,7 | 245 |
+| 350 W | 55.1 tok/s | baseline | 1,238 tok/s | 7.6 | 1,591 MHz |
+| **300 W** | **50.3** | **−9 %** [−13; −3] | 1,166 | **6.8 (−10 %)** | 1,419 |
+| 250 W | 40.7 | −26 % | 1,059 | 7.4 (≈ 350 W) | 1,088 |
+| 220 W | 29.8 | −46 % | 889 | 8.5 | 855 |
+| 200 W | 24.8 | −55 % | 750 | 9.2 | 662 |
+| 180 W | 19.0 | −66 % | 575 | 10.9 | 506 |
+| 150 W | 9.6 | −83 % | 316 | 17.7 | 245 |
 
-Lecture :
-- **300 W est le meilleur compromis** : seul niveau plus efficace en énergie que 350 W, pour 9 % de vitesse en moins.
-- **Sous 250 W**, on perd en vitesse **et** en énergie par token : le brider davantage ne sert à rien.
-- La vitesse de génération suit la fréquence SM (≈ 0,035 à 0,039 tok/s par MHz) : ici, la génération est limitée par le
-  calcul, pas par la mémoire.
-- La carte ne dépasse pas ≈ 309 W en charge, même avec une limite de 350 W.
+Reading:
+- **300 W is the best compromise**: the only level more energy-efficient than 350 W, for 9 % less speed.
+- **Below 250 W**, you lose speed **and** energy per token: capping it further is useless.
+- Generation speed follows the SM clock (≈ 0.035 to 0.039 tok/s per MHz): here, generation is compute-bound, not
+  memory-bound.
+- The card does not go above ≈ 309 W under load, even with a 350 W limit.
 
-Limites de cette mesure : un modèle, une charge, bruit de mesure (CV médian 9 %, plus petit écart détectable ≈ 10,5 %).
-La différence 300 W / 350 W (−9 %) était donc **à la limite du détectable** : d'où la confirmation ci-dessous.
+Limits of this measurement: one model, one workload, measurement noise (median CV 9 %, smallest detectable difference
+≈ 10.5 %). The 300 W / 350 W difference (−9 %) was therefore **at the edge of what is detectable**: hence the
+confirmation below.
 
-### Confirmation (power-confirm, 15 octobre 2026, 15 répétitions par niveau)
-Même modèle et même charge ; référence 350 W ; intervalles de confiance à 95 % entre crochets.
+### Confirmation (power-confirm, 15 repetitions per level)
+Same model and workload; baseline 350 W; 95 % confidence intervals in brackets.
 
-| Limite | Génération | Prefill | Temps avant 1er token | Puissance moyenne | Énergie par token |
+| Limit | Generation | Prefill | Time to 1st token | Mean power | Energy per token |
 |---|---|---|---|---|---|
-| **300 W** | **−6,8 %** [−12,5 ; −0,7] | −5,1 % | +3,7 % | −11,5 % | **−7,0 %** [−11,3 ; −2,5] |
-| 250 W | −30,7 % [−35,0 ; −26,1] | −14,5 % | +14,9 % | −23,1 % | −0,8 % (non significatif) |
+| **300 W** | **−6.8 %** [−12.5; −0.7] | −5.1 % | +3.7 % | −11.5 % | **−7.0 %** [−11.3; −2.5] |
+| 250 W | −30.7 % [−35.0; −26.1] | −14.5 % | +14.9 % | −23.1 % | −0.8 % (not significant) |
 
-Tous les écarts de 300 W sont significatifs : −7 % de vitesse environ (le vrai écart se situe probablement entre 1 et
-12 %), −7 % d'énergie par token. À 250 W la vitesse chute d'un tiers sans gain d'énergie par token : réglage écarté.
-Non noté au moment du test : l'état du bureau à distance (demandé éteint ; à vérifier si les chiffres sont comparés à de
-futures mesures).
+All the 300 W differences are significant: about −7 % speed (the real difference is probably between 1 and 12 %), −7 %
+energy per token. At 250 W speed drops by a third without any gain in energy per token: setting rejected.
+Not noted at the time of the test: the state of the remote desktop (asked to be off; check it if the numbers are
+compared with future measurements).
 
-### Appliquer de façon permanente
+### Applying it permanently
 ```bash
-lab gpu-limit install 300      # installe un service systemd (demande sudo)
-lab gpu-limit status           # limite actuelle, bornes, service installé ?
-lab gpu-limit remove           # retire le service et remet la limite d'usine
+lab gpu-limit install 300      # installs a systemd service (asks for sudo)
+lab gpu-limit status           # current limit, bounds, service installed?
+lab gpu-limit remove           # removes the service and restores the factory limit
 ```
-Le service exécute `nvidia-smi -pm 1` puis `-pl 300` à chaque démarrage. Le banc d'essai **restaure la limite qu'il a
-trouvée** à la fin de chaque test, donc il ne défait pas ce réglage.
+The service runs `nvidia-smi -pm 1` then `-pl 300` at every boot. The benchmark **restores the limit it found** at the
+end of each test, so it does not undo this setting.
 
-## 1 bis. Coût du contexte (context-scaling, 18 octobre 2026)
+## 1b. Cost of the context (context-scaling)
 
-`qwen3.8:27b`, limite 300 W, `num_ctx` 65 536, 128 tokens générés, 5 répétitions par profondeur, Ollama de production arrêté
-(le modèle de tâches n'était donc pas chargé). Cache KV du banc : **f16** d'après `bench/labbench/config.py` (valeur par
-défaut du banc ; à relire dans `meta.json`), alors que la production utilise `q8_0`. Ces chiffres viennent de `summary.csv`.
+`qwen3.8:27b`, 300 W limit, `num_ctx` 65,536, 128 tokens generated, 5 repetitions per depth, production Ollama stopped
+(so the task model was not loaded). Bench KV cache: **f16** according to `bench/labbench/config.py` (bench default; check
+in `meta.json`), whereas production uses `q8_0`. These numbers come from `summary.csv`.
 
-| Contexte rempli | Génération (tok/s) | Prefill (tok/s) | Délai avant le 1er token | Puissance moy. | Part du temps au GPU |
+| Filled context | Generation (tok/s) | Prefill (tok/s) | Time to 1st token | Mean power | Share of time on GPU |
 |---|---|---|---|---|---|
-| 512 | 48,6 ± 4,2 | 896 | 1,5 s | 253 W | 100 % |
-| 4 096 | 57,9 ± 5,2 | 1 225 | 3,6 s | 269 W | 100 % |
-| 16 384 | 59,4 ± 2,7 | 1 204 | 13,4 s | 285 W | 100 % |
-| 32 768 | 58,5 ± 2,6 | 1 126 | 27,4 s | 291 W | 100 % |
-| 56 000 | 54,9 ± 4,4 | 1 023 | 50,8 s | 294 W | 100 % |
+| 512 | 48.6 ± 4.2 | 896 | 1.5 s | 253 W | 100 % |
+| 4,096 | 57.9 ± 5.2 | 1,225 | 3.6 s | 269 W | 100 % |
+| 16,384 | 59.4 ± 2.7 | 1,204 | 13.4 s | 285 W | 100 % |
+| 32,768 | 58.5 ± 2.6 | 1,126 | 27.4 s | 291 W | 100 % |
+| 56,000 | 54.9 ± 4.4 | 1,023 | 50.8 s | 294 W | 100 % |
 
-Lecture :
-- **Le coût d'un grand contexte se paie au premier token** : environ 0,9 ms par token de prompt, soit ≈ 13 s pour 16 000
-  tokens, ≈ 27 s pour 32 000, ≈ 51 s pour 56 000 (prefill de 1 225 à 1 023 tok/s, en baisse de ≈ 16 %, intervalles étroits).
-- **La génération reste stable (≈ 55 à 59 tok/s) de 4 096 à 56 000 tokens** : les intervalles de confiance se recouvrent. Le
-  recul à 56 000 (−7 % par rapport au plateau) n'est pas démontré. Latence inter-token p95 : 51 → 56 ms.
-- **Le point à 512 est suspect** (génération 48,6 tok/s, puissance 253 W, fréquence SM 1 425 MHz, plus bas que les autres,
-  et TTFT très bruité, CV 45 %) : des essais très courts, GPU pas encore à plein régime. Ne pas s'en servir comme référence
-  de « vitesse à vide » ; les écarts en % du fichier `comparisons.csv` sont mesurés par rapport à lui et sont donc trompeurs.
-- **Le modèle reste à 100 % GPU à 65 536 tokens de contexte**, seul sur la carte. Pas de bridage thermique (max 63 °C) ;
-  la carte est bridée par la limite de puissance (300 W) presque tout le temps, ce qui est le réglage voulu.
-- Énergie par token (7,6 → 110 J) : elle inclut le prefill ; ce n'est pas l'efficacité de la génération.
+Reading:
+- **The cost of a large context is paid at the first token**: about 0.9 ms per prompt token, i.e. ≈ 13 s for 16,000
+  tokens, ≈ 27 s for 32,000, ≈ 51 s for 56,000 (prefill from 1,225 to 1,023 tok/s, down ≈ 16 %, narrow intervals).
+- **Generation stays stable (≈ 55 to 59 tok/s) from 4,096 to 56,000 tokens**: the confidence intervals overlap. The
+  drop at 56,000 (−7 % from the plateau) is not demonstrated. p95 inter-token latency: 51 → 56 ms.
+- **The 512 point is suspicious** (generation 48.6 tok/s, power 253 W, SM clock 1,425 MHz, lower than the others, and a
+  very noisy TTFT, CV 45 %): very short trials, GPU not yet at full speed. Do not use it as an "empty context speed"
+  reference; the % differences in `comparisons.csv` are measured against it and are therefore misleading.
+- **The model stays 100 % on the GPU with a 65,536-token context**, alone on the card. No thermal throttling (max
+  63 °C); the card is capped by the power limit (300 W) almost all the time, which is the intended setting.
+- Energy per token (7.6 → 110 J): it includes the prefill; it is not the efficiency of generation.
 
-Limites : pas de comparaison de `num_ctx` (tout le test est à 65 536, donc l'effet de la **taille de fenêtre** sur la VRAM
-et la vitesse à vide n'est pas mesuré, seulement l'effet de la **quantité de texte** dans la fenêtre) ; cache f16, pas
-`q8_0` ; un seul modèle ; 5 répétitions. Génération à 58 tok/s à 300 W, contre 50 tok/s mesurés au `power-sweep` : écart
-non expliqué (le bureau à distance était actif lors du premier test, état non noté pour celui-ci).
+Limits: no comparison of `num_ctx` (the whole test is at 65,536, so the effect of the **window size** on VRAM and on
+speed with an empty context is not measured, only the effect of the **amount of text** in the window); f16 cache, not
+`q8_0`; a single model; 5 repetitions. Generation at 58 tok/s at 300 W, versus 50 tok/s measured in the `power-sweep`:
+difference not explained (the remote desktop was active during the first test, state not noted for this one).
 
-## 1 ter. Génération d'images : Qwen-Image-2.1 dans ComfyUI (21 octobre 2026)
+## 1c. Image generation: Qwen-Image-2.1 in ComfyUI
 
-**Configuration** : ComfyUI 0.39.0, PyTorch 2.14.1+cu130, RTX 3090. Modèle de diffusion `qwen-image-2.1-UC-BF16.gguf` (14,2 Go, chargé par le nœud *Unet Loader (GGUF)* du fork `leejet/ComfyUI-GGUF`), encodeur de texte `qwen3vl_8b_int8_convrot.safetensors` (9,35 Go), VAE `qwen_image_2.1_vae_bf16.safetensors`. Réglages du template : 1024×1024 (1:1, 1,0 mégapixel), 25 étapes, `cfg` 1,0, `euler` / `simple`, `refine_prompt` désactivé. Fichiers vérifiés par SHA256.
+**Configuration**: ComfyUI 0.39.0, PyTorch 2.14.1+cu130, RTX 3090. Diffusion model `qwen-image-2.1-UC-BF16.gguf`
+(14.2 GB, loaded by the *Unet Loader (GGUF)* node of the `leejet/ComfyUI-GGUF` fork), text encoder
+`qwen3vl_8b_int8_convrot.safetensors` (9.35 GB), VAE `qwen_image_2.1_vae_bf16.safetensors`. Template settings:
+1024×1024 (1:1, 1.0 megapixel), 25 steps, `cfg` 1.0, `euler` / `simple`, `refine_prompt` disabled. Files checked by
+SHA256.
 
-| Essai | Durée | Remarque |
+| Trial | Duration | Note |
 |---|---|---|
-| Prompt par défaut du template (portrait) | **42,55 s** | première génération : charge les modèles |
-| Test 1 (ruelle de ramen) | 32,66 s | modèles déjà chargés |
-| Test 2 (horloger) | 32,39 s | idem |
-| Test 3 (bibliothèque) | 32,42 s | idem |
-| Test 3 (bibliothèque) relancé après vidage des modèles et du cache | 37,82 s | rechargement des modèles |
+| Template's default prompt (portrait) | **42.55 s** | first generation: loads the models |
+| Test 1 (ramen alley) | 32.66 s | models already loaded |
+| Test 2 (watchmaker) | 32.39 s | same |
+| Test 3 (library) | 32.42 s | same |
+| Test 3 (library) run again after unloading the models and the cache | 37.82 s | models reloaded |
 
-- **Régime établi : ≈ 32,5 s par image** (≈ 1,3 s par étape, encodage du texte et VAE compris : je n'ai pas séparé ces temps). Très stable : 32,39 à 32,66 s sur trois prompts différents.
-- **Coût du chargement : ≈ 5 s** (rechargement après vidage, 37,82 contre 32,42) **à ≈ 10 s** (toute première image). L'écart entre ces deux valeurs n'est pas expliqué : les prompts différaient, et je ne sais pas ce que « vider le cache » a vidé exactement.
-- **VRAM pendant la génération** : 23 347 Mio utilisés sur 24 576 Mio (95 %), dont 22 682 Mio pour le processus ComfyUI et ≈ 600 Mio pour le bureau (gnome-shell, bureau à distance). GPU à 100 %, 298 W sur 300 W, 53 °C, état P2. Ces 22,7 Go ne sont pas le besoin réel du modèle (14,2 Go) : ComfyUI utilise la VRAM disponible pour garder des données en cache.
-- **Qualité observée** (4 images) : très bonne fidélité sur un prompt long et descriptif ; texte court en gros caractères correct ; erreurs sur l'heure d'une horloge, sur un texte manuscrit de petite taille et sur une instruction de placement précise (« le chat sur le vélo »).
-- **Mise en place** : `/root/.triton` n'est pas accessible en écriture pour l'utilisateur du conteneur, ce qui faisait échouer l'encodeur de texte (`PermissionError`). Contournement appliqué avec `docker exec` (perdu si le conteneur est recréé) ; correction durable à faire : variable `TRITON_CACHE_DIR` dans `comfyui/docker-compose.yml`.
+- **Steady state: ≈ 32.5 s per image** (≈ 1.3 s per step, text encoding and VAE included: these times were not
+  separated). Very stable: 32.39 to 32.66 s on three different prompts.
+- **Loading cost: ≈ 5 s** (reload after unloading, 37.82 versus 32.42) **to ≈ 10 s** (very first image). The difference
+  between these two values is not explained: the prompts differed, and it is not known exactly what "clearing the
+  cache" cleared.
+- **VRAM during generation**: 23,347 MiB used out of 24,576 MiB (95 %), of which 22,682 MiB for the ComfyUI process and
+  ≈ 600 MiB for the desktop (gnome-shell, remote desktop). GPU at 100 %, 298 W out of 300 W, 53 °C, state P2. These
+  22.7 GB are not the model's real need (14.2 GB): ComfyUI uses the available VRAM to keep data cached.
+- **Observed quality** (4 images): very good fidelity on a long, descriptive prompt; short text in large characters
+  correct; errors on the time of a clock, on small handwritten text and on a precise placement instruction ("the cat on
+  the bicycle").
+- **Setup**: `/root/.triton` was not writable for the container's user, which made the text encoder fail
+  (`PermissionError`). Now fixed durably in `comfyui/docker-compose.yml` (`TRITON_CACHE_DIR`).
 
-Détail, exemples et pièges dans [image-generation.md](image-generation.md).
+Details, examples and pitfalls in [image-generation.md](image-generation.md).
 
-**Non mesuré** : durée par étape isolée ; résolutions supérieures à 1 mégapixel ; nombre d'étapes différent ; Q8_0 et INT8 comparés au BF16 (vitesse, qualité, VRAM) ; effet du bureau à distance sur la VRAM disponible ; dispersion sur plusieurs graines ; consommation moyenne sur une image complète.
+**Not measured**: isolated per-step duration; resolutions above 1 megapixel; a different number of steps; Q8_0 and INT8
+compared with BF16 (speed, quality, VRAM); effect of the remote desktop on available VRAM; spread over several seeds;
+mean power over a full image.
 
-## 2. Les réglages d'Ollama et ce qu'ils changent
+## 2. Ollama settings and what they change
 
-| Réglage (`ai-stack/.env`) | Effet | Comment le mesurer |
+| Setting (`ai-stack/.env`) | Effect | How to measure it |
 |---|---|---|
-| `OLLAMA_CONTEXT_LENGTH` | Taille de la fenêtre de contexte par défaut. Plus grand = plus de VRAM (cache KV) et un prefill plus long | `lab bench context-scaling` |
-| `OLLAMA_KV_CACHE_TYPE` | `f16` (le plus précis), `q8_0` (≈ moitié de la mémoire du cache), `q4_0` (≈ quart ; qualité à surveiller) | `lab bench kv-cache` (vitesse + retrouver une info) et `kv-quality` |
-| `OLLAMA_FLASH_ATTENTION` | Attention optimisée ; requise pour quantifier le cache KV | `kv-cache` (facteur `flash_attention`) |
-| `OLLAMA_NUM_PARALLEL` | Requêtes servies en même temps. Chaque emplacement multiplie le cache KV | `lab bench concurrency` |
-| `OLLAMA_KEEP_ALIVE` | Durée de maintien du modèle en VRAM. Évite les rechargements (le chargement de 17 Go prend de longues secondes) | observer `load_s` dans `runs.csv` |
-| `OLLAMA_MAX_LOADED_MODELS` | Nombre de modèles en VRAM simultanément (2 avec un modèle de tâches) | `ollama ps` |
+| `OLLAMA_CONTEXT_LENGTH` | Default context window size. Larger = more VRAM (KV cache) and a longer prefill | `lab bench context-scaling` |
+| `OLLAMA_KV_CACHE_TYPE` | `f16` (most precise), `q8_0` (≈ half the cache memory), `q4_0` (≈ a quarter; quality to watch) | `lab bench kv-cache` (speed + finding a piece of information) and `kv-quality` |
+| `OLLAMA_FLASH_ATTENTION` | Optimised attention; required to quantise the KV cache | `kv-cache` (`flash_attention` factor) |
+| `OLLAMA_NUM_PARALLEL` | Requests served at the same time. Each slot multiplies the KV cache | `lab bench concurrency` |
+| `OLLAMA_KEEP_ALIVE` | How long the model stays in VRAM. Avoids reloads (loading 17 GB takes many seconds) | look at `load_s` in `runs.csv` |
+| `OLLAMA_MAX_LOADED_MODELS` | Number of models in VRAM at the same time (2 with a task model) | `ollama ps` |
 
-Les ordres de grandeur du cache KV (f16 > q8_0 > q4_0) sont des propriétés du format ; **les pertes de vitesse et de
-qualité ne sont connues que partiellement : `kv-cache` et `kv-decode` (18 octobre) ont mesuré mémoire, vitesse et l'aiguille ; `kv-quality` (18 octobre) n'a montré aucune différence mais discrimine mal (3 calculs justes sur 12)**.
+The orders of magnitude of the KV cache (f16 > q8_0 > q4_0) are properties of the format; **the losses of speed and
+quality are only partly known: `kv-cache` and `kv-decode` measured memory, speed and the needle; `kv-quality` showed no
+difference but discriminates poorly (3 correct calculations out of 12)**.
 
-## 3. Marche à suivre (dans cet ordre)
+## 3. Procedure (in this order)
 
-1. **Environnement propre** : arrête le bureau à distance (`lab bureau off`), ferme les navigateurs et les applications
-   graphiques lourdes. Vérifie `lab status` : le GPU doit être en `P8` au repos (≈ 20 W).
-2. `lab bench quick-smoke` : s'assure que tout fonctionne (5 min).
-3. `lab bench power-confirm` : confirme 300 W avec 15 répétitions (≈ 10 min). **Fait le 16 octobre : 300 W installé.**
-4. `lab bench context-scaling` : coût du contexte, pour choisir `OLLAMA_CONTEXT_LENGTH`. **Fait le 18 octobre** (voir §1 bis).
-5. `lab bench kv-cache` (**fait le 18 octobre**), puis `lab bench kv-decode` (**fait le 18 octobre**) et `lab bench kv-quality` (**fait le 18 octobre, peu informatif**), puis `lab bench kv-quality-easy` (**fait le 19 octobre**, 150 calculs faciles) : choisir f16 ou q8_0 en connaissance de cause.
-   Puis `lab bench ctx-window` (taille de la fenêtre × type de cache : VRAM réservée et limite avant débordement) : **fait le 18 octobre**.
-6. `lab bench concurrency` : seulement si tu comptes servir plusieurs requêtes en parallèle (n8n + Open WebUI + agents).
-7. Après chaque changement dans `ai-stack/.env` : `cd ai-stack && docker compose up -d`, puis vérifie
-   `docker exec ollama ollama ps` : le modèle doit rester à **100 % GPU**.
+1. **Clean environment**: stop the remote desktop (`lab desktop off`), close browsers and heavy graphical
+   applications. Check `lab status`: the GPU must be in `P8` at idle (≈ 20 W).
+2. `lab bench quick-smoke`: makes sure everything works (5 min).
+3. `lab bench power-confirm`: confirms 300 W with 15 repetitions (≈ 10 min).
+4. `lab bench context-scaling`: cost of the context, to choose `OLLAMA_CONTEXT_LENGTH` (see §1b).
+5. `lab bench kv-cache`, then `lab bench kv-decode`, `lab bench kv-quality` and `lab bench kv-quality-easy` (150 easy
+   calculations): choose f16 or q8_0 knowingly. Then `lab bench ctx-window` (window size × cache type: reserved VRAM
+   and limit before spilling over).
+6. `lab bench concurrency`: only if you intend to serve several requests in parallel (n8n + Open WebUI + agents).
+7. After each change in `ai-stack/.env`: `cd ai-stack && docker compose up -d`, then check
+   `docker exec ollama ollama ps`: the model must stay **100 % GPU**.
 
-Durées indiquées dans `bench/README.md` : estimations, non mesurées sauf `power-sweep` (≈ 15 min réels).
+Durations given in `bench/README.md`: estimates, not measured except where stated.
 
-## 4. Journal des décisions
+## 4. Decision log (reference machine)
 
-| Date | Décision | Preuve |
+| Date | Decision | Evidence |
 |---|---|---|
-| 2026-10-15 | Limite de puissance cible : 300 W | `power-sweep` (voir §1) |
-| 2026-10-16 | **300 W confirmé** et installé en permanence (`lab gpu-limit install 300`) | `power-confirm`, 15 répétitions : −7 % vitesse, −7 % énergie/token, −11,5 % puissance moyenne (voir §1) |
-| 2026-10-18 | `OLLAMA_CONTEXT_LENGTH` **inchangé** (32 768) : aucune mesure ne justifie de le modifier ; 65 536 reste possible par préréglage | `context-scaling` (§1 bis) : 100 % GPU à 65 536, génération stable, coût = délai avant le 1er token |
-| 2026-10-18 | `OLLAMA_KV_CACHE_TYPE` **inchangé** (`q8_0`), à confirmer | `kv-cache` : VRAM ≈ 20 643 / 19 760 / 19 250 Mio (f16 / q8_0 / q4_0), préremplissage et TTFT identiques à < 1 %, aiguille 100 % partout ; décodage **invalide** (4 à 7 tokens) ; `kv-decode` : `f16` 58,6, `q8_0` 55,7 (5 mesures sur 6), `q4_0` 55,4 tok/s, écart `f16`/`q8_0` ≈ 5 % non démontré ; VRAM reproductible ; `kv-quality` : 30 (`f16`), 29 (`q8_0`), 30 (`q4_0`) réponses justes sur 120, aucune différence mais test peu discriminant (3 calculs justes sur 12) |
-| 2026-10-18 | Fenêtre de contexte : **32 768 par défaut inchangé** ; 65 536 possible en `q8_0` avec le petit modèle ; 98 304 déconseillé | `ctx-window` : VRAM `q8_0` 19 045 / 19 065 / 19 769 / 21 147 / 22 555 Mio (8 192 → 98 304), `f16` 22 854 à 65 536 puis **débordement à 98 304** (81 % sur GPU, décodage 24 tok/s) ; pas de perte de vitesse détectable jusqu'à 65 536 |
-| 2026-10-19 | Aucun réglage changé : le cache de préfixe d'Ollama fonctionne déjà (le début identique d'un prompt est relu 10 à 23 fois plus vite) | `prefix-cache` (f16) : TTFT chaud 0,56 / 0,63 / 0,81 s contre froid 1,4 / 6,5 / 18,9 s pour ≈ 950 / 7 400 / 21 500 tokens communs. Pour les agents : garder le début du prompt stable |
-| 2026-10-19 | `lab update` : 6 images mises à jour (dont `ollama`), plus MinIO (Langfuse, non mémorisé pour `lab rollback`, corrigé) | `kv-decode` refait après la mise à jour : `f16` 57,6 tok/s (avant 58,6), `q8_0` 54,7 et `q4_0` 56,3 hors une mesure à ≈ 23 tok/s dans chacun ; VRAM identique ; aucune régression visible ; `q8_0` conservé |
-| 2026-10-19 | `OLLAMA_KV_CACHE_TYPE` **`q8_0` confirmé** (choix maintenu) | `kv-quality-easy` : 147 (`f16`), 147-148 (`q8_0`), 148-149 (`q4_0`) bonnes réponses sur 150, aucune perte visible ; test peu sollicitant pour le cache (≈ 65 tokens par question) ; `q4_0` n'économise que 0,5 Gio de plus |
-| 2026-10-19 | `OLLAMA_NUM_PARALLEL` **inchangé (1)** | `concurrency` : débit total ≈ 36-38 tok/s quel que soit le nombre de clients (1, 2, 4) et `NUM_PARALLEL` (1, 2, 4) ; premier token ≈ 1,1 / 2,9 / 6,4 s pour 1 / 2 / 4 clients ; VRAM identique : les demandes sont traitées l'une après l'autre ; cause : Ollama ignore `NUM_PARALLEL` pour `qwen35` (confirmé par `server-logs.txt`) |
-| 2026-10-21 | Image : Qwen-Image-2.1 `UC-BF16.gguf` essayé dans ComfyUI | ≈ 32,5 s par image en 1024×1024 / 25 étapes (modèles chargés), VRAM 23,3 Gio sur 24 ; voir §1 ter |
-| 2026-10-15 | Bureau à distance éteint par défaut (−100 W au repos) | `remote-desktop-gpu.md` |
+| 2026-10-15 | Target power limit: 300 W | `power-sweep` (see §1) |
+| 2026-10-15 | Remote desktop off by default (−100 W at idle) | `remote-desktop-gpu.md` |
+| 2026-10-16 | **300 W confirmed** and installed permanently (`lab gpu-limit install 300`) | `power-confirm`, 15 repetitions: −7 % speed, −7 % energy/token, −11.5 % mean power (see §1) |
+| 2026-10-18 | `OLLAMA_CONTEXT_LENGTH` **unchanged** (32,768): no measurement justifies changing it; 65,536 remains possible as a preset | `context-scaling` (§1b): 100 % GPU at 65,536, stable generation, cost = time to first token |
+| 2026-10-18 | `OLLAMA_KV_CACHE_TYPE` **unchanged** (`q8_0`), to be confirmed | `kv-cache`: VRAM ≈ 20,643 / 19,760 / 19,250 MiB (f16 / q8_0 / q4_0), prefill and TTFT identical within < 1 %, needle 100 % everywhere; decoding **invalid** (4 to 7 tokens); `kv-decode`: `f16` 58.6, `q8_0` 55.7 (5 measurements out of 6), `q4_0` 55.4 tok/s, `f16`/`q8_0` difference ≈ 5 % not demonstrated; VRAM reproducible; `kv-quality`: 30 (`f16`), 29 (`q8_0`), 30 (`q4_0`) correct answers out of 120, no difference but a poorly discriminating test (3 correct calculations out of 12) |
+| 2026-10-18 | Context window: **32,768 by default unchanged**; 65,536 possible in `q8_0` with the small model; 98,304 not recommended | `ctx-window`: VRAM `q8_0` 19,045 / 19,065 / 19,769 / 21,147 / 22,555 MiB (8,192 → 98,304), `f16` 22,854 at 65,536 then **spill-over at 98,304** (81 % on GPU, decoding 24 tok/s); no detectable speed loss up to 65,536 |
+| 2026-10-19 | No setting changed: Ollama's prefix cache already works (the identical start of a prompt is read 10 to 23 times faster) | `prefix-cache` (f16): warm TTFT 0.56 / 0.63 / 0.81 s versus cold 1.4 / 6.5 / 18.9 s for ≈ 950 / 7,400 / 21,500 shared tokens. For agents: keep the start of the prompt stable |
+| 2026-10-19 | `lab update`: 6 images updated (including `ollama`), plus MinIO (Langfuse, not recorded for `lab rollback`, fixed) | `kv-decode` run again after the update: `f16` 57.6 tok/s (before 58.6), `q8_0` 54.7 and `q4_0` 56.3 apart from one measurement at ≈ 23 tok/s in each; identical VRAM; no visible regression; `q8_0` kept |
+| 2026-10-19 | `OLLAMA_KV_CACHE_TYPE` **`q8_0` confirmed** (choice kept) | `kv-quality-easy`: 147 (`f16`), 147-148 (`q8_0`), 148-149 (`q4_0`) correct answers out of 150, no visible loss; a test that puts little load on the cache (≈ 65 tokens per question); `q4_0` only saves 0.5 GiB more |
+| 2026-10-19 | `OLLAMA_NUM_PARALLEL` **unchanged (1)** | `concurrency`: total throughput ≈ 36-38 tok/s whatever the number of clients (1, 2, 4) and `NUM_PARALLEL` (1, 2, 4); first token ≈ 1.1 / 2.9 / 6.4 s for 1 / 2 / 4 clients; identical VRAM: requests are handled one after the other; cause: Ollama ignores `NUM_PARALLEL` for `qwen35` (confirmed by `server-logs.txt`) |
+| 2026-10-21 | Images: Qwen-Image-2.1 `UC-BF16.gguf` tried in ComfyUI | ≈ 32.5 s per image at 1024×1024 / 25 steps (models loaded), VRAM 23.3 GiB out of 24; see §1c |
 
-Ajoute une ligne à chaque changement de réglage : date, décision, mesure qui la justifie.
+Add a line for each settings change: date, decision, measurement that justifies it.
 
-## 5. Ce qui n'est pas mesuré
+## 5. What is not measured
 
-- `prefix-cache` et `concurrency` : mesurés en `f16` seulement ; pour `concurrency`, `NUM_PARALLEL` est ignoré par Ollama pour l'architecture `qwen35` (journal du serveur : « does not currently support parallel requests », `-np 1`) (`ctx-window` : mesuré, voir le journal) (`kv-cache` : VRAM et préremplissage ; `kv-decode` : vitesse de décodage)
-  à ce jour (`context-scaling` : voir §1 bis). Ne choisis pas ces réglages sur des chiffres venus d'ailleurs.
-- La limite de 300 W n'est confirmée que pour ce modèle et cette charge (génération, 2 048 tokens de contexte).
-- L'effet du bureau à distance sur le bruit du `power-sweep` (supposé, non quantifié).
+- `prefix-cache` and `concurrency`: measured in `f16` only; for `concurrency`, `NUM_PARALLEL` is ignored by Ollama for
+  the `qwen35` architecture (server log: "does not currently support parallel requests", `-np 1`). Do not choose these
+  settings on numbers that come from elsewhere.
+- The 300 W limit is only confirmed for this model and this workload (generation, 2,048 tokens of context).
+- The effect of the remote desktop on the noise of the `power-sweep` (assumed, not quantified).

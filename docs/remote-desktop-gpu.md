@@ -1,50 +1,49 @@
-# Impact du bureau à distance sur la consommation du GPU
+# Impact of the remote desktop on GPU power draw
 
-Analyse réalisée le 15 octobre 2026 sur AiBeast (RTX 3090, pilote 595.99.02, Ubuntu 26.04).
+Analysis done on the reference machine (RTX 3090, driver 595.99.02, Ubuntu 26.04).
 
-## Résumé
+## Summary
 
-Le service système `gnome-remote-desktop` (bureau à distance) maintenait la RTX 3090 dans l'état de performance
-**P2 (calcul)** en permanence, même avec 0 % d'utilisation : **~123 W au repos** au lieu de **~17-23 W** (état P8).
-L'arrêt du service a fait passer le GPU en P8 en moins de 20 secondes. Écart mesuré : **~100 W en continu**,
-soit ~2,4 kWh/jour.
+The system service `gnome-remote-desktop` (remote desktop) kept the RTX 3090 permanently in performance state
+**P2 (compute)**, even at 0 % utilisation: **~123 W at idle** instead of **~17-23 W** (P8 state). Stopping the service
+brought the GPU to P8 in less than 20 seconds. Measured difference: **~100 W continuously**, i.e. ~2.4 kWh/day.
 
-## 1. Symptôme
+## 1. Symptom
 
-| Mesure | Valeur |
+| Measurement | Value |
 |---|---|
-| Puissance au repos (banc d'essai, `quick-smoke`) | 123,3 W, 44 °C |
-| Puissance au repos (banc d'essai, `power-sweep`) | 124,5 W |
-| `nvidia-smi`, GPU à 0 % d'utilisation | P2, SM 1740 MHz, mémoire 9501 MHz, 124 W |
-| Ventilateur | 53 % à 44 °C |
-| VRAM utilisée sans modèle chargé | 777 à 1148 Mo |
+| Idle power (benchmark, `quick-smoke`) | 123.3 W, 44 °C |
+| Idle power (benchmark, `power-sweep`) | 124.5 W |
+| `nvidia-smi`, GPU at 0 % utilisation | P2, SM 1740 MHz, memory 9501 MHz, 124 W |
+| Fan | 53 % at 44 °C |
+| VRAM used without a loaded model | 777 to 1148 MB |
 
-Une RTX 3090 inactive est normalement en P8 (SM ~210 MHz) et consomme 15 à 40 W.
+An idle RTX 3090 is normally in P8 (SM ~210 MHz) and draws 15 to 40 W.
 
-## 2. Diagnostic
+## 2. Diagnosis
 
-`nvidia-smi` listait des processus marqués `C+G` (contexte graphique **et** contexte de calcul CUDA) :
+`nvidia-smi` listed processes marked `C+G` (graphics context **and** CUDA compute context):
 
-| Processus | Type | VRAM |
+| Process | Type | VRAM |
 |---|---|---|
-| `gnome-remote-desktop-daemon` | C+G | 344 Mo |
-| `ptyxis` (terminal) | C+G | 46 Mo |
-| `resources` (moniteur système) | C+G | 31 Mo |
-| `gnome-shell` (×2), `Xwayland` | G | 112 / 161 / 6 Mo |
+| `gnome-remote-desktop-daemon` | C+G | 344 MB |
+| `ptyxis` (terminal) | C+G | 46 MB |
+| `resources` (system monitor) | C+G | 31 MB |
+| `gnome-shell` (×2), `Xwayland` | G | 112 / 161 / 6 MB |
 
-Hypothèse : un contexte de calcul ouvert empêche le pilote de redescendre en P8. Le principal suspect était le
-bureau à distance, qui est la plus grosse de ces applications.
+Hypothesis: an open compute context prevents the driver from going back down to P8. The main suspect was the remote
+desktop, the largest of these applications.
 
 ## 3. Test
 
-Le service actif était la version **système** (pas la version utilisateur) :
+The active service was the **system** version (not the user version):
 
 ```bash
 systemctl --user is-active gnome-remote-desktop.service   # inactive
 systemctl is-active gnome-remote-desktop.service          # active
 ```
 
-Test réalisé depuis une session SSH (pour ne pas être coupé), avec l'arrêt du service :
+Test done from an SSH session (so as not to be cut off), by stopping the service:
 
 ```bash
 sudo systemctl stop gnome-remote-desktop.service
@@ -52,95 +51,94 @@ sleep 20
 nvidia-smi --query-gpu=pstate,clocks.sm,power.draw --format=csv
 ```
 
-| | État | SM | Puissance |
+| | State | SM | Power |
 |---|---|---|---|
-| Avant | P2 | 1740 MHz | 122,7 - 123,0 W |
-| Après arrêt du service | **P8** | **210 MHz** | **17,2 - 23,3 W** |
+| Before | P2 | 1740 MHz | 122.7 - 123.0 W |
+| After stopping the service | **P8** | **210 MHz** | **17.2 - 23.3 W** |
 
-**Conclusion : l'arrêt de ce service suffit à ramener le GPU au repos réel.** L'écart est d'environ **100 W**.
-Cause établie par le test ; le mécanisme exact (contexte CUDA / encodage GPU de la capture) est une explication
-probable, pas vérifiée dans le code du service.
+**Conclusion: stopping this service is enough to bring the GPU back to real idle.** The difference is about
+**100 W**. Cause established by the test; the exact mechanism (CUDA context / GPU encoding of the capture) is a probable
+explanation, not verified in the service's code.
 
-## 4. Coût
+## 4. Cost
 
-Hypothèses : écart de 100 W, machine allumée 24 h/24, électricité à 0,30 €/kWh (à remplacer par ton tarif).
+Assumptions: 100 W difference, machine on 24/7, electricity at €0.30/kWh (replace with your rate).
 
-- 100 W × 24 h = **2,4 kWh/jour**
-- ≈ **0,72 €/jour**, ≈ **260 €/an**
-- Avec le bureau à distance laissé actif en continu. Pas de coût tant qu'il est éteint.
+- 100 W × 24 h = **2.4 kWh/day**
+- ≈ **€0.72/day**, ≈ **€260/year**
+- With the remote desktop left on continuously. No cost while it is off.
 
-## 5. Effet sur les résultats du banc d'essai
+## 5. Effect on the benchmark results
 
-Le `power-sweep` (49 mesures, qwen3.8:27b) a été réalisé **avec le bureau à distance actif**.
+The `power-sweep` (49 measurements, qwen3.8:27b) was run **with the remote desktop active**.
 
-- **Comparaisons entre limites de puissance : valables.** Tous les niveaux ont subi les mêmes conditions.
-- **Valeur absolue du J/token : légèrement gonflée.** Elle inclut la consommation de fond du GPU.
-- **Bruit de mesure : plausiblement augmenté** (CV médian 9 %, plus petit écart détectable ~10,5 %).
-- **Mesure de la puissance au repos : faussée** (124,5 W au lieu de ~20 W).
+- **Comparisons between power limits: valid.** Every level had the same conditions.
+- **Absolute J/token value: slightly inflated.** It includes the GPU's background draw.
+- **Measurement noise: plausibly increased** (median CV 9 %, smallest detectable difference ~10.5 %).
+- **Idle power measurement: wrong** (124.5 W instead of ~20 W).
 
-Conclusions du `power-sweep` (inchangées) : 300 W est le meilleur compromis (−9 % de vitesse de génération,
-−10 % d'énergie par token), et au-dessous de 250 W on perd sur tous les tableaux. Une expérience de confirmation
-(`power-confirm`, 15 répétitions à 350 / 300 / 250 W) est prévue **avec le bureau à distance éteint**.
+Conclusions of the `power-sweep` (unchanged): 300 W is the best compromise (−9 % generation speed, −10 % energy per
+token), and below 250 W you lose on every count. A confirmation experiment (`power-confirm`, 15 repetitions at 350 /
+300 / 250 W) is planned **with the remote desktop off**.
 
 ## 6. Options
 
-| Option | Effet | Commande |
+| Option | Effect | Command |
 |---|---|---|
-| Éteint par défaut, démarré à la demande | économie complète, démarrage par SSH | `sudo systemctl start gnome-remote-desktop.service` |
-| Ne pas le lancer au démarrage | idem après redémarrage | `sudo systemctl disable gnome-remote-desktop.service` |
-| Toujours actif | confort, ~100 W de plus en continu | aucune |
-| Autre outil d'accès à distance | à évaluer : certains gardent aussi un contexte de calcul | non vérifié |
+| Off by default, started on demand | full saving, started over SSH | `lab desktop on` / `lab desktop off` |
+| Not started at boot | same after a reboot | `sudo systemctl disable gnome-remote-desktop.service` |
+| Always on | comfort, ~100 W more continuously | none |
+| Another remote access tool | to evaluate: some also keep a compute context | not verified |
 
-Prérequis pour les deux premières options : un **accès de secours en SSH** (installé et testé le même jour :
-`openssh-server`, accès par VPN depuis l'extérieur). Ne jamais arrêter le service depuis un terminal ouvert
-*dans* le bureau à distance : la session se coupe.
+Prerequisite for the first two options: an **SSH fallback access** (`openssh-server`, VPN access from outside). Never
+stop the service from a terminal opened *inside* the remote desktop: the session gets cut.
 
-## 7. Procédure de test reproductible
+## 7. Reproducible test procedure
 
-1. Se connecter en SSH depuis un autre appareil (pas via le bureau à distance).
-2. Noter l'état : `nvidia-smi --query-gpu=pstate,clocks.sm,power.draw --format=csv`.
-3. Arrêter le service : `sudo systemctl stop gnome-remote-desktop.service`, attendre 20 s, relire l'état.
-4. Si le GPU reste en P2 : lister les contextes de calcul restants
+1. Connect over SSH from another device (not through the remote desktop).
+2. Note the state: `nvidia-smi --query-gpu=pstate,clocks.sm,power.draw --format=csv`.
+3. Stop the service: `sudo systemctl stop gnome-remote-desktop.service`, wait 20 s, read the state again.
+4. If the GPU stays in P2: list the remaining compute contexts
    `nvidia-smi --query-compute-apps=pid,name,used_memory --format=csv`.
-5. Rétablir : `sudo systemctl start gnome-remote-desktop.service`.
+5. Restore: `sudo systemctl start gnome-remote-desktop.service`.
 
-## 8. Limites et points non vérifiés
+## 8. Limits and unverified points
 
-- Une seule machine, un seul pilote (595.99.02). Un autre pilote ou une autre version du service peut se comporter
-  autrement.
-- Le mécanisme précis (CUDA ou NVENC dans le service) n'est pas confirmé ; seule la corrélation « service arrêté →
-  P8 » est mesurée.
-- `ptyxis` et `resources` portent aussi un contexte `C+G`. Leur effet seul n'a pas été testé ; le test montre qu'ils ne
-  suffisent pas à maintenir le GPU en P2 quand le bureau à distance est arrêté (ils étaient ouverts ou pas, non noté).
-- Le coût annuel dépend entièrement du tarif et du temps d'allumage supposés.
-- Le `power-sweep` n'a pas été refait sans bureau à distance au moment de cette note.
+- A single machine, a single driver (595.99.02). Another driver or another version of the service may behave
+  differently.
+- The precise mechanism (CUDA or NVENC in the service) is not confirmed; only the correlation "service stopped → P8" is
+  measured.
+- `ptyxis` and `resources` also hold a `C+G` context. Their effect alone was not tested; the test shows they are not
+  enough to keep the GPU in P2 when the remote desktop is stopped (whether they were open or not was not noted).
+- The yearly cost entirely depends on the assumed rate and uptime.
+- The `power-sweep` had not been run again without the remote desktop when this note was written.
 
-## Annexe : résultats du `power-sweep` (bureau à distance actif)
+## Appendix: `power-sweep` results (remote desktop active)
 
-qwen3.8:27b, 7 répétitions par niveau, 2048 tokens de contexte rempli, 256 tokens générés, référence 350 W.
+qwen3.8:27b, 7 repetitions per level, 2048 tokens of filled context, 256 tokens generated, baseline 350 W.
 
-| Limite | Génération (tok/s) | vs 350 W | Prefill (tok/s) | J/token | Fréquence SM (MHz) |
+| Limit | Generation (tok/s) | vs 350 W | Prefill (tok/s) | J/token | SM clock (MHz) |
 |---|---|---|---|---|---|
-| 350 W | 55,1 | référence | 1 238 | 7,6 | 1 591 |
-| 300 W | 50,3 | −9 % | 1 166 | 6,8 | 1 419 |
-| 250 W | 40,7 | −26 % | 1 059 | 7,4 | 1 088 |
-| 220 W | 29,8 | −46 % | 889 | 8,5 | 855 |
-| 200 W | 24,8 | −55 % | 750 | 9,2 | 662 |
-| 180 W | 19,0 | −66 % | 575 | 10,9 | 506 |
-| 150 W | 9,6 | −83 % | 316 | 17,7 | 245 |
+| 350 W | 55.1 | baseline | 1,238 | 7.6 | 1,591 |
+| 300 W | 50.3 | −9 % | 1,166 | 6.8 | 1,419 |
+| 250 W | 40.7 | −26 % | 1,059 | 7.4 | 1,088 |
+| 220 W | 29.8 | −46 % | 889 | 8.5 | 855 |
+| 200 W | 24.8 | −55 % | 750 | 9.2 | 662 |
+| 180 W | 19.0 | −66 % | 575 | 10.9 | 506 |
+| 150 W | 9.6 | −83 % | 316 | 17.7 | 245 |
 
-La vitesse de génération suit presque proportionnellement la fréquence SM (≈ 0,035 à 0,039 tok/s par MHz).
+Generation speed follows the SM clock almost proportionally (≈ 0.035 to 0.039 tok/s per MHz).
 
-## 9. Précision du 16 octobre : service actif sans session = GPU en veille
+## 9. Follow-up: service active without a session = GPU idle
 
-Le 16 octobre, `lab doctor` a relevé le service `gnome-remote-desktop` **actif** et le GPU pourtant en **P8 à 43 W**,
-sans modèle chargé et sans session de bureau à distance ouverte (accès uniquement par SSH).
+The next day, `lab doctor` found the `gnome-remote-desktop` service **active** and yet the GPU in **P8 at 43 W**, with
+no model loaded and no remote desktop session open (access over SSH only).
 
-Conséquence : ce n'est probablement pas le service seul qui garde le GPU en P2, mais une **session de bureau à distance
-ouverte** (et le contexte CUDA qu'elle crée). Le test du 15 octobre (arrêt du service → P8) avait lieu pendant que cette
-session était en cours : il ne distinguait pas les deux causes.
+Consequence: it is probably not the service alone that keeps the GPU in P2, but an **open remote desktop session** (and
+the CUDA context it creates). The first test (service stopped → P8) took place while that session was open: it did not
+separate the two causes.
 
-Non encore mesuré : l'état du GPU **pendant** une session ouverte, puis **après sa fermeture** service actif. À tester :
-ouvrir le bureau à distance, relever `nvidia-smi --query-gpu=pstate,power.draw --format=csv`, se déconnecter, relever à
-nouveau après 30 s. En attendant, la règle prudente reste : fermer la session quand elle ne sert pas, et `lab bureau off`
-si on ne s'en sert pas du tout. L'alerte `GpuBloqueEnP2AuRepos` signale le cas.
+Not measured yet: the GPU state **during** an open session, then **after closing it** with the service active. To test:
+open the remote desktop, read `nvidia-smi --query-gpu=pstate,power.draw --format=csv`, disconnect, read it again after
+30 s. Meanwhile, the cautious rule remains: close the session when it is not used, and `lab desktop off` if you do not
+use it at all. The `GpuStuckInP2AtIdle` alert reports the case.
