@@ -5,7 +5,7 @@
 #   (via scp, SSH uniquement). <Destination> par défaut : dossier aibeast-backup à côté du dossier windows\.
 # - Vérifie le nombre de fichiers et la taille totale AVANT de remplacer la copie précédente.
 # - Garde UNE copie précédente (restic-repo.precedent) au cas où la nouvelle serait mauvaise.
-# - Ne copie PAS le mot de passe du dépôt (voir docs/sauvegardes.md : sans lui, la copie est illisible ;
+# - Ne copie PAS le mot de passe du dépôt (voir docs/backups.md : sans lui, la copie est illisible ;
 #   garde-le dans un gestionnaire de mots de passe, pas à côté de la copie).
 param(
     [string]$Destination = (Join-Path $PSScriptRoot "..\..\aibeast-backup"),

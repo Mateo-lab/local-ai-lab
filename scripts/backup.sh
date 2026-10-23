@@ -14,7 +14,7 @@
 #
 # Variables : BACKUP_REPO (défaut $LAB_DATA_DIR/backups/restic, soit /data/backups/restic), BACKUP_PASSWORD_FILE (défaut ~/.config/aibeast-backup/password)
 # Dépôt sur le MÊME disque que les données : protège d'une erreur de manipulation, PAS de la perte du disque.
-# Pour une vraie protection, pointe BACKUP_REPO vers un autre disque ou un serveur (voir docs/sauvegardes.md).
+# Pour une vraie protection, pointe BACKUP_REPO vers un autre disque ou un serveur (voir docs/backups.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -97,7 +97,7 @@ case "$cmd" in
     id="${1:?usage : restore ID CIBLE}"; target="${2:?usage : restore ID CIBLE}"
     [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ] && { echo "La cible doit être vide ou absente : $target" >&2; exit 1; }
     restic restore "$id" --target "$target"
-    echo "Restauré dans $target. Rien n'a été remplacé : voir docs/sauvegardes.md pour remettre les données en place."
+    echo "Restauré dans $target. Rien n'a été remplacé : voir docs/backups.md pour remettre les données en place."
     ;;
 
   last)

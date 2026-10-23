@@ -100,7 +100,7 @@ non expliqué (le bureau à distance était actif lors du premier test, état no
 - **Qualité observée** (4 images) : très bonne fidélité sur un prompt long et descriptif ; texte court en gros caractères correct ; erreurs sur l'heure d'une horloge, sur un texte manuscrit de petite taille et sur une instruction de placement précise (« le chat sur le vélo »).
 - **Mise en place** : `/root/.triton` n'est pas accessible en écriture pour l'utilisateur du conteneur, ce qui faisait échouer l'encodeur de texte (`PermissionError`). Contournement appliqué avec `docker exec` (perdu si le conteneur est recréé) ; correction durable à faire : variable `TRITON_CACHE_DIR` dans `comfyui/docker-compose.yml`.
 
-Détail, exemples et pièges dans [generation-images.md](generation-images.md).
+Détail, exemples et pièges dans [image-generation.md](image-generation.md).
 
 **Non mesuré** : durée par étape isolée ; résolutions supérieures à 1 mégapixel ; nombre d'étapes différent ; Q8_0 et INT8 comparés au BF16 (vitesse, qualité, VRAM) ; effet du bureau à distance sur la VRAM disponible ; dispersion sur plusieurs graines ; consommation moyenne sur une image complète.
 

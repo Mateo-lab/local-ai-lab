@@ -13,17 +13,17 @@
 #   lab bench [expérience] [...]   banc d'essai (sans argument : liste)
 #   lab gpu-limit status|install [W]|remove    limite de puissance GPU permanente
 #   lab bureau on|off|status [--boot]          bureau à distance (≈ 100 W)
-#   lab client [--print]           génère la config SSH (tunnels + bureau à distance) du PC client depuis lab.conf : docs/acces-distant.md
-#   lab isolation install|apply|status|test|remove|uninstall   coupe Internet aux agents (Hermes, OpenClaw) : docs/isolation-agents.md
+#   lab client [--print]           génère la config SSH (tunnels + bureau à distance) du PC client depuis lab.conf : docs/remote-access.md
+#   lab isolation install|apply|status|test|remove|uninstall   coupe Internet aux agents (Hermes, OpenClaw) : docs/agent-isolation.md
 #   lab backup init|run|list|check|restore|schedule    sauvegardes chiffrées
 #   lab update [--no-backup]       met à jour les images, mémorise les anciennes
 #   lab rollback                   revient aux images d'avant la dernière mise à jour
 #   lab mode agents|images|normal|status   agents : libère la VRAM pour les agents (arrête ComfyUI, Kokoro, Tika)
 #                                          images : décharge les modèles Ollama et lance ComfyUI ; normal : rétablit
 #   lab config [list|set MODEL NOM]   modèle principal mémorisé ; `lab tmux update|backup|doctor` : action longue qui survit à une coupure
-#   lab panel install|token|status|logs|uninstall   panneau web à boutons (127.0.0.1:3011) : docs/panneau-web.md
+#   lab panel install|token|status|logs|uninstall   panneau web à boutons (127.0.0.1:3011) : docs/web-panel.md
 #   lab remote add|show|link|list|test|remove   accès SSH de Hermes à une machine de test (clé dédiée) : docs/hermes-ssh.md
-#   lab dev new|list|start|review|check|merge|setup|ctx64   développement avec Hermes (code → test → review) : docs/developpement-agents.md
+#   lab dev new|list|start|review|check|merge|setup|ctx64   développement avec Hermes (code → test → review) : docs/agent-development.md
 set -uo pipefail
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -184,7 +184,7 @@ Prometheus      http://127.0.0.1:9090
 Langfuse        http://127.0.0.1:3002   (lab start langfuse)
 Alertes (ntfy)  http://127.0.0.1:2586/aibeast-alertes
 Alertmanager    http://127.0.0.1:9093
-Depuis Windows : double-clic sur Ouvrir-AiBeast.bat (tunnels SSH), voir docs/acces-distant.md
+Depuis Windows : double-clic sur Ouvrir-AiBeast.bat (tunnels SSH), voir docs/remote-access.md
 URLS
 }
 
@@ -370,9 +370,9 @@ cmd_doctor() {
     if grep -q 'CPU' <<<"$op"; then wa "un modèle déborde sur le CPU (voir : docker exec ollama ollama ps)"; else ok "modèle(s) chargé(s) 100 % GPU"; fi
   fi
 
-  # Isolation des agents (docs/isolation-agents.md)
+  # Isolation des agents (docs/agent-isolation.md)
   local nint=0 n; for n in llm-net hermes-net obs-net; do [ "$(docker network inspect -f '{{.Internal}}' "$n" 2>/dev/null)" = true ] && nint=$((nint+1)); done
-  [ "$nint" = 3 ] && ok "réseaux des agents internes (llm-net, hermes-net, obs-net)" || ko "réseaux des agents : $nint/3 internes (agents avec accès Internet ; voir docs/isolation-agents.md)"
+  [ "$nint" = 3 ] && ok "réseaux des agents internes (llm-net, hermes-net, obs-net)" || ko "réseaux des agents : $nint/3 internes (agents avec accès Internet ; voir docs/agent-isolation.md)"
   if systemctl is-active --quiet ai-lab-isolation.service; then ok "pare-feu des agents actif (lab isolation status)"
   else wa "pare-feu des agents inactif : Hermes et OpenClaw peuvent sortir (lab isolation install)"; fi
   # Sessions Hermes restées en marche (terminal fermé avant la correction de 5-hermes.sh, ou session oubliée)
@@ -433,7 +433,7 @@ cmd_rollback() {
   for p in "${PROJECTS[@]}"; do dc "$p" up -d; done
   apply_mode
   [ $lost -gt 0 ] && echo "$c_wa $lost image(s) introuvable(s) (prune ?) : voir docs/lab.md"
-  echo "Les données (volumes) ne sont pas touchées par un retour d'image. Si une base a migré vers un format plus récent, restaure-la : docs/sauvegardes.md"
+  echo "Les données (volumes) ne sont pas touchées par un retour d'image. Si une base a migré vers un format plus récent, restaure-la : docs/backups.md"
   cmd_doctor
 }
 

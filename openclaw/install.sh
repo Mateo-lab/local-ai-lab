@@ -75,7 +75,7 @@ fi
 if systemctl is-active --quiet ai-lab-isolation.service 2>/dev/null; then
   sudo systemctl restart ai-lab-isolation.service && echo "→ Pare-feu des agents réappliqué (OpenClaw sans accès Internet)"
 else
-  echo "ATTENTION : OpenClaw a accès à Internet tant que l'isolation n'est pas installée : lab isolation install (docs/isolation-agents.md)"
+  echo "ATTENTION : OpenClaw a accès à Internet tant que l'isolation n'est pas installée : lab isolation install (docs/agent-isolation.md)"
 fi
 
 echo

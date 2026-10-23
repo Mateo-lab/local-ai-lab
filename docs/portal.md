@@ -64,7 +64,7 @@ pour une URL : `*` → `%2A`, `{` → `%7B`, `"` → `%22`, `/` → `%2F`), `fie
 
 ## Accès depuis ton PC Windows
 
-Un seul double-clic : voir [`acces-distant.md`](acces-distant.md) (fichiers du dossier `windows/`).
+Un seul double-clic : voir [`remote-access.md`](remote-access.md) (fichiers du dossier `windows/`).
 Les tunnels transportent les mêmes numéros de ports, donc les liens du portail fonctionnent à l'identique sur Windows.
 
 ## Sécurité

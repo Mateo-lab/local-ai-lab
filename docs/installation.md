@@ -121,24 +121,24 @@ règle `LAB_DATA_DIR` (§3).
 
 | Module | Commande | Documentation |
 |---|---|---|
-| Génération d'images (ComfyUI) | `lab mode images` | [generation-images.md](generation-images.md) |
-| Agent Hermes | `./5-hermes.sh NOM_DU_MODELE` | [developpement-agents.md](developpement-agents.md) |
+| Génération d'images (ComfyUI) | `lab mode images` | [image-generation.md](image-generation.md) |
+| Agent Hermes | `./5-hermes.sh NOM_DU_MODELE` | [agent-development.md](agent-development.md) |
 | Suivi des agents (Langfuse) | `./6-langfuse.sh` | [agents-langfuse.md](agents-langfuse.md) |
 | Banc d'essai | `./7-bench.sh check` | `bench/README.md` |
-| Sauvegardes chiffrées | `lab backup init` puis `lab backup schedule` | [sauvegardes.md](sauvegardes.md) |
+| Sauvegardes chiffrées | `lab backup init` puis `lab backup schedule` | [backups.md](backups.md) |
 | Limite de puissance du GPU | `lab gpu-limit install 300` (valeur à adapter à ta carte) | [performance.md](performance.md) |
 | Tri des mails Gmail (n8n) | voir la doc | [n8n-gmail.md](n8n-gmail.md) |
 | OpenClaw | `./openclaw/install.sh` | `README.md` |
 
 **Avant d'utiliser Hermes ou OpenClaw**, coupe-leur Internet : `lab isolation install` puis `lab isolation test`
-([isolation-agents.md](isolation-agents.md)).
+([agent-isolation.md](agent-isolation.md)).
 
 **Fais au moins les sauvegardes** : `lab backup init` affiche un mot de passe à garder **hors de la machine**
 (gestionnaire de mots de passe).
 
 ## 8. Accès depuis ton PC
 
-Tout est expliqué pas à pas dans [acces-distant.md](acces-distant.md). En résumé :
+Tout est expliqué pas à pas dans [remote-access.md](remote-access.md). En résumé :
 
 1. Sur la machine IA : `sudo apt install openssh-server`, puis renseigner `LAB_HOST` dans `lab.conf`.
 2. Sur la machine IA : `lab client` génère la configuration SSH de ton PC et affiche la marche à suivre.
@@ -148,7 +148,7 @@ Tout est expliqué pas à pas dans [acces-distant.md](acces-distant.md). En rés
 5. Seulement ensuite : interdire la connexion SSH par mot de passe (durcissement).
 
 Sous Windows, le dossier `windows/` du projet contient des raccourcis à double-cliquer (console à boutons, tunnels,
-déploiement, copie des sauvegardes) : [raccourcis-windows.md](raccourcis-windows.md).
+déploiement, copie des sauvegardes) : [windows-shortcuts.md](windows-shortcuts.md).
 
 ## 9. Vérifier l'exposition réseau
 
@@ -169,7 +169,7 @@ les ports 18789 et 3978 sur toutes les interfaces (compose officiel) : voir [ope
 | Vérifier après un redémarrage | `lab doctor` |
 
 ComfyUI est figé sur une version précise de son image : sa mise à jour se fait à la main
-([generation-images.md](generation-images.md), « Installation durable »).
+([image-generation.md](image-generation.md), « Installation durable »).
 
 ## Ce qui n'est pas vérifié
 

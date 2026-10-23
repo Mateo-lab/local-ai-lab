@@ -204,7 +204,7 @@ networks:
   ai-net:
   # Les trois réseaux suivants sont « internes » : Docker ne leur donne aucune sortie (ni Internet, ni réseau local).
   # Les agents qui y sont reliés ne joignent que les conteneurs du même réseau. Ollama et Open WebUI sortent par ai-net.
-  # Voir docs/isolation-agents.md.
+  # Voir docs/agent-isolation.md.
   # Nom fixe pour que le projet OpenClaw puisse le rejoindre
   llm-net:
     name: llm-net

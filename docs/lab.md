@@ -23,16 +23,16 @@ Si `~/.local/bin` n'est pas dans ton PATH, la commande l'indique (ligne à ajout
 | `lab task-model NOM` | Voir `open-webui.md` §1 |
 | `lab bench [nom] [...]` | Banc d'essai. Sans nom : liste. Le modèle est celui qui est chargé (sinon le premier installé) ; force-le avec `--model NOM` ou `LAB_MODEL=NOM` |
 | `lab gpu-limit status\|install [W]\|remove` | Voir `performance.md` §1 |
-| `lab bureau on\|off\|status [--boot]` | Bureau à distance à la demande : voir `acces-distant.md` §9 |
-| `lab isolation install\|apply\|status\|test\|remove\|uninstall` | Coupe Internet, le réseau local et la machine aux agents (Hermes, OpenClaw) : `isolation-agents.md` |
-| `lab client [--print]` | Génère la configuration SSH du PC (raccourci `aibeast`, tunnels, bureau à distance) depuis `lab.conf` : `acces-distant.md` §5 |
-| `lab backup init\|run\|list\|check\|restore\|schedule` | Voir `sauvegardes.md` |
-| `lab config [list\|set MODEL NOM]` / `lab main-model` | Modèle principal mémorisé (voir `docs/raccourcis-windows.md`) |
+| `lab bureau on\|off\|status [--boot]` | Bureau à distance à la demande : voir `remote-access.md` §9 |
+| `lab isolation install\|apply\|status\|test\|remove\|uninstall` | Coupe Internet, le réseau local et la machine aux agents (Hermes, OpenClaw) : `agent-isolation.md` |
+| `lab client [--print]` | Génère la configuration SSH du PC (raccourci `aibeast`, tunnels, bureau à distance) depuis `lab.conf` : `remote-access.md` §5 |
+| `lab backup init\|run\|list\|check\|restore\|schedule` | Voir `backups.md` |
+| `lab config [list\|set MODEL NOM]` / `lab main-model` | Modèle principal mémorisé (voir `docs/windows-shortcuts.md`) |
 | `lab.conf` (facultatif, à la racine du projet) | Réglages propres à la machine : `LAB_DATA_DIR`, `LAB_MODEL`, accès distant `LAB_HOST`… (voir `docs/configuration.md`) |
 | `lab backup repo` | Affiche l'emplacement du dépôt de sauvegarde (utilisé par la copie hors machine depuis Windows) |
 | `lab tmux update\|backup\|doctor` | Action longue dans une session tmux (survit à une coupure SSH) |
-| `lab dev new\|list\|start\|review\|check\|merge\|setup\|ctx64` | Développement avec Hermes : `docs/developpement-agents.md` |
-| `lab panel install\|token\|status\|logs\|uninstall` | Panneau web à boutons : `docs/panneau-web.md` |
+| `lab dev new\|list\|start\|review\|check\|merge\|setup\|ctx64` | Développement avec Hermes : `docs/agent-development.md` |
+| `lab panel install\|token\|status\|logs\|uninstall` | Panneau web à boutons : `docs/web-panel.md` |
 | `lab remote add\|show\|link\|list\|test\|remove` | Accès SSH de Hermes à une machine de test : `docs/hermes-ssh.md` |
 | `lab mode agents\|images\|normal\|status` | Voir « Mode agents » et « Mode images » ci-dessous |
 | `lab update [--no-backup]` / `lab rollback` | Voir ci-dessous |
@@ -119,7 +119,7 @@ Si `doctor` signale un problème : `lab rollback`.
   `docker system prune -a` avant d'être sûr de la mise à jour. Les anciennes images restent après un `pull` (sans
   étiquette) ; elles occupent de la place sur `/data`.
 - Il ne touche **pas aux données** (volumes). Si la nouvelle version a migré une base vers un format plus récent,
-  l'ancienne image peut refuser de la lire : il faut alors restaurer la sauvegarde (`sauvegardes.md` §4). C'est la
+  l'ancienne image peut refuser de la lire : il faut alors restaurer la sauvegarde (`backups.md` §4). C'est la
   raison de la sauvegarde automatique à l'étape 1.
 
 ### Rythme conseillé

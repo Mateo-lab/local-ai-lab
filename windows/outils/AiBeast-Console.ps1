@@ -1,5 +1,5 @@
 ﻿# Console AiBeast : une fenêtre avec des boutons pour tout faire (tunnels, navigateur, déploiement, modes, sauvegardes, Hermes).
-# Utilisation : double-clic sur AiBeast.bat. Prérequis : VPN connecté, clé SSH et entrée "Host aibeast" (voir docs\acces-distant.md).
+# Utilisation : double-clic sur AiBeast.bat. Prérequis : VPN connecté, clé SSH et entrée "Host aibeast" (voir docs\remote-access.md).
 # Les actions longues s'ouvrent dans leur propre fenêtre (elles posent des questions ou affichent des résultats) : les scripts existants sont réutilisés tels quels.
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing

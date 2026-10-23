@@ -2,7 +2,7 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-# Règles d'alerte (voir docs/alertes.md) et destinataire des alertes (projet ../alerting)
+# Règles d'alerte (voir docs/alerts.md) et destinataire des alertes (projet ../alerting)
 rule_files:
   - /etc/prometheus/rules/*.yml
 

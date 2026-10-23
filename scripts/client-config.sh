@@ -7,7 +7,7 @@
 # Le bloc définit le raccourci « aibeast » (utilisé par tous les scripts de windows/) et les tunnels
 # vers toutes les interfaces, plus le bureau à distance (RDP). Rien n'est ouvert sur le réseau :
 # les interfaces restent liées à 127.0.0.1 sur la machine IA, les tunnels passent par SSH.
-# Voir docs/acces-distant.md.
+# Voir docs/remote-access.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 if [ -f "$ROOT/lab.conf" ]; then . "$ROOT/lab.conf"; fi
@@ -79,7 +79,7 @@ echo
 bloc
 cat <<EOF
 
-─── Marche à suivre sur ton PC (détail : docs/acces-distant.md) ───────────────────
+─── Marche à suivre sur ton PC (détail : docs/remote-access.md) ───────────────────
 1. Créer une clé, si tu n'en as pas :        ssh-keygen -t ed25519
 2. Copier la clé PUBLIQUE sur cette machine (mot de passe du compte demandé une dernière fois) :
    Windows (PowerShell) :

@@ -6,7 +6,7 @@
 #   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -GarderDns      laisse passer le DNS (port 53)
 #   powershell -ExecutionPolicy Bypass -File .\Isoler-machine-de-test.ps1 -Annuler        retire les regles de pare-feu
 #
-# Ce que fait le script (detail : docs/isolation-agents.md, section « Machine de test ») :
+# Ce que fait le script (detail : docs/agent-isolation.md, section « Machine de test ») :
 # 1. Pare-feu Windows : regles de BLOCAGE sortant vers toutes les adresses publiques (IPv4 et IPv6). Le reseau
 #    local (10.x, 172.16-31.x, 192.168.x, lien local) reste joignable, donc l'agent peut toujours s'y connecter.
 #    Une regle de blocage l'emporte sur toutes les autorisations ; un compte sans droits d'administrateur ne peut

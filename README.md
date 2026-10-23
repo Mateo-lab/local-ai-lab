@@ -1,493 +1,501 @@
 # local-ai-lab
 
-Un labo d'IA **entièrement local** sur une seule machine Linux équipée d'une carte NVIDIA : chat (Open WebUI +
-Ollama), automatisations (n8n), recherche web privée, voix, documents, génération d'images (ComfyUI), agents (Hermes,
-OpenClaw) et leur suivi (Langfuse), supervision et alertes sur le téléphone, sauvegardes chiffrées, banc de mesure.
-Le tout piloté par une seule commande, `lab`, et utilisable depuis un autre ordinateur par SSH, sans rien exposer sur
-Internet.
+A **fully local** AI lab on a single Linux machine with an NVIDIA GPU: chat (Open WebUI + Ollama), automation (n8n),
+private web search, voice, documents, image generation (ComfyUI), agents (Hermes, OpenClaw) and their tracing
+(Langfuse), monitoring and alerts on your phone, encrypted backups, and a benchmark bench. Everything is driven by a
+single command, `lab`, and used from another computer over SSH, without exposing anything to the Internet.
 
-- **Installer** : [docs/installation.md](docs/installation.md) (de la machine neuve à l'accès depuis ton PC).
-- **Accès à distance** (SSH, tunnels, bureau à distance) : [docs/acces-distant.md](docs/acces-distant.md).
-- **Régler ton installation** : un seul fichier, `lab.conf` ([docs/configuration.md](docs/configuration.md)).
-- **Toute la documentation** : [docs/README.md](docs/README.md). Documentation en français.
+- **Install**: [docs/installation.md](docs/installation.md) (from a fresh machine to access from your PC).
+- **Remote access** (SSH, tunnels, remote desktop): [docs/remote-access.md](docs/remote-access.md).
+- **Configure your installation**: a single file, `lab.conf` ([docs/configuration.md](docs/configuration.md)).
+- **Security overview with diagrams**: [docs/security-architecture.md](docs/security-architecture.md).
+- **All documentation**: [docs/README.md](docs/README.md).
 
-Machine de référence (celle sur laquelle tout a été construit et mesuré) : RTX 3090 24 Go, 64 Go de RAM, Ubuntu 26.04,
-appelée **AiBeast** dans les scripts. Les retours d'expérience et les mesures des docs viennent de cette machine.
-Une installation sur un autre matériel n'a pas encore été faite : signale les problèmes rencontrés.
+Reference machine (where everything was built and measured): RTX 3090 24 GB, 64 GB of RAM, Ubuntu 26.04, called
+**AiBeast** in the scripts. The lessons learned and measurements in the docs come from this machine. An installation on
+other hardware has not been done yet: please report the problems you run into.
 
-Licence : MIT (fichier `LICENSE`). Les logiciels lancés par le lab (Ollama, Open WebUI, n8n, ComfyUI, modèles…)
-gardent chacun leur propre licence.
+License: MIT (`LICENSE` file). The software started by the lab (Ollama, Open WebUI, n8n, ComfyUI, models…) keeps its own
+license.
 
-## Organisation
+## Layout
 
-Plusieurs projets Docker séparés, chacun dans son dossier. Ils ne se parlent que par des réseaux
-nommés, pour que chaque outil ne voie que ce dont il a besoin.
+Several separate Docker projects, each in its own folder. They only talk to each other through named networks, so that
+each tool only sees what it needs.
 
 ```
 ai-lab/
-├── ai-stack/    Ollama + Open WebUI + n8n (+ Postgres dédié) + Qdrant + SearXNG + Kokoro (voix) + Tika (documents)
-├── monitoring/  Prometheus + Grafana + node-exporter + exporter GPU (+ règles d'alerte)
-├── portail/     Page d'accueil unique (Homepage) : tous les services, voyants de santé, mesures de la machine
-├── alerting/    Alertes : ntfy + Alertmanager + sondes (blackbox)
-├── hermes/      Hermes Agent (agent à sous-agents)          — optionnel
-├── openclaw/    OpenClaw (agent, installé à part)            — optionnel
-├── comfyui/     ComfyUI (génération d'images)                — optionnel
-├── langfuse/    Langfuse (suivi des appels des agents)       — optionnel
-├── bench/       Banc d'essai (perf, cache KV, contexte, puissance GPU) — optionnel
-├── windows/     Raccourcis Windows (console à boutons, tunnels, déploiement, copie des sauvegardes)
-├── scripts/     Sauvegardes chiffrées, limite de puissance GPU, config SSH du client, accès des agents…
-├── lab.conf.example   Réglages propres à TON installation (à copier en lab.conf)
-├── docs/        Documentation détaillée (index : docs/README.md)
-├── lab          LA commande de pilotage (lab doctor, lab start, lab update…)
-└── 1-prerequis.sh … 8-stockage.sh    scripts guidés, à lancer dans l'ordre
+├── ai-stack/    Ollama + Open WebUI + n8n (+ dedicated Postgres) + Qdrant + SearXNG + Kokoro (voice) + Tika (documents)
+├── monitoring/  Prometheus + Grafana + node-exporter + GPU exporter (+ alert rules)
+├── portail/     Single home page (Homepage): all services, health lights, machine metrics
+├── alerting/    Alerts: ntfy + Alertmanager + probes (blackbox)
+├── hermes/      Hermes Agent (agent with sub-agents)           — optional
+├── openclaw/    OpenClaw (agent, installed separately)          — optional
+├── comfyui/     ComfyUI (image generation)                      — optional
+├── langfuse/    Langfuse (tracing of agent calls)               — optional
+├── bench/       Benchmark bench (speed, KV cache, context, GPU power) — optional
+├── windows/     Windows shortcuts (button console, tunnels, deployment, backup copy, test machine tools)
+├── scripts/     Encrypted backups, GPU power limit, client SSH config, agent isolation and access…
+├── lab.conf.example   Settings specific to YOUR installation (copy to lab.conf)
+├── docs/        Detailed documentation (index: docs/README.md)
+├── lab          THE control command (lab doctor, lab start, lab update…)
+└── 1-prerequis.sh … 8-stockage.sh    guided setup scripts, to run in order
 ```
 
 ```
- réseau          qui le partage
- ai-net          les services de ai-stack entre eux
- llm-net         Ollama + OpenClaw                (OpenClaw ne voit que Ollama)
- hermes-net      Ollama + Hermes                  (Hermes ne voit que Ollama)
- obs-net         Open WebUI + Hermes + Langfuse   (envoi des traces uniquement)
- mon-net         monitoring (isolé)
+ network         shared by                                    exit
+ ai-net          the ai-stack services                        Internet
+ llm-net         Ollama + OpenClaw   (OpenClaw only sees Ollama)   none (internal)
+ hermes-net      Ollama + Hermes     (Hermes only sees Ollama)     none (internal)
+ obs-net         Open WebUI + Hermes + Langfuse (traces only)  none (internal)
+ mon-net         monitoring (isolated)
 ```
 
-Tous les ports sont liés à `127.0.0.1` : rien n'est visible sur ton réseau local.
+Every port is bound to `127.0.0.1`: nothing is visible on your local network. Details:
+[docs/security-architecture.md](docs/security-architecture.md).
 
-## Démarrage rapide
+## Quick start
 
-Prérequis : Ubuntu ou Debian, pilote NVIDIA actif (`nvidia-smi`), un compte avec `sudo`, git. Détail et choix du
-modèle selon ta carte : [docs/installation.md](docs/installation.md).
+Prerequisites: Ubuntu or Debian, a working NVIDIA driver (`nvidia-smi`), an account with `sudo`, git. Details and model
+choice for your GPU: [docs/installation.md](docs/installation.md).
 
-Dans un terminal, avec ton utilisateur normal (**sans `sudo` devant les scripts** : ils demandent le mot de passe
-eux-mêmes) :
+In a terminal, with your normal user (**no `sudo` in front of the scripts**: they ask for the password themselves):
 
 ```bash
 git clone https://github.com/Mateo-lab/local-ai-lab.git ~/Documents/ai-lab && cd ~/Documents/ai-lab
-cp lab.conf.example lab.conf && nano lab.conf   # disque de données, modèle, adresse pour l'accès distant
-./1-prerequis.sh     # installe Docker + NVIDIA Container Toolkit, puis :  sudo reboot
-./2-secrets.sh       # crée les fichiers .env avec des mots de passe aléatoires
-./3-demarrer.sh NOM_DU_MODELE   # lance ai-stack et monitoring, télécharge le modèle
+cp lab.conf.example lab.conf && nano lab.conf   # data disk, model, address for remote access
+./1-prerequis.sh     # installs Docker + NVIDIA Container Toolkit, then:  sudo reboot
+./2-secrets.sh       # creates the .env files with random passwords
+./3-demarrer.sh MODEL_NAME   # starts ai-stack and monitoring, downloads the model
 ./lab install && lab start && lab doctor
-lab client           # configuration SSH à coller sur ton PC (docs/acces-distant.md)
+lab isolation install   # cuts the agents off from the Internet (docs/agent-isolation.md)
+lab client           # SSH configuration to paste on your PC (docs/remote-access.md)
 ```
 
-Ensuite, à ton rythme et dans l'ordre que tu veux (tous optionnels) :
+Then, at your own pace and in any order (all optional):
 
 ```bash
-./5-hermes.sh NOM_DU_MODELE   # agent Hermes (voir plus bas)
-./6-langfuse.sh               # suivi des agents
-./7-bench.sh check              # banc d'essai (optionnel, voir plus bas)
-./8-stockage.sh etat            # 2e SSD : formatage et déplacement de Docker (optionnel)
-./4-comfyui.sh                # images (à lancer seulement au besoin)
-./openclaw/install.sh         # OpenClaw, en dernier
+./5-hermes.sh MODEL_NAME      # Hermes agent (see below)
+./6-langfuse.sh               # agent tracing
+./7-bench.sh check            # benchmark bench (see below)
+./8-stockage.sh status        # 2nd SSD: formatting and moving Docker (optional)
+./4-comfyui.sh                # images (only start when needed)
+./openclaw/install.sh         # OpenClaw, last
 ```
 
-**Où sont les « secrets » / le `.env` ?** Les scripts les créent tout seuls, tu n'as rien à écrire :
+**Where are the "secrets" / the `.env` files?** The scripts create them for you, you have nothing to write:
 
-- `ai-stack/.env` et `monitoring/.env`
-- `langfuse/app/.env` (créé par `6-langfuse.sh`)
+- `ai-stack/.env` and `monitoring/.env`
+- `langfuse/app/.env` (created by `6-langfuse.sh`)
 
-Ce sont des **fichiers cachés** (leur nom commence par un point) : `ls` ne les montre pas,
-utilise `ls -a ai-stack`. Pour lire un fichier : `cat ai-stack/.env`.
-Mot de passe Grafana : `grep GRAFANA_ADMIN_PASSWORD monitoring/.env`.
+They are **hidden files** (their name starts with a dot): `ls` does not show them, use `ls -a ai-stack`. To read one:
+`cat ai-stack/.env`. Grafana password: `grep GRAFANA_ADMIN_PASSWORD monitoring/.env`.
 
-`./2-secrets.sh` peut être relancé à tout moment : il n'écrase aucune valeur, il complète seulement
-les variables manquantes (utile après une mise à jour).
+`./2-secrets.sh` can be run again at any time: it never overwrites a value, it only fills in missing variables (useful
+after an update).
 
-Si une étape échoue, copie-colle le message d'erreur complet.
+If a step fails, copy and paste the full error message.
 
-## Où se trouve quoi
+## Where things are
 
-### Sur la machine IA (Linux)
+### On the AI machine (Linux)
 
-| Chemin | Contenu | À savoir |
+| Path | Content | Good to know |
 |---|---|---|
-| `~/Documents/ai-lab/` | **Le projet** (ce dossier, dépôt git) : compose, scripts, `lab`, docs | C'est ici qu'on lance `./lab` |
-| `…/ai-lab/lab.conf` | Réglages de **cette** installation | Jamais versionné ; modèle : `lab.conf.example` |
-| `…/ai-lab/*/.env` | Secrets de chaque projet | Jamais écrasés par une mise à jour ; sauvegardés par `lab backup` |
-| `…/ai-lab/.lab/` | Images mémorisées avant chaque `lab update` (pour `lab rollback`) | Créé au premier `lab update` |
-| `…/ai-lab/bench/results/` | Résultats du banc d'essai (CSV, rapports HTML) | Sauvegardés |
-| `/data/docker/` (`LAB_DATA_DIR`) | Racine de Docker : images, conteneurs et **volumes** (modèles Ollama, Open WebUI, n8n, Qdrant, bases) | SSD de 4 To. `lab doctor` vérifie que Docker y est |
-| `/data/backups/restic/` | Dépôt des sauvegardes chiffrées | Même SSD que les données : voir `docs/sauvegardes.md` §3 |
-| `~/.config/aibeast-backup/password` | Mot de passe du dépôt de sauvegardes | À copier ailleurs que sur la machine IA |
-| `~/.local/bin/lab` | Lien vers `…/ai-lab/lab` | Créé par `./lab install` |
-| `~/.ssh/authorized_keys` | Clés autorisées à se connecter en SSH | Une ligne par appareil |
-| `/etc/ssh/sshd_config.d/` | Durcissement SSH (mot de passe interdit) | `docs/acces-distant.md` |
-| `/etc/systemd/system/gpu-power-limit.service` | Limite de puissance GPU permanente | Créé par `lab gpu-limit install` |
+| `~/Documents/ai-lab/` | **The project** (this folder, a git repository): compose files, scripts, `lab`, docs | This is where you run `./lab` |
+| `…/ai-lab/lab.conf` | Settings of **this** installation | Never versioned; template: `lab.conf.example` |
+| `…/ai-lab/*/.env` | Secrets of each project | Never overwritten by an update; backed up by `lab backup` |
+| `…/ai-lab/.lab/` | Images recorded before each `lab update` (for `lab rollback`), current mode | Created at the first `lab update` |
+| `…/ai-lab/bench/results/` | Benchmark results (CSV, HTML reports) | Backed up |
+| `/data/docker/` (`LAB_DATA_DIR`) | Docker root: images, containers and **volumes** (Ollama models, Open WebUI, n8n, Qdrant, databases) | 4 TB SSD on the reference machine. `lab doctor` checks Docker is there |
+| `/data/backups/restic/` | Encrypted backup repository | Same SSD as the data: see `docs/backups.md` §3 |
+| `~/.config/aibeast-backup/password` | Password of the backup repository | Keep a copy somewhere other than the AI machine |
+| `~/.local/bin/lab` | Link to `…/ai-lab/lab` | Created by `./lab install` |
+| `~/.ssh/authorized_keys` | Keys allowed to log in over SSH | One line per device |
+| `/etc/ssh/sshd_config.d/` | SSH hardening (no passwords, no reverse forwarding) | `docs/remote-access.md` |
+| `/etc/systemd/system/gpu-power-limit.service` | Permanent GPU power limit | Created by `lab gpu-limit install` |
+| `/etc/systemd/system/ai-lab-isolation.service` | Agent firewall | Created by `lab isolation install` |
 
-Les données de chaque service sont dans des **volumes Docker** nommés (sous `/data/docker/volumes/`), pas dans le dossier du projet :
-`ai-stack_ollama_data` (modèles), `ai-stack_open_webui_data`, `ai-stack_n8n_data`, `ai-stack_qdrant_data`,
-`ai-stack_postgres_n8n_data`, `monitoring_prometheus_data`, `monitoring_grafana_data`. **Ne jamais utiliser `docker compose down -v`** :
-il supprime ces volumes.
+Each service's data lives in named **Docker volumes** (under `/data/docker/volumes/`), not in the project folder:
+`ai-stack_ollama_data` (models), `ai-stack_open_webui_data`, `ai-stack_n8n_data`, `ai-stack_qdrant_data`,
+`ai-stack_postgres_n8n_data`, `monitoring_prometheus_data`, `monitoring_grafana_data`. **Never use
+`docker compose down -v`**: it deletes these volumes.
 
-### Sur ton PC (client)
+### On your PC (client)
 
-| Chemin (Windows ; macOS/Linux : `~/.ssh/…`) | Contenu |
+| Path (Windows; macOS/Linux: `~/.ssh/…`) | Content |
 |---|---|
-| `%USERPROFILE%\.ssh\id_ed25519` | Ta clé **privée** SSH (ne jamais la copier ni l'envoyer) |
-| `%USERPROFILE%\.ssh\id_ed25519.pub` | Ta clé publique (celle qui est dans `authorized_keys` de la machine IA) |
-| `%USERPROFILE%\.ssh\config` | Raccourci `aibeast` et tunnels (bloc généré par `lab client`) |
-| Un dossier de travail au choix | Le dossier `windows\` du projet, l'archive `ai-lab.tar.gz` à côté (si tu déploies depuis le PC), et `aibeast-backup\` (copie des sauvegardes) |
+| `%USERPROFILE%\.ssh\id_ed25519` | Your **private** SSH key (never copy or send it) |
+| `%USERPROFILE%\.ssh\id_ed25519.pub` | Your public key (the one in the AI machine's `authorized_keys`) |
+| `%USERPROFILE%\.ssh\config` | `aibeast` shortcut and tunnels (block generated by `lab client`) |
+| A working folder of your choice | The project's `windows\` folder, the `ai-lab.tar.gz` archive next to it (if you deploy from the PC), and `aibeast-backup\` (backup copy) |
 
-## Adresses (depuis la machine)
+## Addresses (on the machine)
 
 | Service | URL |
 |---|---|
-| **Portail (point d'entrée)** | http://127.0.0.1:3010 |
+| **Portal (entry point)** | http://127.0.0.1:3010 |
 | Open WebUI | http://127.0.0.1:3000 |
 | n8n | http://127.0.0.1:5678 |
 | Qdrant | http://127.0.0.1:6333/dashboard |
 | Ollama (API) | http://127.0.0.1:11434 |
-| Grafana | http://127.0.0.1:3001 (utilisateur `admin`) |
+| Grafana | http://127.0.0.1:3001 (user `admin`) |
 | Prometheus | http://127.0.0.1:9090 |
 | Langfuse | http://127.0.0.1:3002 |
 | ComfyUI | http://127.0.0.1:8188 |
 | OpenClaw | http://127.0.0.1:18789 |
-| Alertes (ntfy) | http://127.0.0.1:2586/aibeast-alertes |
+| Alerts (ntfy) | http://127.0.0.1:2586/aibeast-alertes |
 | Alertmanager | http://127.0.0.1:9093 |
 
-Depuis un autre ordinateur : tunnel SSH, par exemple
-`ssh -L 3000:127.0.0.1:3000 -L 5678:127.0.0.1:5678 UTILISATEUR@IP-DE-LA-MACHINE`.
-Depuis Windows, tout est préparé dans `windows/` (un double-clic) : voir `docs/acces-distant.md`.
+From another computer: SSH tunnels, generated by `lab client` (one shortcut, `ssh -N aibeast`, opens them all). From
+Windows, everything is ready in `windows/` (one double-click): see `docs/remote-access.md`.
 
-## Piloter avec `lab`
+## Driving the lab with `lab`
 
 ```bash
-./lab install        # une fois : crée la commande `lab`
-lab doctor           # santé complète (à lancer après chaque redémarrage)
-lab start            # démarre tout dans l'ordre (ai-stack, monitoring, portail, alerting)
+./lab install        # once: creates the `lab` command
+lab doctor           # full health check (run it after every reboot)
+lab start            # starts everything in order (ai-stack, monitoring, portail, alerting)
 lab status | urls | logs SERVICE | models
-lab update           # mise à jour avec sauvegarde, puis `lab rollback` si besoin
+lab update           # update with a backup first, then `lab rollback` if needed
 ```
-Référence complète : `docs/lab.md`. Toute la documentation : `docs/README.md`.
+Full reference: `docs/lab.md`. All documentation: `docs/README.md`.
 
-## Aide-mémoire des commandes
+## Command cheat sheet
 
-Sur la machine IA, dans un terminal. `lab` fonctionne de n'importe quel dossier après `./lab install`.
+On the AI machine, in a terminal. `lab` works from any folder after `./lab install`.
 
-**Tous les jours**
+**Every day**
 
-| Je veux | Commande |
+| I want to | Command |
 |---|---|
-| Vérifier que tout va bien | `lab doctor` (après chaque redémarrage) |
-| Voir l'état (conteneurs, GPU, disques) | `lab status` |
-| Démarrer / arrêter tout | `lab start` / `lab stop` (ne supprime rien) |
-| Démarrer / arrêter un seul projet | `lab start ai-stack` (ou `monitoring`, `portail`, `alerting`, `comfyui`, `langfuse`) / `lab stop comfyui` |
-| Voir les adresses | `lab urls` |
-| Voir les journaux d'un conteneur | `lab logs ollama` (Ctrl-C pour quitter) |
-| Voir les modèles installés et chargés | `lab models` |
+| Check that everything is fine | `lab doctor` (after every reboot) |
+| See the state (containers, GPU, disks) | `lab status` |
+| Start / stop everything | `lab start` / `lab stop` (deletes nothing) |
+| Start / stop a single project | `lab start ai-stack` (or `monitoring`, `portail`, `alerting`, `comfyui`, `langfuse`) / `lab stop comfyui` |
+| See the addresses | `lab urls` |
+| See a container's logs | `lab logs ollama` (Ctrl-C to quit) |
+| See installed and loaded models | `lab models` |
 
 **Images (ComfyUI)**
 
-| Je veux | Commande |
+| I want to | Command |
 |---|---|
-| **Lancer ComfyUI** (recommandé) | `lab mode images` : décharge les modèles Ollama de la VRAM, lance ComfyUI, attend qu'il réponde |
-| Y accéder | `http://127.0.0.1:8188` sur AiBeast ; depuis Windows, double-clic sur `Ouvrir-AiBeast.bat` puis la même adresse |
-| Arrêter ComfyUI et rendre la VRAM aux modèles | `lab mode normal` |
-| Lancer ComfyUI sans décharger les modèles | `lab start comfyui` (le gros modèle chargé + SDXL ne tiennent pas ensemble en VRAM) |
-| Arrêter ComfyUI seul | `lab stop comfyui` |
-| Voir ce qu'il fait | `lab logs comfyui` (le tout premier démarrage peut durer ≈ 10 min) |
+| **Start ComfyUI** (recommended) | `lab mode images`: unloads the Ollama models from VRAM, starts ComfyUI, waits until it answers |
+| Open it | `http://127.0.0.1:8188` on the AI machine; from Windows, double-click `Ouvrir-AiBeast.bat` then the same address |
+| Stop ComfyUI and give the VRAM back to the models | `lab mode normal` |
+| Start ComfyUI without unloading the models | `lab start comfyui` (the big loaded model and an image model do not fit together in VRAM) |
+| Stop ComfyUI only | `lab stop comfyui` |
+| See what it is doing | `lab logs comfyui` (the first start after the container is recreated can take ≈ 6–10 min) |
 
 **Modes**
 
-| Je veux | Commande |
+| I want to | Command |
 |---|---|
-| Voir le mode actuel, la VRAM libre | `lab mode status` |
-| Libérer des ressources pour les agents | `lab mode agents` (arrête ComfyUI, Kokoro, Tika) |
-| Revenir à la normale | `lab mode normal` |
+| See the current mode and free VRAM | `lab mode status` |
+| Free resources for the agents | `lab mode agents` (stops ComfyUI, Kokoro, Tika) |
+| Go back to normal | `lab mode normal` |
 
 **Maintenance**
 
-| Je veux | Commande |
+| I want to | Command |
 |---|---|
-| Mettre à jour les images (avec sauvegarde) | `lab update` |
-| Revenir aux images d'avant | `lab rollback` |
-| Sauvegarder | `lab backup run` ; `lab backup list` ; `lab backup check` ; `lab backup restore ID DOSSIER` ; `lab backup init` / `lab backup schedule` (une fois) |
-| Limite de puissance GPU | `lab gpu-limit status` ; `lab gpu-limit install 300` ; `lab gpu-limit remove` |
-| Bureau à distance (≈ 100 W) | `lab bureau on` / `off` / `status` |
-| Petit modèle pour les titres Open WebUI | `lab task-model NOM` (puis réglage dans l'interface, voir `docs/open-webui.md`) |
+| Update the images (with a backup) | `lab update` |
+| Go back to the previous images | `lab rollback` |
+| Back up | `lab backup run`; `lab backup list`; `lab backup check`; `lab backup restore ID FOLDER`; `lab backup init` / `lab backup schedule` (once) |
+| GPU power limit | `lab gpu-limit status`; `lab gpu-limit install 300`; `lab gpu-limit remove` |
+| Remote desktop (≈ 100 W) | `lab desktop on` / `off` / `status` (`lab bureau` also works) |
+| Agent isolation | `lab isolation status` / `test` |
+| Small model for Open WebUI titles | `lab task-model NAME` (then a setting in the interface, see `docs/open-webui.md`) |
 
-**Mesures** (arrêtent l'Ollama de production pendant le test ; à lancer dans `tmux`, elles demandent `sudo`)
+**Benchmarks** (they stop the production Ollama during the test; run them in `tmux`, they ask for `sudo`)
 
-| Je veux | Commande |
+| I want to | Command |
 |---|---|
-| Lister les expériences | `lab bench` |
-| Lancer une expérience | `lab bench kv-decode --model qwen3.8:27b` (autres : `quick-smoke`, `power-sweep`, `power-confirm`, `context-scaling`, `ctx-window`, `kv-cache`, `kv-quality`, `prefix-cache`, `concurrency`) |
-| Voir le plan sans rien lancer | ajouter `--dry-run` |
-| Refaire un rapport | `lab bench report bench/results/<dossier>` |
-| Comprendre les résultats | `docs/comprendre-les-mesures.md` |
+| List the experiments | `lab bench` |
+| Run an experiment | `lab bench kv-decode --model qwen3.8:27b` (others: `quick-smoke`, `power-sweep`, `power-confirm`, `context-scaling`, `ctx-window`, `kv-cache`, `kv-quality`, `prefix-cache`, `concurrency`) |
+| See the plan without running anything | add `--dry-run` |
+| Rebuild a report | `lab bench report bench/results/<folder>` |
+| Understand the results | `docs/understanding-benchmarks.md` |
 
-**Installation initiale** (une seule fois, dans l'ordre ; sans `sudo` devant)
+**Initial installation** (once, in order; no `sudo` in front)
 
-`./1-prerequis.sh` (puis `sudo reboot`) · `./2-secrets.sh` · `./3-demarrer.sh` · `./4-comfyui.sh` (ou `lab mode images`) ·
-`./5-hermes.sh MODELE` · `./6-langfuse.sh` · `./7-bench.sh check` · `./8-stockage.sh etat` · `./openclaw/install.sh`
+`./1-prerequis.sh` (then `sudo reboot`) · `./2-secrets.sh` · `./3-demarrer.sh` · `./4-comfyui.sh` (or `lab mode images`) ·
+`./5-hermes.sh MODEL` · `./6-langfuse.sh` · `./7-bench.sh check` · `./8-stockage.sh status` · `./openclaw/install.sh`
 
-**Depuis le PC Windows** (dossier `windows\`, VPN connecté, clé SSH chargée). Le plus simple : double-clic sur `AiBeast.bat` (fenêtre avec des boutons). Les scripts individuels ci-dessous sont dans `windows\outils\`.
+**From the Windows PC** (`windows\` folder, VPN connected, SSH key loaded). The simplest: double-click `AiBeast.bat`
+(window with buttons). The individual scripts below are in `windows\outils\`.
 
-| Je veux | Fichier à double-cliquer |
+| I want to | File to double-click |
 |---|---|
-| Ouvrir les tunnels vers les interfaces | `Ouvrir-AiBeast.bat` (fermer : `Fermer-tunnels-AiBeast.bat`) |
-| Copier les sauvegardes chiffrées sur ce PC | `Sauvegarder-AiBeast-hors-machine.bat` |
-| Envoyer une nouvelle version du lab sur AiBeast | `Deployer-sur-AiBeast.bat` |
+| Open the tunnels to the interfaces | `Ouvrir-AiBeast.bat` (close them: `Fermer-tunnels-AiBeast.bat`) |
+| Install or update the SSH configuration of this PC | `Installer-config-SSH.bat` |
+| Copy the encrypted backups to this PC | `Sauvegarder-AiBeast-hors-machine.bat` |
+| Send a new version of the lab to the AI machine | `Deployer-sur-AiBeast.bat` |
 
-## Mettre à jour le lab
+## Updating the lab
 
 ```bash
 cd ~/Documents/ai-lab
-git status            # doit être propre (tes réglages sont dans lab.conf et les .env, ignorés par git)
+git status            # must be clean (your settings are in lab.conf and the .env files, ignored by git)
 git pull
-./2-secrets.sh        # complète les variables ajoutées par la nouvelle version, sans rien écraser
+./2-secrets.sh        # fills in variables added by the new version, without overwriting anything
 lab start && lab doctor
 ```
 
-Tu modifies le lab toi-même et tu le livres depuis un autre PC ? `scripts/release.sh` produit une archive des fichiers
-commités, et `windows\outils\Deployer-sur-AiBeast.bat` l'envoie et l'extrait (refuse si le dépôt de la machine IA a
-des modifications non commitées) : voir [docs/raccourcis-windows.md](docs/raccourcis-windows.md).
+You modify the lab yourself and deliver it from another PC? `scripts/release.sh` builds an archive of the committed
+files, and `windows\outils\Deployer-sur-AiBeast.bat` sends and extracts it (it refuses if the AI machine's repository
+has uncommitted changes): see [docs/windows-shortcuts.md](docs/windows-shortcuts.md).
 
-## ai-stack : Ollama, Open WebUI, n8n, Qdrant, SearXNG, Kokoro, Tika
+## ai-stack: Ollama, Open WebUI, n8n, Qdrant, SearXNG, Kokoro, Tika
 
-Détail de ce que font les scripts 2 et 3 : `cd ai-stack`, `docker compose up -d`, `docker compose ps`.
+What scripts 2 and 3 do, in detail: `cd ai-stack`, `docker compose up -d`, `docker compose ps`.
 
-**Sauvegarde `N8N_ENCRYPTION_KEY`** (dans `ai-stack/.env`) : sans elle, les identifiants stockés
-dans n8n deviennent illisibles si tu recrées le volume.
+**Back up `N8N_ENCRYPTION_KEY`** (in `ai-stack/.env`): without it, the credentials stored in n8n become unreadable if you
+recreate the volume.
 
-**n8n tourne sur PostgreSQL** (service `postgres-n8n`, sans port publié), pas sur SQLite. Cette base
-est séparée de celle de Langfuse, qui embarque la sienne.
+**n8n runs on PostgreSQL** (service `postgres-n8n`, no published port), not on SQLite. This database is separate from
+Langfuse's, which ships its own.
 
-### Modèle et contexte
+### Model and context
 
 ```bash
-docker exec ollama ollama list                       # modèles téléchargés
-docker exec -it ollama ollama pull NOM_DU_MODELE
-docker exec ollama ollama run NOM_DU_MODELE "Dis bonjour en une phrase"
-docker exec ollama ollama ps      # PROCESSOR doit afficher 100% GPU ; CONTEXT = contexte servi
+docker exec ollama ollama list                       # downloaded models
+docker exec -it ollama ollama pull MODEL_NAME
+docker exec ollama ollama run MODEL_NAME "Say hello in one sentence"
+docker exec ollama ollama ps      # PROCESSOR must show 100% GPU; CONTEXT = context actually served
 ```
 
-`ollama ps` n'affiche que les modèles **chargés** : une liste vide veut juste dire qu'aucun n'est en mémoire.
-Si PROCESSOR montre un partage CPU/GPU, le modèle ou le contexte est trop grand pour 24 Go : baisse
-`OLLAMA_CONTEXT_LENGTH` dans `ai-stack/.env` (puis `docker compose up -d`) ou prends un modèle plus petit.
+`ollama ps` only lists **loaded** models: an empty list just means none is in memory. If PROCESSOR shows a CPU/GPU split,
+the model or the context is too big for the GPU: lower `OLLAMA_CONTEXT_LENGTH` in `ai-stack/.env` (then
+`docker compose up -d`) or pick a smaller model.
 
-**Contexte** : Hermes exige au moins 64 000 tokens et OpenClaw les recommande. Le défaut du projet est 32768 (prudent) :
-mets `OLLAMA_CONTEXT_LENGTH=65536` dans `ai-stack/.env` pour les agents, avec le cache KV en `q8_0`
-(déjà activé), et vérifie `ollama ps`.
+**Context**: Hermes requires at least 64,000 tokens and OpenClaw recommends it. The project default is 32768 (cautious):
+set `OLLAMA_CONTEXT_LENGTH=65536` in `ai-stack/.env` for the agents, with the KV cache in `q8_0` (already enabled), and
+check `ollama ps`. `lab dev ctx64` creates a 64k variant of the main model instead.
 
-Brancher les outils : n8n → Ollama `http://ollama:11434` ; n8n → Qdrant `http://qdrant:6333`.
-Open WebUI est déjà configuré sur Ollama.
+Connecting the tools: n8n → Ollama `http://ollama:11434`; n8n → Qdrant `http://qdrant:6333`. Open WebUI is already
+configured for Ollama.
 
-### Recherche web (SearXNG)
+### Web search (SearXNG)
 
-Méta-moteur privé, sans port publié : seul Open WebUI le joint. Format `json` activé (sans lui : erreur 403).
+Private metasearch engine, no published port: only Open WebUI reaches it. The `json` format is enabled (without it:
+error 403).
 
-1. Open WebUI → Admin → Paramètres → Recherche web : activé, moteur `searxng`, URL `http://searxng:8080/search`.
-2. Dans un chat : **+ Integrations → Web Search** (à refaire pour chaque chat).
+1. Open WebUI → Admin → Settings → Web Search: enabled, engine `searxng`, URL `http://searxng:8080/search`.
+2. In a chat: **+ Integrations → Web Search** (to do again for each chat).
 
-Test : `docker exec open-webui curl -s "http://searxng:8080/search?q=test&format=json" | head -c 300`.
-Les messages `ahmia` / `torch` (moteurs Tor) et `missing config file: limiter.toml` dans `docker logs searxng` sont sans gravité.
+Test: `docker exec open-webui curl -s "http://searxng:8080/search?q=test&format=json" | head -c 300`.
+The `ahmia` / `torch` (Tor engines) and `missing config file: limiter.toml` messages in `docker logs searxng` are harmless.
 
-### Voix et documents (Kokoro, Tika)
+### Voice and documents (Kokoro, Tika)
 
-- **Lecture à voix haute** : service `kokoro` (version CPU, aucune VRAM). Admin → Audio → Text-to-Speech :
-  moteur OpenAI, URL `http://kokoro:8880/v1`, clé `not-needed` (n'importe quelle valeur), modèle `kokoro`, voix `af_bella`.
-  Cette version de Kokoro n'a **que des voix anglaises** (`af_*`, `am_*`, `bf_*`, `bm_*`) : le français est lu avec un accent anglais.
-- **Dictée** : bouton micro, Whisper local d'Open WebUI. Dans Admin → Audio → **Speech-to-Text**, le moteur doit rester
-  celui par défaut (Whisper local) : Kokoro ne fait que la synthèse, et le mettre en STT donne une erreur 404.
-- **Documents** : service `tika` (extraction PDF/Office pour le RAG). Admin → Paramètres → Documents : moteur Tika,
-  URL `http://tika:9998`. Si l'extraction échoue, règle « Tika Server Version » (3.x ou 4.x) comme le serveur.
-- Tests : `docker exec open-webui curl -s http://kokoro:8880/health` et `docker exec open-webui curl -s http://tika:9998/tika`.
+- **Read aloud**: service `kokoro` (CPU version, no VRAM). Admin → Audio → Text-to-Speech: engine OpenAI, URL
+  `http://kokoro:8880/v1`, key `not-needed` (any value), model `kokoro`, voice `af_bella`. This Kokoro version only has
+  **English voices** (`af_*`, `am_*`, `bf_*`, `bm_*`): other languages are read with an English accent.
+- **Dictation**: microphone button, Open WebUI's local Whisper. In Admin → Audio → **Speech-to-Text**, the engine must
+  stay the default (local Whisper): Kokoro only does synthesis, and setting it as STT gives a 404 error.
+- **Documents**: service `tika` (PDF/Office extraction for RAG). Admin → Settings → Documents: engine Tika, URL
+  `http://tika:9998`. If extraction fails, set "Tika Server Version" (3.x or 4.x) to match the server.
+- Tests: `docker exec open-webui curl -s http://kokoro:8880/health` and `docker exec open-webui curl -s http://tika:9998/tika`.
 
 ## Monitoring (Prometheus + Grafana)
 
-Projet indépendant. Démarré par `./3-demarrer.sh`.
+Independent project. Started by `./3-demarrer.sh`.
 
-Le tableau de bord « Labo IA » est chargé automatiquement : utilisation et température du GPU, VRAM sur 24 Go,
-consommation, CPU, RAM, disque. Il n'utilise que les métriques GPU de l'exporter que j'ai pu confirmer
-(utilisation, VRAM utilisée, puissance, température). Plus détaillé : Grafana → Dashboards → Import, ID `14574`.
+The "AI Lab" dashboard is loaded automatically: GPU utilisation and temperature, VRAM, power, CPU, RAM, disk. It only uses
+the GPU exporter metrics that could be confirmed (utilisation, used VRAM, power, temperature). More detailed: Grafana →
+Dashboards → Import, ID `14574`.
 
-Limites : `node-exporter` tourne en réseau bridge (les statistiques **réseau** affichées sont celles du conteneur) ;
-Ollama n'expose pas de métriques Prometheus à ma connaissance ; le job OpenClaw est commenté dans
-`monitoring/prometheus/prometheus.yml` (non testé) ; si `gpu-exporter` ne démarre pas : `docker logs gpu-exporter`.
+Limits: `node-exporter` runs in bridge networking (the **network** statistics shown are the container's); Ollama does not
+expose Prometheus metrics as far as we know; the OpenClaw job is commented out in `monitoring/prometheus/prometheus.yml`
+(not tested); if `gpu-exporter` does not start: `docker logs gpu-exporter`.
 
-### Limiter la puissance du GPU (recommandé)
+### Limiting GPU power (recommended)
 
-Une 3090 tire jusqu'à 350 W. 300 W réduisent chaleur et bruit pour une perte de vitesse généralement faible
-(à mesurer chez toi). Bornes acceptées : `nvidia-smi -q -d POWER`.
-
-```bash
-sudo nvidia-smi -pm 1 && sudo nvidia-smi -pl 300     # temporaire : perdu au redémarrage
-```
-
-**Permanent, en une commande : `lab gpu-limit install 300`** (voir `docs/performance.md` pour la mesure qui justifie 300 W).
-Manuellement : un service systemd qui exécute `nvidia-smi -pm 1` puis `nvidia-smi -pl 300` au démarrage
-(`/etc/systemd/system/gpu-power-limit.service`, type `oneshot`, `WantedBy=multi-user.target`),
-puis `sudo systemctl enable --now gpu-power-limit.service`. Vérification : `nvidia-smi --query-gpu=power.limit --format=csv`.
-
-## Hermes Agent (Nous Research) — optionnel
-
-Projet `hermes/`, image officielle `nousresearch/hermes-agent`. Réseau `hermes-net` : Hermes ne voit **que Ollama**
-(plus Langfuse via `obs-net` si tu l'installes). Pas de socket Docker, pas de port publié : il travaille dans son
-conteneur, avec un seul dossier partagé, `hermes/data/`.
+An RTX 3090 draws up to 350 W. 300 W reduces heat and noise for a usually small loss of speed (measure it on your
+machine). Accepted bounds: `nvidia-smi -q -d POWER`.
 
 ```bash
-docker exec ollama ollama list        # nom exact du modèle
-./5-hermes.sh NOM_DU_MODELE           # ouvre une discussion avec Hermes
+sudo nvidia-smi -pm 1 && sudo nvidia-smi -pl 300     # temporary: lost at reboot
 ```
 
-- **Fichiers** : ce que tu déposes dans `hermes/data/workspace/` est vu par Hermes comme `/opt/data/workspace/`.
-  Donne-lui toujours ce chemin-là (pas `hermes/...`, qui est le chemin sur ta machine). Ses PDF sont lus directement.
-- **Contexte obligatoire** : 64 000 tokens minimum (voir « Modèle et contexte » plus haut).
-- **Sous-agents** : Hermes sait en lancer. Avec `OLLAMA_NUM_PARALLEL=1` (défaut ici), leurs requêtes passent l'une
-  après l'autre sur la 3090 : ça marche, mais sans gain de vitesse. Monter ce réglage multiplie la mémoire de contexte
-  et peut faire déborder la VRAM.
-- Le conteneur est jetable (`--rm`) : seul ce qui est dans `hermes/data/` est conservé.
-- **Fermer le terminal arrête la session** (conteneur `hermes-session-…` supprimé), même si la connexion SSH tombe.
-  Pour qu'une session survive à une coupure, lance-la dans `tmux`. `lab doctor` signale une session en marche depuis
-  plus de 12 h.
+**Permanent, in one command: `lab gpu-limit install 300`** (see `docs/performance.md` for the measurement that justifies
+300 W on the reference machine). Manually: a systemd service that runs `nvidia-smi -pm 1` then `nvidia-smi -pl 300` at
+boot (`/etc/systemd/system/gpu-power-limit.service`, type `oneshot`, `WantedBy=multi-user.target`), then
+`sudo systemctl enable --now gpu-power-limit.service`. Check: `nvidia-smi --query-gpu=power.limit --format=csv`.
 
-## Langfuse (suivi des agents) — optionnel
+## Hermes Agent (Nous Research) — optional
 
-Langfuse enregistre chaque appel au modèle : prompts, réponses, durée, tokens, outils utilisés par l'agent.
-Il utilise le `docker-compose.yml` **officiel** (cloné dans `langfuse/app`) avec une surcharge qui le lie à
-`127.0.0.1:3002` (3000 = Open WebUI, 9090 = Prometheus) et le met sur `obs-net`. Besoin recommandé par Langfuse :
-4 cœurs, 16 Go de RAM, ~100 Go de disque. Cette installation Compose n'a ni haute disponibilité ni sauvegarde.
+Project `hermes/`, official image `nousresearch/hermes-agent`. Network `hermes-net` (internal): Hermes **only sees
+Ollama** (plus Langfuse through `obs-net` if you install it), and has no Internet access
+([docs/agent-isolation.md](docs/agent-isolation.md)). No Docker socket, no published port: it works inside its
+container, with a single shared folder, `hermes/data/`.
 
 ```bash
-cd ai-stack && docker compose up -d && cd ..   # crée le réseau obs-net
-./6-langfuse.sh                                # clone, génère les secrets, démarre, affiche compte et clés
+docker exec ollama ollama list        # exact model name
+./5-hermes.sh MODEL_NAME              # opens a conversation with Hermes
 ```
 
-Compte, mot de passe et clés d'API sont créés d'avance et écrits dans `langfuse/app/.env` (caché).
+- **Files**: what you put in `hermes/data/workspace/` is seen by Hermes as `/opt/data/workspace/`. Always give it that
+  path (not `hermes/...`, which is the path on your machine). It reads PDFs directly.
+- **Required context**: 64,000 tokens minimum (see "Model and context" above).
+- **Sub-agents**: Hermes can start them. With `OLLAMA_NUM_PARALLEL=1` (the default here), their requests run one after
+  the other on the GPU: it works, without a speed gain. Raising this setting multiplies context memory and can overflow
+  the VRAM.
+- The container is disposable (`--rm`): only what is in `hermes/data/` is kept.
+- **Closing the terminal stops the session** (container `hermes-session-…` removed), even if the SSH connection drops.
+  For a session to survive a disconnection, start it in `tmux`. `lab doctor` reports a session running for more than
+  12 h.
+- **Development workflow** (git projects, review, merge by you): [docs/agent-development.md](docs/agent-development.md).
+  **Access to a test machine** over SSH, admin scripts after your approval: [docs/hermes-ssh.md](docs/hermes-ssh.md).
 
-- **Open WebUI** : Admin → Fonctions → nouvelle fonction (filtre Langfuse, code sur
-  https://docs.openwebui.com/tutorials/integrations/monitoring/langfuse), puis dans ses Valves : clé publique,
-  clé secrète, hôte `http://langfuse-web:3000`. Activer en « Global ». Garder le SDK Langfuse en v3.
-- **Hermes** : `./5-hermes.sh MODELE plugins install langfuse`, puis dans `hermes/data/.env` :
-  `HERMES_LANGFUSE_PUBLIC_KEY`, `HERMES_LANGFUSE_SECRET_KEY`, `HERMES_LANGFUSE_BASE_URL=http://langfuse-web:3000`
-  (et `HERMES_LANGFUSE_CAPTURE=metadata` pour n'envoyer ni prompts ni réponses). Non vérifié : le plugin doit
-  survivre à la fermeture du conteneur ; contrôle avec `plugins list` au lancement suivant.
+## Langfuse (agent tracing) — optional
 
-## Images (ComfyUI) — optionnel
-
-Projet séparé `comfyui/`, **à lancer seulement quand tu en as besoin** (il prend beaucoup de VRAM). Image
-**communautaire** (`ghcr.io/clsferguson/comfyui-docker`, MIT), figée par son empreinte dans
-`comfyui/docker-compose.yml` ; mise à jour et réglages durables : [docs/generation-images.md](docs/generation-images.md).
+Langfuse records every model call: prompts, answers, duration, tokens, tools used by the agent. It uses the **official**
+`docker-compose.yml` (cloned into `langfuse/app`) with an override that binds it to `127.0.0.1:3002` (3000 = Open WebUI,
+9090 = Prometheus) and puts it on `obs-net`. Langfuse recommends: 4 cores, 16 GB of RAM, ~100 GB of disk. This Compose
+installation has neither high availability nor backups of its own.
 
 ```bash
-./4-comfyui.sh          # décharge les modèles Ollama puis démarre ComfyUI
-./4-comfyui.sh stop     # arrête et libère la VRAM
+cd ai-stack && docker compose up -d && cd ..   # creates the obs-net network
+./6-langfuse.sh                                # clones, generates the secrets, starts, shows account and keys
 ```
 
-1. Dépose un modèle d'image (`.safetensors`) dans `comfyui/data/models/checkpoints/`, relance `./4-comfyui.sh`.
-2. Dans ComfyUI : Settings → « Dev Mode », charge un workflow qui marche, File → **Export (API)** (fichier JSON).
-3. Open WebUI → Admin → Paramètres → **Images** : moteur **ComfyUI**, URL `http://comfyui:8188`, importe le JSON,
-   vérifie la correspondance des champs (prompt, modèle, taille, étapes, seed).
-4. Dans un chat : **+ Integrations → Image**.
+Account, password and API keys are created in advance and written to `langfuse/app/.env` (hidden).
 
-## Banc d'essai (benchmark) — optionnel
+- **Open WebUI**: Admin → Functions → new function (Langfuse filter, code at
+  https://docs.openwebui.com/tutorials/integrations/monitoring/langfuse), then in its Valves: public key, secret key,
+  host `http://langfuse-web:3000`. Enable it as "Global". Keep the Langfuse SDK at v3.
+- **Hermes**: `./5-hermes.sh MODEL plugins install langfuse` (needs Internet: temporarily `lab isolation remove`, then
+  `lab isolation apply`), then in `hermes/data/.env`: `HERMES_LANGFUSE_PUBLIC_KEY`, `HERMES_LANGFUSE_SECRET_KEY`,
+  `HERMES_LANGFUSE_BASE_URL=http://langfuse-web:3000` (and `HERMES_LANGFUSE_CAPTURE=metadata` to send neither prompts nor
+  answers). Not verified: the plugin should survive the container being closed; check with `plugins list` at the next
+  start.
 
-Projet `bench/` : mesures chiffrées avec intervalles de confiance (vitesse, cache KV, contexte, parallélisme,
-**perte de performance selon la limite de puissance du GPU**). Il démarre son propre Ollama de test et arrête
-temporairement celui de production.
+## Images (ComfyUI) — optional
+
+Separate project `comfyui/`, **only start it when you need it** (it takes a lot of VRAM). **Community** image
+(`ghcr.io/clsferguson/comfyui-docker`, MIT), pinned by digest in `comfyui/docker-compose.yml`; update procedure and
+durable settings: [docs/image-generation.md](docs/image-generation.md).
+
+```bash
+./4-comfyui.sh          # unloads the Ollama models then starts ComfyUI
+./4-comfyui.sh stop     # stops it and frees the VRAM
+```
+
+1. Put an image model (`.safetensors`) in `comfyui/data/models/checkpoints/`, run `./4-comfyui.sh` again.
+2. In ComfyUI: Settings → "Dev Mode", load a workflow that works, File → **Export (API)** (JSON file).
+3. Open WebUI → Admin → Settings → **Images**: engine **ComfyUI**, URL `http://comfyui:8188`, import the JSON, check the
+   field mapping (prompt, model, size, steps, seed).
+4. In a chat: **+ Integrations → Image**.
+
+## Benchmark bench — optional
+
+Project `bench/`: measurements with confidence intervals (speed, KV cache, context, parallelism, **performance loss
+depending on the GPU power limit**). It starts its own test Ollama and temporarily stops the production one.
 
 ```bash
 ./7-bench.sh check
 ./7-bench.sh run quick-smoke --model qwen3.8:27b     # ~5 min
-./7-bench.sh run power-sweep --model qwen3.8:27b     # courbe puissance → tok/s, J/token, °C
+./7-bench.sh run power-sweep --model qwen3.8:27b     # power → tok/s, J/token, °C curve
 ```
 
-Rapport HTML dans `bench/results/…/report.html`. Méthode et limites : `bench/README.md`.
-Non vérifié sur ton matériel : le banc n'a été testé qu'avec un faux GPU et un faux Ollama.
+HTML report in `bench/results/…/report.html`. Method and limits: `bench/README.md`.
 
-## OpenClaw — optionnel
+## OpenClaw — optional
 
-Prérequis : `ai-stack` tourne (il crée le réseau `llm-net`) et un modèle est téléchargé.
+Prerequisite: `ai-stack` is running (it creates the `llm-net` network) and a model is downloaded.
 
 ```bash
 ./openclaw/install.sh
 ```
 
-Le script clone le dépôt officiel, ajoute un override (la gateway rejoint `llm-net`), puis lance l'installateur officiel.
-Réponses à donner : provider **Ollama**, mode **Local only**, URL `http://ollama:11434` (pas `host.docker.internal`),
-modèle téléchargé. Interface : http://127.0.0.1:18789/ avec le jeton `OPENCLAW_GATEWAY_TOKEN` de `~/openclaw/.env`.
+The script clones the official repository, adds an override (the gateway joins `llm-net`), runs the official installer,
+then limits OpenClaw's ports to `127.0.0.1` and reapplies the agent firewall. Answers to give: provider **Ollama**, mode
+**Local only**, URL `http://ollama:11434` (not `host.docker.internal`), the downloaded model. Interface:
+http://127.0.0.1:18789/ with the `OPENCLAW_GATEWAY_TOKEN` from `~/openclaw/.env`.
 
-Commandes utiles (depuis `~/openclaw`) :
+Useful commands (from `~/openclaw`):
 
 ```bash
-docker compose run --rm openclaw-cli dashboard --no-open     # réafficher l'URL
+docker compose run --rm openclaw-cli dashboard --no-open     # show the URL again
 docker compose run --rm openclaw-cli models list --provider ollama
 docker compose logs -f openclaw-gateway
 ```
 
-Mise à jour : `cd ~/openclaw && git pull && docker compose pull && docker compose up -d`.
-**Important :** le script officiel appelle `docker compose -f docker-compose.yml`, qui ignore l'override réseau. Après toute recréation de la passerelle (mise à jour, `up -d`), rattache-la à Ollama : `docker network connect llm-net $(docker compose -f docker-compose.yml ps -q openclaw-gateway)` (sans effet si elle y est déjà ; `./openclaw/install.sh` le fait aussi).
-Installation réelle, pièges et sécurité (ports 18789 et 3978 publiés sur toutes les interfaces) : [docs/openclaw.md](docs/openclaw.md).
+Update: `cd ~/openclaw && git pull && docker compose pull && docker compose up -d`.
+**Important:** the official script calls `docker compose -f docker-compose.yml`, which ignores the network override.
+After any recreation of the gateway (update, `up -d`), reattach it to Ollama:
+`docker network connect llm-net $(docker compose -f docker-compose.yml ps -q openclaw-gateway)` (no effect if it is
+already attached; `./openclaw/install.sh` does it too), then `lab isolation apply`.
+Real installation, pitfalls, security (ports, allowed models and tools): [docs/openclaw.md](docs/openclaw.md).
 
-## Stockage (second SSD sur /data) — optionnel
+## Storage (second SSD on /data) — optional
 
-Système sur un disque, données lourdes (images Docker, volumes dont les modèles Ollama) sur un second disque monté sur
-`LAB_DATA_DIR` (`/data` par défaut). Machine de référence : NVMe 480 Go + SSD 4 To. Sans second disque, saute cette
-section et règle `LAB_DATA_DIR` dans `lab.conf`.
+System on one disk, heavy data (Docker images, volumes including the Ollama models) on a second disk mounted on
+`LAB_DATA_DIR` (`/data` by default). Reference machine: 480 GB NVMe + 4 TB SSD. Without a second disk, skip this section
+and set `LAB_DATA_DIR` in `lab.conf`.
 
 ```bash
-./8-stockage.sh etat      # disques, /data, racine Docker
-./8-stockage.sh disque /dev/NOM   # EFFACE ce disque (nom obligatoire, voir « etat »), ext4, monté via fstab
-./8-stockage.sh docker    # arrête les conteneurs, copie Docker vers /data/docker, data-root + garde-fou systemd
-./3-demarrer.sh           # puis relancer les services
+./8-stockage.sh status          # disks, /data, Docker root
+./8-stockage.sh disk /dev/NAME  # ERASES this disk (name required, see "status"), ext4, mounted through fstab
+./8-stockage.sh docker          # stops the containers, copies Docker to /data/docker, data-root + systemd guard
+./3-demarrer.sh                 # then restart the services
 ```
 
-L'ancien dossier reste dans `/var/lib/docker.old` jusqu'à ce que tu le supprimes. Non testé sur du vrai matériel.
-Sauvegardes : le SSD seul n'est pas une sauvegarde (copie chiffrée vers un autre support à prévoir).
+The old folder stays in `/var/lib/docker.old` until you delete it. A disk alone is not a backup (an encrypted copy to
+another medium is still needed).
 
-## Arrêter ou éteindre la machine
+## Stopping or shutting down the machine
 
-Tu peux simplement éteindre : Docker arrête proprement ses conteneurs, les données restent dans les volumes, et
-les services reviennent seuls au démarrage (sauf ComfyUI, et Hermes qui n'est lancé qu'à la demande).
-Pour tout arrêter proprement avant :
+You can simply shut down: Docker stops its containers cleanly, the data stays in the volumes, and the services come back
+on their own at boot (except ComfyUI, and Hermes which is only started on demand). To stop everything cleanly before:
 
 ```bash
 for d in ai-stack monitoring comfyui langfuse/app; do (cd $d 2>/dev/null && docker compose stop); done
 (cd ~/openclaw 2>/dev/null && docker compose stop)
 ```
 
-Relancer : `./3-demarrer.sh`, puis `docker compose up -d` dans `langfuse/app` et `~/openclaw` si installés.
-**N'utilise jamais `docker compose down -v`** : l'option `-v` supprime les volumes (conversations, workflows, modèles).
+Restart: `./3-demarrer.sh` (or `lab start`), then `docker compose up -d` in `langfuse/app` and `~/openclaw` if installed.
+**Never use `docker compose down -v`**: the `-v` option deletes the volumes (conversations, workflows, models).
 
-## Sécurité (à lire avant de donner des outils à un agent)
+## Security (read before giving tools to an agent)
 
-Vue d'ensemble avec diagrammes (réseaux, ports, accès, agents, risques restants) :
-[docs/architecture-securite.md](docs/architecture-securite.md).
+Overview with diagrams (networks, ports, access, agents, remaining risks):
+[docs/security-architecture.md](docs/security-architecture.md).
 
-- **Agents sans Internet** : Hermes et OpenClaw ne joignent qu'Ollama (et Langfuse) ; Internet, le réseau local et la
-  machine elle-même leur sont fermés, sauf SSH vers les machines de test que tu autorises : `lab isolation install`,
-  [docs/isolation-agents.md](docs/isolation-agents.md).
+- **Agents without Internet**: Hermes and OpenClaw only reach Ollama (and Langfuse); the Internet, the local network and
+  the machine itself are closed to them, except SSH to the test machines you allow: `lab isolation install`,
+  [docs/agent-isolation.md](docs/agent-isolation.md).
+- **Check the exposure**: `ss -tlnp | grep -vE '127\.0\.0\.1|\[::1\]|127\.0\.0\.53'` must only show SSH (22) and, if
+  enabled, the remote desktop (3389). Docker bypasses UFW: a port published on `0.0.0.0` would be reachable from the
+  network, which is why every port of the lab is bound to `127.0.0.1`.
+- **Remote access**: SSH tunnels over the local network or a VPN (Tailscale, WireGuard…), never a port open to the
+  Internet: [docs/remote-access.md](docs/remote-access.md).
+- **Data**: do not mount your personal folders into an agent container. Only copy what it needs.
+- **Accounts**: at first, no real mail or accounts connected. An agent that reads external content (web, mails,
+  messages) can be manipulated by that content (prompt injection).
+- **Secrets**: treat `ai-stack/.env`, `langfuse/app/.env` and `~/openclaw/.env` as credentials.
+- **Plugins and functions** (Open WebUI, Hermes): they run code on your machine; read them before installing them.
+- **Backups**: volumes `ollama_data`, `n8n_data`, `postgres_n8n_data`, `qdrant_data`, `open_webui_data`, `grafana_data`,
+  the Langfuse volumes, and the folders `hermes/data`, `comfyui/data`, `~/.openclaw`. Not forgetting the `.env` files.
 
-- **Vérifie l'exposition** : `ss -tlnp | grep -E '18789|3000|3001|3002|5678|6333|8188|9090|11434'`. Aucun ne doit écouter sur
-  `0.0.0.0`. Le port 18789 d'OpenClaw est publié par son compose officiel : sinon, restreins-le par pare-feu
-  (Docker contourne UFW ; voir la chaîne `DOCKER-USER`).
-- **Accès à distance** : tunnels SSH par le réseau local ou un VPN (Tailscale, WireGuard…), jamais de port ouvert sur
-  Internet : [docs/acces-distant.md](docs/acces-distant.md).
-- **Données** : ne monte pas tes dossiers personnels dans un conteneur d'agent. Ne copie que ce dont il a besoin.
-- **Comptes** : au début, pas de mails ni de comptes réels connectés. Un agent qui lit du contenu externe
-  (web, mails, messages) peut être manipulé par ce contenu (injection de prompt).
-- **Secrets** : traite `ai-stack/.env`, `langfuse/app/.env` et `~/openclaw/.env` comme des identifiants.
-- **Plugins et fonctions** (Open WebUI, Hermes) : ils exécutent du code sur ta machine ; lis-les avant de les installer.
-- **Sauvegardes** : volumes `ollama_data`, `n8n_data`, `postgres_n8n_data`, `qdrant_data`, `open_webui_data`,
-  `grafana_data`, les volumes de Langfuse, et les dossiers `hermes/data`, `comfyui/data`, `~/.openclaw`. Sans oublier
-  les fichiers `.env`.
+## Quick troubleshooting
 
-## Dépannage rapide
-
-| Symptôme | Piste |
+| Symptom | Lead |
 |---|---|
-| `docker: command not found` | `./1-prerequis.sh` n'est pas allé au bout ; relance-le et lis la fin du message |
-| `apt` : « Release … n'est pas encore valable » | L'horloge de la machine est fausse : `sudo timedatectl set-ntp true` |
-| `apt` : verrou `dpkg` occupé (`unattended-upgr`) | Mise à jour automatique en cours ; attends : `pgrep -a unattended-upgr` |
-| `could not select device driver "nvidia"` | NVIDIA Container Toolkit non configuré : `./1-prerequis.sh` |
-| `network llm-net / hermes-net / obs-net not found` | Lance d'abord `ai-stack` (`docker compose up -d`) |
-| SearXNG en boucle : `settings.yml is a directory` | Docker a créé un faux dossier : `docker compose stop searxng`, `sudo rm -r ai-stack/searxng/settings.yml`, `sudo chown "$USER": ai-stack/searxng`, recopie le vrai fichier, puis `docker compose rm -sf searxng && docker compose up -d searxng` |
-| Dictée : 404 sur `/audio/transcriptions` | Le moteur STT pointe vers Kokoro : remets Whisper local (Admin → Audio → STT) |
-| Voix introuvable (`Voice "…" not found`) | Choisis une voix de la liste (`af_bella`…) dans Admin → Audio |
-| Hermes ne trouve pas un fichier | Utilise le chemin vu par Hermes : `/opt/data/workspace/…` |
-| Hermes refuse de démarrer | Contexte < 64000 : `OLLAMA_CONTEXT_LENGTH=65536`, puis `docker compose up -d` |
-| OpenClaw n'atteint pas Ollama | `docker compose run --rm openclaw-cli doctor --json` ; URL `http://ollama:11434` |
-| Réponses très lentes | `docker exec ollama ollama ps` : le modèle déborde sur le CPU |
-| n8n : cookie/connexion refusée en http | `N8N_SECURE_COOKIE=false` dans `ai-stack/.env` |
+| `docker: command not found` | `./1-prerequis.sh` did not finish; run it again and read the end of the message |
+| `apt`: "Release … is not valid yet" | The machine's clock is wrong: `sudo timedatectl set-ntp true` |
+| `apt`: `dpkg` lock busy (`unattended-upgr`) | Automatic update running; wait: `pgrep -a unattended-upgr` |
+| `could not select device driver "nvidia"` | NVIDIA Container Toolkit not configured: `./1-prerequis.sh` |
+| `network llm-net / hermes-net / obs-net not found` | Start `ai-stack` first (`docker compose up -d`) |
+| SearXNG looping: `settings.yml is a directory` | Docker created a fake folder: `docker compose stop searxng`, `sudo rm -r ai-stack/searxng/settings.yml`, `sudo chown "$USER": ai-stack/searxng`, copy the real file back, then `docker compose rm -sf searxng && docker compose up -d searxng` |
+| Dictation: 404 on `/audio/transcriptions` | The STT engine points to Kokoro: set local Whisper back (Admin → Audio → STT) |
+| Voice not found (`Voice "…" not found`) | Pick a voice from the list (`af_bella`…) in Admin → Audio |
+| Hermes cannot find a file | Use the path seen by Hermes: `/opt/data/workspace/…` |
+| Hermes refuses to start | Context < 64000: `OLLAMA_CONTEXT_LENGTH=65536`, then `docker compose up -d` |
+| OpenClaw cannot reach Ollama | `docker network connect llm-net openclaw-openclaw-gateway-1`; `docker compose run --rm openclaw-cli doctor --json`; URL `http://ollama:11434` |
+| Very slow answers | `docker exec ollama ollama ps`: the model spills over to the CPU |
+| n8n: cookie/login refused over http | `N8N_SECURE_COOKIE=false` in `ai-stack/.env` |
+| An agent reaches the Internet | `lab isolation test`, `lab doctor`: see [docs/agent-isolation.md](docs/agent-isolation.md) |

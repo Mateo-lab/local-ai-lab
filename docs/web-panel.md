@@ -12,7 +12,7 @@ lab panel install
 
 La commande crée un service utilisateur (`aibeast-panel`), le démarre, et affiche une adresse du type `http://127.0.0.1:3011/login?t=…`.
 
-Sur ton PC : la ligne `LocalForward 3011 127.0.0.1:3011` fait partie de la configuration générée par `lab client` (voir `docs/acces-distant.md`) ; rouvre le tunnel, puis ouvre l'adresse affichée **une fois**. Un cookie de 30 jours te garde connecté ; ensuite `http://127.0.0.1:3011` suffit (lien aussi dans le portail).
+Sur ton PC : la ligne `LocalForward 3011 127.0.0.1:3011` fait partie de la configuration générée par `lab client` (voir `docs/remote-access.md`) ; rouvre le tunnel, puis ouvre l'adresse affichée **une fois**. Un cookie de 30 jours te garde connecté ; ensuite `http://127.0.0.1:3011` suffit (lien aussi dans le portail).
 
 Autres commandes : `lab panel token` (réafficher l'adresse), `status`, `logs`, `restart`, `uninstall`.
 

@@ -23,7 +23,7 @@
 
 # ─── 2. L'accès depuis ton ordinateur (client) ─────────────────────────────────
 # Utilisé par `lab client` pour générer la configuration SSH à copier sur ton PC.
-# Voir docs/acces-distant.md.
+# Voir docs/remote-access.md.
 
 # Adresse de la machine IA, telle que ton PC la joint : IP du réseau local, IP de ton VPN,
 # nom Tailscale (ex. aibeast.tailnet-xxxx.ts.net)… OBLIGATOIRE pour `lab client`.
@@ -45,5 +45,5 @@
 # ─── 3. Isolation des agents (lab isolation) ───────────────────────────────────
 # Hermes et OpenClaw n'ont accès ni à Internet, ni au réseau local, ni à cette machine.
 # Exceptions : machines de test que Hermes peut joindre en SSH (lab remote), séparées par des espaces,
-# sous la forme IP ou IP:PORT (port 22 par défaut). Vide = aucune exception. Voir docs/isolation-agents.md.
+# sous la forme IP ou IP:PORT (port 22 par défaut). Vide = aucune exception. Voir docs/agent-isolation.md.
 #LAB_AGENT_SSH_ALLOW="192.168.1.60"

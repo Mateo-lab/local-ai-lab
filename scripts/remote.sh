@@ -58,7 +58,7 @@ icacls $f   # doit lister seulement SYSTEM, Administrateurs et @USER@
 Add-Content 'C:\ProgramData\ssh\sshd_config' "`nMatch User @USER@`n    AuthorizedKeysFile C:/ProgramData/ssh/@USER@_authorized_keys`n    PasswordAuthentication no`n    AllowTcpForwarding no`n    AllowStreamLocalForwarding no`n    PermitTunnel no`n    AllowAgentForwarding no`n    X11Forwarding no`n    GatewayPorts no"
 Restart-Service sshd
 # 5. Couper Internet sur cette machine (sinon l'agent pourrait y lancer des commandes qui sortent) :
-#    windows\outils\Isoler-machine-de-test.ps1, en administrateur (docs/isolation-agents.md)
+#    windows\outils\Isoler-machine-de-test.ps1, en administrateur (docs/agent-isolation.md)
 PS
 )"
     t="${t//@USER@/$user}"; t="${t//@LINE@/$line}"
@@ -152,7 +152,7 @@ echo -n 'utilisateur : '; \$S whoami || exit 4
 echo -n 'machine     : '; \$S hostname
 if \$S 'whoami /groups' 2>/dev/null | grep -q 'S-1-5-32-544'; then echo 'ATTENTION : cet utilisateur est membre des administrateurs Windows'; fi
 if \$S 'sudo -n true' >/dev/null 2>&1; then echo 'ATTENTION : sudo possible sans mot de passe'; else echo 'pas de sudo sans mot de passe : bien'; fi
-if timeout 15 ssh -F $INSIDE/config -W 127.0.0.1:22 $name < /dev/null 2>&1 | grep -q 'SSH-2.0'; then echo 'ATTENTION : tunnel SSH possible (redirection de port) : voir docs/isolation-agents.md'; else echo 'tunnel SSH refusé : bien'; fi
+if timeout 15 ssh -F $INSIDE/config -W 127.0.0.1:22 $name < /dev/null 2>&1 | grep -q 'SSH-2.0'; then echo 'ATTENTION : tunnel SSH possible (redirection de port) : voir docs/agent-isolation.md'; else echo 'tunnel SSH refusé : bien'; fi
 if \$S ver 2>/dev/null | grep -qi windows; then
   r=\$(\$S powershell -NoProfile -NonInteractive -EncodedCommand $enc 2>/dev/null | tr -d '\\r')
   case \"\$r\" in *internet=False*) echo 'Internet depuis la machine : bloqué, bien';; *) echo \"ATTENTION : la machine a accès à Internet (\$r) : windows/outils/Isoler-machine-de-test.ps1\";; esac

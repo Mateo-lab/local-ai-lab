@@ -1,6 +1,6 @@
 ﻿# Menu AiBeast : les actions courantes sans taper de commande.
 # Utilisation : double-clic sur AiBeast-Menu.bat (menu), ou sur un raccourci direct (AiBeast-Images.bat, AiBeast-Normal.bat...).
-# Prérequis : la clé SSH et l'entrée "Host aibeast" générée par « lab client » sur AiBeast (voir docs\acces-distant.md).
+# Prérequis : la clé SSH et l'entrée "Host aibeast" générée par « lab client » sur AiBeast (voir docs\remote-access.md).
 param([string]$Action = "menu")
 $Hote = "aibeast"
 $Lab  = "~/.local/bin/lab"

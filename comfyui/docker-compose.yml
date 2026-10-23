@@ -9,7 +9,7 @@ name: comfyui
 
 services:
   comfyui:
-    image: ghcr.io/clsferguson/comfyui-docker@sha256:6c0adbc07478eca67c56ec25ac0bfdd4e58ea91fc7f63b0cad45a11a2ad76a32   # version du 6 oct. 2026, figée (voir docs/generation-images.md)
+    image: ghcr.io/clsferguson/comfyui-docker@sha256:6c0adbc07478eca67c56ec25ac0bfdd4e58ea91fc7f63b0cad45a11a2ad76a32   # version du 6 oct. 2026, figée (voir docs/image-generation.md)
     container_name: comfyui
     # Ne démarre pas tout seul au boot : tu le lances quand tu en as besoin (il prend de la VRAM).
     restart: "no"

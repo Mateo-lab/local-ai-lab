@@ -9,7 +9,7 @@
 #   lab isolation remove      retire les règles (les réseaux internes restent sans sortie)
 #   lab isolation uninstall   retire le service et les règles
 #
-# Fonctionnement (détail : docs/isolation-agents.md) :
+# Fonctionnement (détail : docs/agent-isolation.md) :
 # - llm-net, hermes-net, obs-net sont des réseaux Docker « internes » (ai-stack/docker-compose.yml) : aucune sortie.
 # - Hermes a un réseau de sortie dédié (hermes-sortie, interface br-hermes-out) : tout y est bloqué sauf
 #   LAB_AGENT_SSH_ALLOW.
@@ -58,7 +58,7 @@ cmd_apply() {
   for n in llm-net hermes-net obs-net; do b="$(bridge_of "$n")"; [ -n "$b" ] && internes+=("$b"); done
   for n in llm-net hermes-net obs-net; do
     [ "$(docker network inspect -f '{{.Internal}}' "$n" 2>/dev/null)" = "true" ] \
-      || echo "ATTENTION : le réseau $n n'est pas interne (ou absent) : les conteneurs qui y sont reliés peuvent sortir. Voir docs/isolation-agents.md." >&2
+      || echo "ATTENTION : le réseau $n n'est pas interne (ou absent) : les conteneurs qui y sont reliés peuvent sortir. Voir docs/agent-isolation.md." >&2
   done
 
   iptables -N "$CH" 2>/dev/null || iptables -F "$CH"
@@ -186,7 +186,7 @@ const tcp=(h,p)=>new Promise(r=>{const s=net.connect({host:h,port:+p});s.setTime
           "machine hôte, SSH (${hostip:-?}:22)|${hostip:-127.0.0.2}|22|bloque")
   while read -r ip port; do [ -n "$ip" ] && checks+=("machine de test autorisée ($ip:$port)|$ip|$port|ouvert"); done < <(allow_list)
   (cd "$ROOT/hermes" && docker compose run --rm --no-deps -T --entrypoint python3 hermes -c "$PROBE" "${checks[@]}") || rc=1
-  [ $rc = 0 ] && echo "Isolation vérifiée." || echo "Au moins un contrôle a échoué : voir docs/isolation-agents.md." >&2
+  [ $rc = 0 ] && echo "Isolation vérifiée." || echo "Au moins un contrôle a échoué : voir docs/agent-isolation.md." >&2
   return $rc
 }
 

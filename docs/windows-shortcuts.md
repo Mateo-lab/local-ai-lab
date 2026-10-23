@@ -16,7 +16,7 @@ Les actions qui modifient AiBeast (déployer, mise à jour, sauvegarde) demanden
 
 Double-clic sur un fichier `.bat` du dossier `windows\outils\` de ton PC. Chaque raccourci se connecte à AiBeast par SSH (comme `Ouvrir-AiBeast.bat`),
 lance la commande `lab` correspondante et affiche le résultat. Il faut le réseau (VPN si tu es dehors), la clé SSH et le raccourci `aibeast` dans la configuration SSH du PC,
-généré par `lab client` sur AiBeast (voir `docs/acces-distant.md`). Le dossier `windows\` peut être n'importe où sur le PC :
+généré par `lab client` sur AiBeast (voir `docs/remote-access.md`). Le dossier `windows\` peut être n'importe où sur le PC :
 l'archive `ai-lab.tar.gz` et la copie des sauvegardes `aibeast-backup\` sont cherchées à côté de lui.
 
 | Raccourci | Ce qu'il fait | Commande équivalente |
@@ -47,7 +47,7 @@ Plus besoin de donner `--model` : `lab bench`, `lab dev start` et `lab dev ctx64
 |---|---|
 | `Installer-config-SSH.bat` | Installe ou met à jour le raccourci `aibeast` dans `%USERPROFILE%\.ssh\config` à partir de `windows\ssh_config_aibeast.txt` (généré par `lab client`) ; sauvegarde l'ancienne configuration, ne touche pas aux autres blocs |
 | `Installer-admin-hermes.ps1`, `Approuver-script-hermes.ps1` | **Sur la machine de test**, en administrateur : permettent à Hermes de lancer en administrateur les scripts `.bat` que tu as approuvés, sans être administrateur (voir `docs/hermes-ssh.md`) |
-| `Isoler-machine-de-test.ps1` | À lancer **en administrateur sur la machine de test** des agents (pas sur ton PC) : coupe Internet et le DNS pour cette machine, interdit les tunnels SSH au compte de Hermes ; `-Annuler` pour revenir (voir `docs/isolation-agents.md`) |
+| `Isoler-machine-de-test.ps1` | À lancer **en administrateur sur la machine de test** des agents (pas sur ton PC) : coupe Internet et le DNS pour cette machine, interdit les tunnels SSH au compte de Hermes ; `-Annuler` pour revenir (voir `docs/agent-isolation.md`) |
 | `recuperer-work-hermes.bat` | À lancer sur la machine de test Windows (`lab remote add … --windows`) avec ton compte : copie `C:\Users\hermes\work` vers `Documents\hermes-work` (robocopy, ne supprime rien) |
 | `Deployer-sur-AiBeast.ps1` | Livre `ai-lab.tar.gz` (produite sur AiBeast par `scripts/release.sh`). Refuse si le dépôt git d'AiBeast a des modifications non commitées, affiche `git status` après extraction. Sauvegarde de sécurité `~/avant-*.tgz` (≈ 1 Mo : sans `bench/.venv` ni `bench/results`, que la livraison ne touche jamais) |
 

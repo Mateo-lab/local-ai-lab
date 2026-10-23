@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Panneau de contrôle d'AiBeast : quelques boutons qui lancent des commandes `lab` prédéfinies.
 
-Sécurité (voir docs/panneau-web.md) :
+Sécurité (voir docs/web-panel.md) :
   - écoute sur 127.0.0.1 uniquement (tu y accèdes par ton tunnel SSH) ;
   - jeton secret (cookie HttpOnly SameSite=Strict) + en-tête X-Panel + contrôle de Host et d'Origin ;
   - AUCUNE commande libre : seules les actions de ACTIONS existent ; projet et branche doivent être dans la liste réelle de `lab dev pending` ;

@@ -19,13 +19,13 @@ services:
     command: serve
     environment:
       TZ: Europe/Brussels
-      # Adresse publique vue par tes appareils. Localement : http://127.0.0.1:2586 (voir docs/alertes.md pour le téléphone)
+      # Adresse publique vue par tes appareils. Localement : http://127.0.0.1:2586 (voir docs/alerts.md pour le téléphone)
       NTFY_BASE_URL: ${NTFY_BASE_URL:-http://127.0.0.1:2586}
       NTFY_LISTEN_HTTP: ":80"
       NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
       NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
       # read-write = ouvert à qui joint le port ; reste sans danger tant que le port est lié à 127.0.0.1.
-      # Si tu l'exposes sur le réseau/VPN : mets deny-all (voir docs/alertes.md).
+      # Si tu l'exposes sur le réseau/VPN : mets deny-all (voir docs/alerts.md).
       NTFY_AUTH_DEFAULT_ACCESS: ${NTFY_AUTH_DEFAULT_ACCESS:-read-write}
     volumes:
       - ntfy_data:/var/lib/ntfy
@@ -36,7 +36,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   alertmanager-ntfy:
-    # Pont communautaire (github.com/alexbakker/alertmanager-ntfy). Non vérifié ici : voir docs/alertes.md si le conteneur
+    # Pont communautaire (github.com/alexbakker/alertmanager-ntfy). Non vérifié ici : voir docs/alerts.md si le conteneur
     # ne démarre pas (nom d'image, commande).
     image: ghcr.io/alexbakker/alertmanager-ntfy:latest
     container_name: alertmanager-ntfy

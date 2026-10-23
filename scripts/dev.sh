@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Atelier de développement avec Hermes : projets git locaux, boucle code → test → review, fusion par l'humain.
-# Appelé par `lab dev …` (voir docs/developpement-agents.md).
+# Appelé par `lab dev …` (voir docs/agent-development.md).
 #
 #   dev.sh new NOM [python|node|shell|autre]   crée un projet (git, AGENTS.md, scripts/check)
 #   dev.sh list                                projets, branche courante, branches de l'agent à relire

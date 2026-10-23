@@ -1,33 +1,37 @@
 # Documentation
 
-AiBeast = la machine IA (nom de la machine d'origine du projet). Les mesures et retours d'expérience ont été faits sur
-cette machine de référence : RTX 3090 24 Go, 64 Go de RAM, Ubuntu 26.04.
+AiBeast = the AI machine (the name of the project's original machine). Measurements and lessons learned come from this
+reference machine: RTX 3090 24 GB, 64 GB of RAM, Ubuntu 26.04.
 
-| Document | Pour quoi faire |
+| Document | What it is for |
 |---|---|
-| [installation.md](installation.md) | **Commencer ici** : installer le lab sur une nouvelle machine, de zéro à l'accès depuis ton PC |
-| [acces-distant.md](acces-distant.md) | SSH par clé, configuration du PC (`lab client`), tunnels, bureau à distance (RDP), démarrage, secours |
-| [lab.md](lab.md) | La commande `lab` : référence, mises à jour, retour arrière |
-| [configuration.md](configuration.md) | `lab.conf` : réglages propres à la machine (disque de données, modèle, accès distant), séparation code / configuration / secrets |
-| [portail.md](portail.md) | Page d'accueil unique (http://127.0.0.1:3010), tunnels Windows, ajout d'un service |
-| [open-webui.md](open-webui.md) | Modèle de tâches, préréglages, réglages, état de la voix en français |
-| [performance.md](performance.md) | Limite de puissance du GPU, réglages d'Ollama, marche à suivre des mesures |
-| [comprendre-les-mesures.md](comprendre-les-mesures.md) | Pourquoi tester puissance, contexte, cache KV…, comment lire un rapport, glossaire |
-| [remote-desktop-gpu.md](remote-desktop-gpu.md) | Analyse : le bureau à distance coûte ≈ 100 W |
-| [alertes.md](alertes.md) | Prometheus → Alertmanager → ntfy : règles, test, réaction |
-| [sauvegardes.md](sauvegardes.md) | Sauvegardes chiffrées (restic) et restauration |
-| [raccourcis-windows.md](raccourcis-windows.md) | Double-clic sur ton PC : mode images, santé, mise à jour, Hermes ; modèle par défaut (`lab config`) |
-| [panneau-web.md](panneau-web.md) | Page à boutons (modes, santé, mise à jour, sauvegarde, revue Hermes) via le tunnel SSH (`lab panel`) |
-| [hermes-ssh.md](hermes-ssh.md) | Donner à Hermes un accès SSH limité à une machine de test (`lab remote`) |
-| [n8n-gmail.md](n8n-gmail.md) | Tri des mails Gmail par le modèle local dans n8n, anciens mails, corbeille validée (workflows dans `n8n/`) |
-| [developpement-agents.md](developpement-agents.md) | Développer avec Hermes : projets git, boucle code → test → review, fusion par toi (`lab dev`) |
-| [generation-images.md](generation-images.md) | Images avec Qwen-Image-2.1 dans ComfyUI : installation, réglages, mesures, exemples, pièges |
-| [architecture-securite.md](architecture-securite.md) | **Vue d'ensemble** : réseaux, ports, accès, confinement des agents, protections et risques restants, avec diagrammes |
-| [isolation-agents.md](isolation-agents.md) | Agents sans Internet : réseaux internes, pare-feu (`lab isolation`), exceptions SSH, vérification |
-| [openclaw.md](openclaw.md) | OpenClaw : installation, pièges rencontrés (réseau, clé factice, modèle, contexte 64k), sécurité, mise à jour |
-| [agents-langfuse.md](agents-langfuse.md) | Langfuse, brancher Hermes, mode agents, ComfyUI (1er démarrage), pièges rencontrés |
+| [installation.md](installation.md) | **Start here**: install the lab on a new machine, from scratch to access from your PC |
+| [remote-access.md](remote-access.md) | Key-based SSH, PC configuration (`lab client`), tunnels, remote desktop (RDP), startup, recovery |
+| [lab.md](lab.md) | The `lab` command: reference, updates, rollback |
+| [configuration.md](configuration.md) | `lab.conf`: machine-specific settings (data disk, model, remote access), separation of code / configuration / secrets |
+| [security-architecture.md](security-architecture.md) | **Overview**: networks, ports, access, agent confinement, protections and remaining risks, with diagrams |
+| [agent-isolation.md](agent-isolation.md) | Agents without Internet: internal networks, firewall (`lab isolation`), SSH exceptions, test machine, verification |
+| [portal.md](portal.md) | Single home page (http://127.0.0.1:3010), Windows tunnels, adding a service |
+| [open-webui.md](open-webui.md) | Task model, presets, settings, state of the voice features |
+| [performance.md](performance.md) | GPU power limit, Ollama settings, measurement procedure |
+| [understanding-benchmarks.md](understanding-benchmarks.md) | Why test power, context, KV cache…, how to read a report, glossary |
+| [remote-desktop-gpu.md](remote-desktop-gpu.md) | Analysis: the remote desktop costs ≈ 100 W |
+| [alerts.md](alerts.md) | Prometheus → Alertmanager → ntfy: rules, test, response |
+| [backups.md](backups.md) | Encrypted backups (restic) and restore |
+| [windows-shortcuts.md](windows-shortcuts.md) | Double-click on your PC: image mode, health, update, Hermes, SSH config, test machine tools; default model (`lab config`) |
+| [web-panel.md](web-panel.md) | Button page (modes, health, update, backup, Hermes review) through the SSH tunnel (`lab panel`) |
+| [hermes-ssh.md](hermes-ssh.md) | Give Hermes limited SSH access to a test machine (`lab remote`), admin scripts after approval |
+| [agent-development.md](agent-development.md) | Developing with Hermes: git projects, code → test → review loop, merge by you (`lab dev`) |
+| [openclaw.md](openclaw.md) | OpenClaw: installation, pitfalls (network, dummy key, model, 64k context), security, update |
+| [agents-langfuse.md](agents-langfuse.md) | Langfuse, connecting Hermes, agents mode, ComfyUI (first start), pitfalls |
+| [image-generation.md](image-generation.md) | Images with Qwen-Image-2.1 in ComfyUI: installation, settings, measurements, examples, pitfalls |
+| [n8n-gmail.md](n8n-gmail.md) | Sorting Gmail messages with the local model in n8n, old messages, validated trash (workflows in `n8n/`) |
 
-Documentation à la racine : `README.md` (installation, étapes 1 à 8), `bench/README.md` (banc d'essai).
+Documentation at the root: `README.md` (overview, quick start), `bench/README.md` (benchmark bench).
 
-Convention : chaque document se termine par **« Ce qui n'est pas vérifié »**. Ce qui est écrit avant cette section a été
-mesuré sur ta machine ou contrôlé ; ce qui est dedans ne l'a pas été.
+Convention: every document ends with **"What is not verified"**. What comes before that section was measured on the
+reference machine or checked; what is in it was not.
+
+Commands, menu names and messages are quoted exactly as the tools display them; a few machine-level names created
+before the translation keep their original French spelling (for example the Docker network `hermes-sortie` or the
+folder `C:\ProgramData\hermes-admin\approuves`), because renaming them would break existing installations.

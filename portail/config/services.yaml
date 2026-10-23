@@ -63,7 +63,7 @@
         description: "Optionnel : suivi des agents (installer avec ./6-langfuse.sh)"
         siteMonitor: http://langfuse-web:3000/api/public/health
 
-# Agents lancés à la demande. Pas de voyant : voir docs/portail.md (isolation des réseaux d'OpenClaw et Hermes).
+# Agents lancés à la demande. Pas de voyant : voir docs/portal.md (isolation des réseaux d'OpenClaw et Hermes).
 - Agents (à la demande):
     - OpenClaw:
         icon: mdi-robot-outline

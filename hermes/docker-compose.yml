@@ -2,7 +2,7 @@
 # Image officielle : nousresearch/hermes-agent (tags : stable, latest, main, X.Y.Z).
 #
 # Isolation : réseau hermes-net (interne) partagé avec Ollama uniquement (ni n8n, ni Qdrant, ni OpenClaw) ;
-# aucun accès à Internet ni au réseau local, sauf SSH vers les machines de test autorisées (docs/isolation-agents.md).
+# aucun accès à Internet ni au réseau local, sauf SSH vers les machines de test autorisées (docs/agent-isolation.md).
 # Aucun port publié, et PAS de socket Docker monté : l'agent travaille DANS ce conteneur,
 # qui est son bac à sable. Il ne voit que ./data (sa mémoire ET son dossier de travail ./data/workspace,
 # vu comme /opt/data/workspace dans le conteneur : dépose tes fichiers là).
@@ -37,7 +37,7 @@ networks:
     name: obs-net
   # hermes-net et obs-net sont internes (sans sortie). Ce réseau-ci est la seule route de Hermes vers l'extérieur ;
   # son nom d'interface est fixe pour que le pare-feu (lab isolation) le reconnaisse : tout y est bloqué
-  # sauf SSH vers LAB_AGENT_SSH_ALLOW (lab.conf). Voir docs/isolation-agents.md.
+  # sauf SSH vers LAB_AGENT_SSH_ALLOW (lab.conf). Voir docs/agent-isolation.md.
   hermes-sortie:
     name: hermes-sortie
     driver_opts:

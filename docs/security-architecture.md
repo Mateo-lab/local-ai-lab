@@ -170,9 +170,9 @@ sequenceDiagram
 | Redirections | `AllowTcpForwarding local` (tunnels `-L` permis, `-R` refusé), `GatewayPorts no`, `PermitTunnel no`, `AllowAgentForwarding no`, `X11Forwarding no` | idem |
 | Côté PC | Tunnels liés à `127.0.0.1` du PC (`GatewayPorts no`) : une autre machine du réseau du PC ne peut pas les utiliser | config générée par `lab client` |
 | Interfaces | Chaque interface garde son propre compte ou jeton (Open WebUI, n8n, Grafana, OpenClaw, panneau) | `.env` de chaque projet |
-| Bureau à distance | Éteint par défaut (coûte ≈ 100 W), joint par le tunnel, identifiants RDP propres puis compte Linux | `lab bureau`, [acces-distant.md](acces-distant.md) §9 |
+| Bureau à distance | Éteint par défaut (coûte ≈ 100 W), joint par le tunnel, identifiants RDP propres puis compte Linux | `lab bureau`, [remote-access.md](remote-access.md) §9 |
 
-Détail : [acces-distant.md](acces-distant.md).
+Détail : [remote-access.md](remote-access.md).
 
 ## 6. Le confinement des agents
 
@@ -210,7 +210,7 @@ flowchart LR
 - **Sessions Hermes** : arrêtées à la fermeture du terminal (`5-hermes.sh`) ; `lab doctor` signale une session de plus
   de 12 h. Six sessions oubliées, avec accès Internet, avaient été trouvées avant cette correction.
 
-Détail : [isolation-agents.md](isolation-agents.md).
+Détail : [agent-isolation.md](agent-isolation.md).
 
 ### Le lien SSH de Hermes vers la machine de test
 
@@ -243,12 +243,12 @@ la machine IA, avec les yeux de Hermes : `lab remote test NOM`.
 |---|---|---|
 | Secrets | Mots de passe aléatoires dans des `.env` (créés par `2-secrets.sh`), jamais versionnés ; `.gitignore` exclut `.env`, `client_secret*`, clés, `lab.conf` ; dépôt public publié avec un historique neuf et vérifié par gitleaks | [configuration.md](configuration.md) |
 | Configuration propre à la machine | `lab.conf` (adresses, disque, exceptions SSH des agents), jamais versionné | [configuration.md](configuration.md) |
-| Sauvegardes | restic chiffré, quotidien (03:30), copie hors machine sur le PC par SSH ; mot de passe hors de la machine | [sauvegardes.md](sauvegardes.md) |
-| Supervision | Prometheus + Alertmanager → ntfy (alertes sur le téléphone) ; disques, GPU bloqué en P2, services injoignables | [alertes.md](alertes.md) |
-| ntfy depuis le téléphone | Par défaut sur `127.0.0.1` ; pour un téléphone sur le VPN, `NTFY_BIND` = adresse VPN de la machine IA (exposition limitée au VPN) | [alertes.md](alertes.md) |
-| Images Docker | ComfyUI figé par empreinte ; `lab update` mémorise les images pour `lab rollback` | [generation-images.md](generation-images.md), [lab.md](lab.md) |
-| Données des agents | Hermes ne voit que `hermes/data` ; aucun agent n'a le socket Docker ni un dossier personnel monté | [developpement-agents.md](developpement-agents.md) |
-| Livraison | `scripts/release.sh` (fichiers commités seulement, refus si un fichier sensible apparaît) ; `Deployer-sur-AiBeast` refuse si le dépôt a des modifications non commitées | [raccourcis-windows.md](raccourcis-windows.md) |
+| Sauvegardes | restic chiffré, quotidien (03:30), copie hors machine sur le PC par SSH ; mot de passe hors de la machine | [backups.md](backups.md) |
+| Supervision | Prometheus + Alertmanager → ntfy (alertes sur le téléphone) ; disques, GPU bloqué en P2, services injoignables | [alerts.md](alerts.md) |
+| ntfy depuis le téléphone | Par défaut sur `127.0.0.1` ; pour un téléphone sur le VPN, `NTFY_BIND` = adresse VPN de la machine IA (exposition limitée au VPN) | [alerts.md](alerts.md) |
+| Images Docker | ComfyUI figé par empreinte ; `lab update` mémorise les images pour `lab rollback` | [image-generation.md](image-generation.md), [lab.md](lab.md) |
+| Données des agents | Hermes ne voit que `hermes/data` ; aucun agent n'a le socket Docker ni un dossier personnel monté | [agent-development.md](agent-development.md) |
+| Livraison | `scripts/release.sh` (fichiers commités seulement, refus si un fichier sensible apparaît) ; `Deployer-sur-AiBeast` refuse si le dépôt a des modifications non commitées | [windows-shortcuts.md](windows-shortcuts.md) |
 
 ## 8. Risques restants (connus et acceptés)
 

@@ -44,7 +44,7 @@ Ajoute `--windows` : `lab remote add NOM hermes@ADRESSE --windows`. Au lieu des 
 ## Scripts en administrateur (machine Windows)
 
 L'agent n'est **jamais** administrateur de la machine de test : sinon il pourrait désactiver le pare-feu qui coupe
-Internet ou réactiver les tunnels SSH ([isolation-agents.md](isolation-agents.md) §5). Pour les scripts `.bat`/`.cmd`
+Internet ou réactiver les tunnels SSH ([agent-isolation.md](agent-isolation.md) §5). Pour les scripts `.bat`/`.cmd`
 qui doivent tourner en administrateur, il passe par **des scripts que tu as approuvés** :
 
 ```mermaid
@@ -92,11 +92,11 @@ lancement par Hermes fonctionnent ; Hermes reste un compte standard.
 
 - **Isolation** : Hermes n'a aucun accès réseau sauf ceux que tu autorises. Ajoute l'adresse de la machine à
   `LAB_AGENT_SSH_ALLOW` dans `lab.conf`, puis `lab isolation apply` : sinon la connexion SSH est bloquée
-  ([isolation-agents.md](isolation-agents.md)).
+  ([agent-isolation.md](agent-isolation.md)).
 - **Jamais administrateur** : pour les scripts qui en ont besoin, voir « Scripts en administrateur » ci-dessus.
 - **Pas d'Internet par la machine de test** : lance `windows\outils\Isoler-machine-de-test.ps1` en administrateur sur
   la machine (Internet et DNS coupés pour toute la machine, tunnels SSH interdits au compte de Hermes), puis
-  `lab remote test NOM` (section 5 d'[isolation-agents.md](isolation-agents.md)).
+  `lab remote test NOM` (section 5 d'[agent-isolation.md](agent-isolation.md)).
 
 - **Prends un instantané de la VM** avant chaque séance : l'agent peut casser la machine, par erreur ou parce qu'un texte lu l'y a poussé.
 - **Utilise une machine sans secret** : pas de jetons, pas de clés d'autres machines, pas de partage réseau monté, et si possible isolée de ton réseau sensible. Hermes, lui, ne peut atteindre que ce que la machine atteint.
