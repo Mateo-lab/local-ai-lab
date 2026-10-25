@@ -126,3 +126,17 @@ Not measured: duration of the task, number of review rounds, code quality on a l
 - Hermes has never run the full loop (plan → tests → two-pass review) here; the duration of a task is not known.
 - `scripts/check`: tested for Python (`unittest`), Node (`npm test`) and shell; `pytest`, `ruff` and `shellcheck` were
   not (absent from the test environment).
+
+## Appendix: OpenCode for Hermes (23 October 2026)
+
+OpenCode (command-line coding agent, version 1.19.4) is installed in Hermes's volume, `hermes/data/opencode/`, seen as `/opt/data/opencode/` by Hermes. Hermes runs it with `/opt/data/opencode/opencode run "task"` (bounded task). Sources: [installation](https://opencode.ai/en/docs), [providers](https://opencode.ai/docs/providers), [configuration](https://opencode.ai/docs/config).
+
+**Why this installation.** The Hermes container has no Internet (see `agent-isolation.md`): `npm` or `curl | bash` fail there. `hermes/install-opencode.sh` downloads `opencode-ai` in a throwaway copy of the Hermes image (`bridge` network, same Node and glibc) into the volume. The image's `npm` 12 blocks install scripts: the script therefore runs the package's `postinstall.mjs` by hand, which puts the platform binary in place.
+
+**Files** (in `hermes/data/opencode/`, ignored by git): `opencode.json` (provider `ollama` at `http://ollama:11434/v1`, model `qwen3.8:27b-64k`, context 65536, output 8192, `autoupdate` disabled); `opencode`, a wrapper that sets `OPENCODE_CONFIG` and the XDG folders in the same volume, so it depends neither on `HOME` nor on a project folder.
+
+**Commands.** Install or reinstall: `cd hermes && ./install-opencode.sh [VERSION] [MODEL]` (keeps an existing `opencode.json`). Update: run it again with the new version, after reading its release notes. Change model: edit `hermes/data/opencode/opencode.json`.
+
+**Verified (23 October 2026, reference machine).** `opencode --version` returns 1.19.4 in the Hermes image; `opencode run "Create a file bonjour.txt containing the word salut, then answer only OK"` run as user 1000 on `hermes-net`: model `qwen3.8:27b-64k`, file-write tool call succeeded, answer `OK`, exit code 0; `install-opencode.sh` run again: version 1.19.4, config kept.
+
+**Not verified.** A first installation from scratch with the script; OpenCode on a real project (several files, tests, long tasks); quality of results compared with Hermes alone; duration of a task; its behaviour when Hermes launches it from its own session (no terminal, unknown `HOME`); possible network requests from OpenCode (model list, updates) blocked by the isolation — no error appeared during the test, but the logs were not searched; the case where Hermes and OpenCode query Ollama at the same time (one model served at a time).

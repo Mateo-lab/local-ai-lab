@@ -49,3 +49,11 @@ Rules:
      `ssh -F /opt/data/ssh/config NAME 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\hermes-admin\outils\lancer.ps1 name.bat ARG1 ARG2'`
      (without a script name: list of approved scripts). The script's output and exit code are shown at the end;
    - for a change, propose a new version to approve; never touch the `C:\ProgramData\hermes-admin` folder.
+
+## OpenCode (coding assistant, for a bounded task)
+OpenCode is installed at `/opt/data/opencode/opencode`. It uses the same local model as you.
+- Usage: from the project folder, **on your `agent/*` branch**: `/opt/data/opencode/opencode run "precise task"`. Never in interactive mode (there is no terminal).
+- It replaces none of the rules above: same branch, `./scripts/check` before any commit, and you read `git diff` of what it changed yourself before committing. What it writes is not validated because it wrote it.
+- One request at a time: not while a sub-agent is working (a single local model).
+- Give it a short, complete task (files, constraints, test command). If it fails twice, take over; the 3-attempts rule applies to the whole.
+- No Internet: do not try to work around it. If OpenCode prints a network error but finishes the task, mention it in the report.
