@@ -61,8 +61,8 @@ Good to know on Windows:
 ## Administrator scripts (Windows machine)
 
 The agent is **never** an administrator of the test machine: otherwise it could disable the firewall that cuts the
-Internet or re-enable SSH tunnels ([agent-isolation.md](agent-isolation.md) §5). For the `.bat`/`.cmd` scripts that
-must run as administrator, it goes through **scripts you have approved**:
+Internet or re-enable SSH tunnels ([agent-isolation.md](agent-isolation.md) §5). For the `.bat`/`.cmd` and Python `.py`
+scripts that must run as administrator, it goes through **scripts you have approved**:
 
 ```mermaid
 flowchart LR
@@ -99,6 +99,19 @@ powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Log     
 What to check when reviewing: the script must only call **files placed next to it** (`%~dp0`) or system programs,
 never a file in the agent's profile (it could change it after your approval), and must not touch the firewall, SSH,
 accounts or `C:\ProgramData\hermes-admin`. What is approved runs with **SYSTEM** rights.
+
+**Python scripts (`.py`).** They run with the newest Python installed **for all users** in `C:\Program Files\Python3xx`
+(a folder only administrators can write to), with `python -E -s`: the `PYTHON*` environment variables and the user
+site-packages are ignored. A `.py` can import:
+- the standard library and packages installed for all users (`pip install` run **as administrator** with that
+  Python, for example `pywin32` and `WMI`);
+- modules placed next to it in `approuves\`, which therefore must be approved too, one by one.
+
+It cannot import anything from the agent's profile. When approving a `.py`, the review also flags commands
+(`subprocess`, `os.system`), network access, the registry (`winreg`), native calls (`ctypes`, `win32api`…), dynamic
+code (`exec`, `eval`, `importlib`) and changes to `sys.path`: these are warnings to read, not bans (a WMI script
+legitimately uses `win32com`/`wmi`). Without Python installed for all users, the run is refused with an explicit
+message.
 
 **On the agent side**: rule 6 of its `AGENTS.md` (`hermes/dev-template/AGENTS.md`). History: `approbations.log` and
 `resultats\journal.log` in `C:\ProgramData\hermes-admin`. Maximum duration of a run: 1 hour.

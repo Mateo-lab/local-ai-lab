@@ -1,4 +1,4 @@
-﻿# Lets the agent (hermes account) run AS ADMINISTRATOR the .bat/.cmd scripts that YOU approved,
+﻿# Lets the agent (hermes account) run AS ADMINISTRATOR the .bat/.cmd/.py scripts that YOU approved,
 # without giving it administrator rights. To run AS ADMINISTRATOR on the test machine:
 #
 #   powershell -ExecutionPolicy Bypass -File .\Installer-admin-hermes.ps1               installs (account: hermes)
@@ -14,6 +14,9 @@
 #   Scheduled task \local-ai-lab\Hermes-admin: SYSTEM account; the agent can TRIGGER it, not change it.
 # The agent never becomes an administrator: it can touch neither the firewall nor sshd_config, nor run as
 # administrator anything other than the approved scripts, with filtered arguments (letters, digits, _ . : = / + -).
+# .py scripts run with the newest Python installed for all users in C:\Program Files\Python3xx (admin-only folder),
+# in "-E -s" mode: PYTHON* environment variables and user site-packages are ignored; the script's folder (approuves,
+# read-only for the agent) stays on the import path, so a script can only import modules that were approved too.
 param(
     [Alias('User')][string]$Utilisateur = "hermes",
     [Alias('Uninstall')][switch]$Desinstaller
@@ -54,6 +57,12 @@ foreach ($d in "", "\outils", "\approuves", "\demandes", "\resultats") { icacls 
 $Base = "C:\ProgramData\hermes-admin"
 $journal = "$Base\resultats\journal.log"
 function J([string]$m) { Add-Content -Path $journal -Value ("{0:yyyy-MM-dd HH:mm:ss}  {1}" -f (Get-Date), $m) }
+function Find-Python {   # newest C:\Program Files\Python3xx\python.exe (installed for all users; folder writable by admins only)
+    $c = Get-ChildItem "$env:ProgramFiles" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^Python3\d+$' } |
+         Sort-Object { [int]($_.Name.Substring(7)) } -Descending | ForEach-Object { Join-Path $_.FullName "python.exe" } |
+         Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+    return $c
+}
 for ($tour = 0; $tour -lt 100; $tour++) {
     $d = Get-ChildItem "$Base\demandes" -Filter "*.json" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -First 1
     if (-not $d) { break }
@@ -65,14 +74,17 @@ for ($tour = 0; $tour -lt 100; $tour++) {
     $nom = if ($req) { [string]$req.script } else { "" }
     $arg = @(); if ($req -and $req.args) { $arg = @($req.args | ForEach-Object { [string]$_ }) }
     $raison = $null
-    if ($nom -notmatch '^[A-Za-z0-9_-]{1,64}\.(bat|cmd)$') { $raison = "invalid script name '$nom'" }
+    $py = $null
+    if ($nom -notmatch '^[A-Za-z0-9_-]{1,64}\.(bat|cmd|py)$') { $raison = "invalid script name '$nom'" }
     elseif (-not (Test-Path -LiteralPath (Join-Path "$Base\approuves" $nom) -PathType Leaf)) { $raison = "script not approved '$nom'" }
     elseif ($arg.Count -gt 10) { $raison = "too many arguments" }
     else { foreach ($a in $arg) { if ($a -notmatch '^[A-Za-z0-9_.:=/+-]{1,128}$') { $raison = "argument refused '$a'" } } }
+    if (-not $raison -and $nom -like '*.py') { $py = Find-Python; if (-not $py) { $raison = "no Python found in $env:ProgramFiles\Python3xx (install it for all users)" } }
     if ($raison) { "REFUSED: $raison" | Set-Content $log; "-1" | Set-Content $fin; J "refused ($id): $raison"; continue }
     $chemin = Join-Path "$Base\approuves" $nom
     J "start ($id): $nom $($arg -join ' ')"
-    $p = Start-Process -FilePath "$env:WINDIR\System32\cmd.exe" -ArgumentList ('/d /c ""' + $chemin + '" ' + ($arg -join ' ') + ' > "' + $log + '" 2>&1"') `
+    if ($py) { $cible = '"' + $py + '" -E -s "' + $chemin + '"' } else { $cible = '"' + $chemin + '"' }
+    $p = Start-Process -FilePath "$env:WINDIR\System32\cmd.exe" -ArgumentList ('/d /c "' + $cible + ' ' + ($arg -join ' ') + ' > "' + $log + '" 2>&1"') `
          -WorkingDirectory "$Base\approuves" -WindowStyle Hidden -PassThru
     $null = $p.Handle
     if (-not $p.WaitForExit(3600 * 1000)) {
@@ -88,7 +100,7 @@ for ($tour = 0; $tour -lt 100; $tour++) {
 @'
 # Usage (by the agent, over SSH):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\hermes-admin\outils\lancer.ps1             lists the approved scripts
-#   powershell -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\hermes-admin\outils\lancer.ps1 NAME.bat [ARG...]
+#   powershell -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\hermes-admin\outils\lancer.ps1 NAME.bat|NAME.py [ARG...]
 # Arguments: letters, digits and _ . : = / + - only (10 at most). Exit code = the script's
 # (-1 refused, -2 time exceeded, 124 no result after waiting).
 $Base = "C:\ProgramData\hermes-admin"
@@ -98,7 +110,7 @@ if ($args.Count -eq 0) {
     exit 0
 }
 $nom = [string]$args[0]; $arg = @(); if ($args.Count -gt 1) { $arg = @($args[1..($args.Count - 1)] | ForEach-Object { [string]$_ }) }
-if ($nom -notmatch '^[A-Za-z0-9_-]{1,64}\.(bat|cmd)$') { Write-Output "Invalid script name: $nom"; exit 2 }
+if ($nom -notmatch '^[A-Za-z0-9_-]{1,64}\.(bat|cmd|py)$') { Write-Output "Invalid script name: $nom"; exit 2 }
 if (-not (Test-Path (Join-Path "$Base\approuves" $nom))) { Write-Output "Script not approved: $nom. Ask the human to approve it (Approuver-script-hermes.ps1)."; exit 3 }
 foreach ($a in $arg) { if ($a -notmatch '^[A-Za-z0-9_.:=/+-]{1,128}$') { Write-Output "Argument refused: $a"; exit 2 } }
 $id = (Get-Date).ToString("yyyyMMddHHmmssfff")

@@ -1,4 +1,4 @@
-﻿# Approves a .bat/.cmd script so that the agent can run it as administrator ("Approuver" = approve; see Installer-admin-hermes.ps1).
+﻿# Approves a .bat/.cmd/.py script so that the agent can run it as administrator ("Approuver" = approve; see Installer-admin-hermes.ps1).
 # To run AS ADMINISTRATOR on the test machine:
 #   powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Script C:\Users\hermes\work\project\test.bat
 #   powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -List
@@ -6,8 +6,10 @@
 #   powershell -ExecutionPolicy Bypass -File .\Approuver-script-hermes.ps1 -Log            latest runs
 # (The former French parameter names -Fichier, -Lister, -Retirer and -Journal still work.)
 # The script is SHOWN in full: read it. What is approved runs with SYSTEM rights.
-# Rule: an approved script must only call files in the approved scripts folder (%~dp0), never a
-# file the agent can change (its profile, C:\Users\hermes\...), otherwise the agent could change what runs.
+# Rule: an approved script must only call files in the approved scripts folder (%~dp0 for .bat, the script's own
+# folder for .py), never a file the agent can change (its profile, C:\Users\hermes\...), otherwise the agent could
+# change what runs. A .py may import the standard library, packages installed for all users (pip as administrator)
+# and modules placed next to it, which must therefore be approved too.
 param([Alias('Script')][string]$Fichier, [Alias('Remove')][string]$Retirer, [Alias('List')][switch]$Lister, [Alias('Log')][switch]$Journal)
 $ErrorActionPreference = "Stop"
 $Base = "C:\ProgramData\hermes-admin"; $Dest = "$Base\approuves"
@@ -28,7 +30,7 @@ if ($Retirer) {
 }
 if (-not $Fichier -or -not (Test-Path -LiteralPath $Fichier -PathType Leaf)) { Write-Host "Give -Script PATH (or -List, -Remove NAME, -Log)."; exit 1 }
 $nom = Split-Path $Fichier -Leaf
-if ($nom -notmatch '^[A-Za-z0-9_-]{1,64}\.(bat|cmd)$') { Write-Host "Name refused: $nom (letters, digits, _ and -; extension .bat or .cmd)." -ForegroundColor Red; exit 1 }
+if ($nom -notmatch '^[A-Za-z0-9_-]{1,64}\.(bat|cmd|py)$') { Write-Host "Name refused: $nom (letters, digits, _ and -; extension .bat, .cmd or .py)." -ForegroundColor Red; exit 1 }
 
 $lignes = @(Get-Content -LiteralPath $Fichier)
 $hash = (Get-FileHash -LiteralPath $Fichier).Hash
@@ -37,6 +39,8 @@ for ($i = 0; $i -lt $lignes.Count; $i++) { Write-Host ("{0,4}  {1}" -f ($i + 1),
 Write-Host "===== end of script =====" -ForegroundColor Cyan
 
 $suspect = 'Users\\|%USERPROFILE%|%HOMEPATH%|%TEMP%|%TMP%|%APPDATA%|\\work\\|netsh|firewall|Set-NetFirewall|NetFirewallRule|sshd|ssh\\|net\s+user|net\s+localgroup|Add-LocalGroupMember|icacls|takeown|schtasks|Register-ScheduledTask|sc(\.exe)?\s+(create|config)|New-Service|reg(\.exe)?\s+(add|delete|import)|Set-ItemProperty|curl|wget|Invoke-WebRequest|Invoke-RestMethod|bitsadmin|certutil|DownloadString|DownloadFile|powershell.*-enc|EncodedCommand|hermes-admin'
+# Python: commands, network, registry, native calls, dynamic code (a warning to read, not a ban)
+if ($nom -like '*.py') { $suspect += '|subprocess|os\.system|os\.popen|os\.exec|os\.spawn|urllib|requests|http\.client|socket|winreg|ctypes|win32api|win32security|win32service|exec\(|eval\(|__import__|importlib|shutil\.rmtree|sys\.path' }
 $alertes = 0
 for ($i = 0; $i -lt $lignes.Count; $i++) {
     if ($lignes[$i] -match $suspect) { $alertes++; Write-Host ("WARNING line {0}: {1}" -f ($i + 1), $lignes[$i].Trim()) -ForegroundColor Yellow }
