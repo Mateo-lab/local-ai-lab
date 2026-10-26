@@ -28,11 +28,17 @@ the SSH key and the `aibeast` shortcut in the PC's SSH configuration, generated 
 |---|---|---|
 | `AiBeast-Menu.bat` | Numbered menu with all the actions below | — |
 | `AiBeast-Images.bat` | Unloads the language model, starts ComfyUI, opens `http://127.0.0.1:8188` if the tunnel is up | `lab mode images` |
-| `AiBeast-Normal.bat` | Stops ComfyUI, restores Kokoro and Tika | `lab mode normal` |
-| `AiBeast-Agents.bat` | Agents mode for Hermes only (stops Open WebUI, n8n, OpenClaw…) | `lab mode agents` |
+| `AiBeast-Normal.bat` | Restarts what agents mode stopped (Open WebUI, n8n, Kokoro, Tika, OpenClaw…); from images mode, stops ComfyUI | `lab mode normal` |
+| `AiBeast-Agents.bat` | Agents mode, **Hermes only** (stops Open WebUI, n8n, Qdrant, SearXNG, OpenClaw…) | `lab mode agents hermes` |
+| `AiBeast-OpenClaw.bat` | Agents mode, **OpenClaw only** (refused while a Hermes session is open) | `lab mode agents openclaw` |
+| `AiBeast-Fermer-Hermes.bat` | Closes the open Hermes session(s) (asks for confirmation; Hermes's memory and project files are kept) | `lab session close --all` |
 | `AiBeast-Sante.bat` | Full health check | `lab doctor` |
 | `AiBeast-Mise-a-jour.bat` | Backup then image update, in a `tmux` session (continues if the connection drops) | `lab update` |
 | `AiBeast-Hermes.bat` | Review and merge the agent's work, open Hermes in a project, create a project | `lab dev …` |
+
+The console (`AiBeast.bat`) has an "Agents: only one at a time" group with the same three actions (Hermes only, OpenClaw only,
+Close the Hermes session); the text menu has them as items 3, 10 and 11. They were written without being able to run PowerShell
+here: not tested on a PC yet.
 
 The menu adds the state (`lab mode status`), the backup (`lab backup run` under tmux) and opening the portal.
 

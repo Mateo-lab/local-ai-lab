@@ -34,7 +34,8 @@ If `~/.local/bin` is not in your PATH, the command says so (line to add to `~/.b
 | `lab dev new\|list\|start\|review\|check\|merge\|setup\|ctx64` | Development with Hermes: `docs/agent-development.md` |
 | `lab panel install\|token\|status\|logs\|uninstall` | Web button panel: `docs/web-panel.md` |
 | `lab remote add\|show\|link\|list\|test\|remove` | Hermes SSH access to a test machine: `docs/hermes-ssh.md` |
-| `lab mode agents\|images\|normal\|status` | See "Agents mode" and "Images mode" below |
+| `lab mode agents [hermes\|openclaw]\|images\|normal\|status` | See "Agents mode" and "Images mode" below |
+| `lab session list\|close [NAME\|--all]` | Open Hermes sessions (containers `hermes-session-…`): list, or close (without a name: the only one; several: name or `--all`). Hermes's memory and the project files are kept |
 | `lab update [--no-backup]` / `lab rollback` | See below |
 
 `ComfyUI`, `Hermes`, `Langfuse` and `OpenClaw` keep their scripts (`4-comfyui.sh`, `5-hermes.sh`, `6-langfuse.sh`,

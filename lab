@@ -22,6 +22,7 @@
 #                                          n8n, Qdrant, SearXNG, ComfyUI, Kokoro, Tika and the other agent; Ollama, monitoring,
 #                                          portal and Langfuse keep running
 #                                          images: unloads the Ollama models and starts ComfyUI; normal: restores
+#   lab session list|close [NAME|--all]   open Hermes sessions: list, or close them (memory and history are kept)
 #   lab config [list|set MODEL NAME]  stored main model; `lab tmux update|backup|doctor`: long action that survives a disconnection
 #   lab panel install|token|status|logs|uninstall   web button panel (127.0.0.1:3011): docs/web-panel.md
 #   lab remote add|show|link|list|test|remove   Hermes SSH access to a test machine (dedicated key): docs/hermes-ssh.md
@@ -201,6 +202,29 @@ cmd_mode() {
       printf '%-8s %-22s %-22s %s\n' "RAM %" "Container" "Memory" "CPU"
       docker stats --no-stream --format '{{.MemPerc}}\t{{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}' | sort -rn | head -8 | awk -F'\t' '{printf "%-8s %-22s %-22s %s\n",$1,$2,$3,$4}' ;;
     *) die "usage: lab mode agents [hermes|openclaw]|images|normal|status" ;;
+  esac
+}
+
+cmd_session() { # Hermes sessions = containers hermes-session-... (see 5-hermes.sh)
+  need docker; local a="${1:-list}"; shift || true
+  local sess; sess="$(hermes_sessions)"
+  case "$a" in
+    list) if [ -z "$sess" ]; then echo "No Hermes session open."; else docker ps --filter name=hermes-session --format 'table {{.Names}}\t{{.Status}}\t{{.CreatedAt}}'; fi ;;
+    close)
+      local target="${1:-}" c
+      [ -n "$sess" ] || { echo "No Hermes session open."; return 0; }
+      case "$target" in
+        ""|--all) ;;
+        *) [[ "$target" =~ ^hermes-session-[0-9]{8}-[0-9]{6}-[0-9]+$ ]] || die "invalid session name: $target (lab session list)"
+           grep -qx "$target" <<<"$sess" || die "no such session: $target (lab session list)"
+           sess="$target" ;;
+      esac
+      if [ -z "$target" ] && [ "$(wc -l <<<"$sess")" -gt 1 ]; then
+        echo "$c_wa Several sessions are open: lab session close NAME, or --all"; echo "$sess"; return 1
+      fi
+      for c in $sess; do docker rm -f "$c" >/dev/null && echo "$c_ok $c closed"; done
+      echo "Hermes's memory and history (hermes/data) are kept; project files too." ;;
+    *) die "usage: lab session list|close [NAME|--all]" ;;
   esac
 }
 
@@ -483,7 +507,7 @@ case "$c" in
   urls) cmd_urls ;;          models) cmd_models ;;         task-model) cmd_task_model "$@" ;;
   bench) cmd_bench "$@" ;;   gpu-limit) cmd_gpu_limit "$@" ;;  desktop|bureau) cmd_bureau "$@" ;;
   backup) cmd_backup "$@" ;; update) cmd_update "$@" ;;    rollback) cmd_rollback ;;
-  mode) cmd_mode "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     config) cmd_config "$@" ;;
+  mode) cmd_mode "$@" ;;     session) cmd_session "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     config) cmd_config "$@" ;;
   tmux) cmd_tmux "$@" ;;     main-model) main_model ;;  client) cmd_client "$@" ;;  isolation) cmd_isolation "$@" ;;
   help|-h|--help|"") sed -n '2,26p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   *) echo "lab: unknown command \"$c\"" >&2; sed -n '2,26p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;

@@ -19,6 +19,7 @@ case "$1" in
       cat "$R" ;;
   stop) shift; for c in "$@"; do grep -qx "$c" "$R" && sed -i "/^$c\$/d" "$R"; done; exit 0 ;;
   start) shift; for c in "$@"; do grep -qx "$c" "$FAKE/known" || exit 1; grep -qx "$c" "$R" || echo "$c" >> "$R"; done; exit 0 ;;
+  rm) shift; for c in "$@"; do [ "$c" = -f ] && continue; sed -i "/^$c\$/d" "$R"; done; exit 0 ;;
   inspect) shift; grep -qx "${!#}" "$FAKE/known" ;;
   *) exit 0 ;;
 esac
@@ -62,6 +63,25 @@ echo "· back to hermes then normal"
 for c in open-webui n8n kokoro tika searxng qdrant postgres-n8n "$OC"; do up "$c" && ok "$c restarted" || ko "$c not restarted"; done
 up comfyui && ko "comfyui must NOT be restarted by normal" || ok "comfyui stays stopped"
 [ -f "$T/proj/.lab/openclaw-paused" ] && ko "marker still there" || ok "marker removed"
+
+echo "· lab session list / close"
+echo hermes-session-20261026-110000-11 >> "$T/running"; echo hermes-session-20261026-110500-22 >> "$T/running"
+ls_out="$("$L" session list 2>&1)"; rc=$?
+[ $rc -eq 0 ] && ok "list exit 0" || ko "list exit $rc"
+out="$("$L" session close 2>&1)"; rc=$?
+[ $rc -ne 0 ] && grep -q "Several sessions" <<<"$out" && ok "close without name refused when several sessions" || ko "should refuse: $out"
+grep -q "^hermes-session-20261026-110000-11$" "$T/running" && ok "nothing closed by the refusal" || ko "a session was closed"
+"$L" session close 'x; rm -rf /' >/dev/null 2>&1 && ko "invalid name accepted" || ok "invalid name refused"
+"$L" session close hermes-session-20261026-999999-99 >/dev/null 2>&1 && ko "unknown session accepted" || ok "unknown session refused"
+"$L" session close hermes-session-20261026-110000-11 >/dev/null 2>&1
+grep -q "^hermes-session-20261026-110000-11$" "$T/running" && ko "named session not closed" || ok "named session closed"
+grep -q "^hermes-session-20261026-110500-22$" "$T/running" && ok "other session kept" || ko "other session closed"
+"$L" session close >/dev/null 2>&1
+grep -q "^hermes-session" "$T/running" && ko "single session not closed" || ok "single session closed without a name"
+echo hermes-session-20261026-111000-1 >> "$T/running"; echo hermes-session-20261026-111100-2 >> "$T/running"
+"$L" session close --all >/dev/null 2>&1
+grep -q "^hermes-session" "$T/running" && ko "--all left sessions" || ok "--all closes everything"
+out="$("$L" session close 2>&1)"; [ $? -eq 0 ] && grep -q "No Hermes session open" <<<"$out" && ok "nothing to close: exit 0" || ko "no-session case: $out"
 
 echo "· invalid agent"
 "$L" mode agents foo >/dev/null 2>&1 && ko "foo accepted" || ok "foo refused"

@@ -87,7 +87,10 @@ function Executer([string]$cle) {
         "copie-sauvegardes" { Lancer-Fenetre "Sauvegarder-AiBeast-hors-machine.ps1" }
         "images"         { Lancer-Fenetre "AiBeast.ps1" "-Action images" }
         "normal"         { Lancer-Fenetre "AiBeast.ps1" "-Action normal" }
-        "agents"         { Lancer-Fenetre "AiBeast.ps1" "-Action agents" }
+        "agents"         { Lancer-Fenetre "AiBeast.ps1" "-Action agents-hermes" }
+        "agents-hermes"  { Lancer-Fenetre "AiBeast.ps1" "-Action agents-hermes" }
+        "agents-openclaw" { Lancer-Fenetre "AiBeast.ps1" "-Action agents-openclaw" }
+        "fermer-hermes"  { if (Confirmer "Close the Hermes session(s) on AiBeast?`n`nThe conversation in progress stops. Hermes's memory and the project files are kept.") { Lancer-Fenetre "AiBeast.ps1" "-Action close-hermes -Yes" } }
         "status"         { Lancer-Fenetre "AiBeast.ps1" "-Action status" }
         "doctor"         { Lancer-Fenetre "AiBeast.ps1" "-Action doctor" }
         "update"         { if (Confirmer "Start the update of the Docker images on AiBeast?`n`nA backup is made first. This can take a long time.") { Lancer-Fenetre "AiBeast.ps1" "-Action update" } }
@@ -147,9 +150,11 @@ Ajouter-Groupe "2. Open in the browser" @(
 Ajouter-Groupe "3. Delivery and backup copies" @(
     @("Deploy the new version", "deployer"), @("Copy the backups to this PC", "copie-sauvegardes"))
 Ajouter-Groupe "4. Graphics card modes" @(
-    @("Images mode", "images"), @("Normal mode", "normal"), @("Agents mode", "agents"),
+    @("Images mode", "images"), @("Normal mode", "normal"),
     @("State", "status"), @("Health (diagnosis)", "doctor"))
-Ajouter-Groupe "5. Maintenance and Hermes" @(
+Ajouter-Groupe "5. Agents: only one at a time" @(
+    @("Hermes only", "agents-hermes"), @("OpenClaw only", "agents-openclaw"), @("Close the Hermes session", "fermer-hermes"))
+Ajouter-Groupe "6. Maintenance and Hermes" @(
     @("Update", "update"), @("Backup", "backup"), @("Hermes (projects, review)", "hermes"))
 
 $lblMessage = New-Object System.Windows.Forms.Label
