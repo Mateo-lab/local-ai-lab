@@ -45,25 +45,36 @@ once installed.
 
 ```bash
 lab mode status     # current mode, free VRAM, loaded models, the 8 containers using the most RAM
-lab mode agents     # stops ComfyUI, Kokoro and Tika; shows the VRAM before/after
+lab mode agents     # only ONE agent active (Hermes by default); stops Open WebUI, n8n, Qdrant, SearXNG, ComfyUI, Kokoro, Tika, OpenClaw
+lab mode agents openclaw   # same, but keeps OpenClaw instead of Hermes (refused while a Hermes session is open)
 lab mode images     # unloads the Ollama models from VRAM and starts ComfyUI (see "Images mode")
-lab mode normal     # restarts Kokoro and Tika; from images mode, also stops ComfyUI
+lab mode normal     # restarts everything agents mode stopped (except ComfyUI) and OpenClaw if agents mode stopped it; from images mode, also stops ComfyUI
 ```
-**What this mode does and does not do.** It stops the services the agents do not need. It touches neither Ollama, nor
-Open WebUI, n8n, Qdrant, SearXNG, nor monitoring, nor **Langfuse**: Langfuse is used to observe the agents, stopping it
-while they work would remove the trace of what they do.
+**What this mode does and does not do.** It leaves only what an agent needs plus what lets you watch the machine:
+- **Kept**: Ollama, monitoring and alerts (Prometheus, Grafana, exporters, Alertmanager, ntfy, blackbox), the portal and **Langfuse**
+  (it observes Hermes: stopping it would remove the trace of what the agent does).
+- **Stopped**: Open WebUI, n8n (and its Postgres), Qdrant, SearXNG, Kokoro, Tika, ComfyUI.
+- **One agent at a time**: `lab mode agents` (= `hermes`) also stops the OpenClaw gateway; `lab mode agents openclaw` starts
+  OpenClaw and refuses to start Hermes sessions (`./5-hermes.sh`, `lab dev start`) until you switch back. Switching to
+  `openclaw` is refused, without changing anything, while a Hermes session is open: close it first.
+- Hermes starts on demand (a session = a container), OpenClaw is a permanent container: that is why "only one" means
+  "the other is stopped or refused".
 
 **What to expect from it.** The real constraint of a local agent is the **VRAM** (24 GB, of which ≈ 17 GB for the
-27-billion-parameter model and its context cache). Only ComfyUI weighs on it. Kokoro and Tika run on the CPU: stopping
-them saves RAM and a bit of CPU, **not VRAM**. With 64 GB of RAM, the gain is modest; the mode mostly guarantees that
-ComfyUI is off and shows the state of the resources at a glance. To know whether other services are worth stopping, look
-at `lab mode status` during an agent session rather than guessing.
+27-billion-parameter model and its context cache). Only ComfyUI weighs on it. The other services run on the CPU: stopping
+them saves RAM and CPU, **not VRAM**. The exact gain has not been measured: compare `lab mode status` before and after.
+`lab doctor` warns if a second agent is active in this mode.
 
-**Persistence.** The mode is stored in `.lab/mode`. While it is "agents", `lab start`, `lab update` and `lab rollback`
-stop these three services again, and `lab doctor` does not count them as missing. After a reboot of the machine, Docker
+**Persistence.** The mode is stored in `.lab/mode` and the chosen agent in `.lab/agent`. While it is "agents", `lab start`,
+`lab update` and `lab rollback` stop these services again (and OpenClaw in `hermes` mode), and `lab doctor` does not count
+them as missing. After a reboot of the machine, Docker
 does not restart a container stopped by hand (`unless-stopped`): the mode therefore stays consistent.
 
-To change the list of stopped services: `AGENT_PAUSE` variable at the top of the `lab` script.
+To change the list of stopped services: `AGENT_PAUSE` variable at the top of the `lab` script. The OpenClaw container name
+can be changed with `OPENCLAW_CT` in `lab.conf` (default `openclaw-openclaw-gateway-1`).
+
+Tests: `bash scripts/test-agents-mode.sh` (fake `docker`: stopped/started containers, guards, doctor). Not tested on the real
+machine yet.
 
 ## Images mode: make room for ComfyUI
 

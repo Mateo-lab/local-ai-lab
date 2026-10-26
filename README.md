@@ -193,7 +193,7 @@ On the AI machine, in a terminal. `lab` works from any folder after `./lab insta
 | I want to | Command |
 |---|---|
 | See the current mode and free VRAM | `lab mode status` |
-| Free resources for the agents | `lab mode agents` (stops ComfyUI, Kokoro, Tika) |
+| Free resources for ONE agent | `lab mode agents` (Hermes) or `lab mode agents openclaw`: stops Open WebUI, n8n, Qdrant, SearXNG, ComfyUI, Kokoro, Tika and the other agent; Ollama, monitoring, portal and Langfuse stay |
 | Go back to normal | `lab mode normal` |
 
 **Maintenance**

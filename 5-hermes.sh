@@ -16,6 +16,11 @@ docker info >/dev/null 2>&1 || { echo "Docker does not answer (see ./1-prerequis
 docker network inspect hermes-net >/dev/null 2>&1 || {
   echo "The hermes-net network does not exist: update the stack then run ./3-demarrer.sh again" >&2; exit 1; }
 
+# `lab mode agents openclaw` keeps ONLY OpenClaw active (saves RAM/CPU): refuse to start Hermes then.
+if [ "$(cat ../.lab/mode 2>/dev/null)" = agents ] && [ "$(cat ../.lab/agent 2>/dev/null)" = openclaw ]; then
+  echo "Agents mode is set to OpenClaw: Hermes is not started. To switch: lab mode agents hermes" >&2; exit 1
+fi
+
 mkdir -p data/workspace
 printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > .env
 

@@ -109,3 +109,10 @@ container loses the attachment. Running `./openclaw/install.sh` again also does 
   embedding model is configured. Not handled.
 - `~/openclaw` and `~/.openclaw` contain credentials (gateway token): they are not included in the backups described in
   `docs/backups.md` (not verified).
+
+## Agents mode: only one agent at a time
+
+`lab mode agents openclaw` keeps OpenClaw (its gateway container is started if needed) and stops Open WebUI, n8n, Qdrant,
+SearXNG, Kokoro, Tika, ComfyUI; Hermes sessions are then refused. `lab mode agents` (Hermes) stops the gateway instead.
+`lab mode normal` restarts it. Details: [lab.md](lab.md). After a start by this mode, the container keeps its `llm-net`
+connection (a stop/start does not remove it); this has not been checked on the real machine.

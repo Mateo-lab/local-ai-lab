@@ -18,7 +18,9 @@
 #   lab backup init|run|list|check|restore|schedule    encrypted backups
 #   lab update [--no-backup]       updates the images, records the old ones
 #   lab rollback                   goes back to the images from before the last update
-#   lab mode agents|images|normal|status   agents: frees VRAM for the agents (stops ComfyUI, Kokoro, Tika)
+#   lab mode agents [hermes|openclaw]|images|normal|status   agents: only ONE agent active (default hermes); stops Open WebUI,
+#                                          n8n, Qdrant, SearXNG, ComfyUI, Kokoro, Tika and the other agent; Ollama, monitoring,
+#                                          portal and Langfuse keep running
 #                                          images: unloads the Ollama models and starts ComfyUI; normal: restores
 #   lab config [list|set MODEL NAME]  stored main model; `lab tmux update|backup|doctor`: long action that survives a disconnection
 #   lab panel install|token|status|logs|uninstall   web button panel (127.0.0.1:3011): docs/web-panel.md
@@ -36,7 +38,10 @@ LAB_DATA_DIR="${LAB_DATA_DIR:-/data}"   # large volumes: Docker, backups, models
 export LAB_DATA_DIR
 PROJECTS=(ai-stack monitoring portail alerting)           # start order
 [ -f "$ROOT/langfuse/app/docker-compose.yml" ] && PROJECTS+=(langfuse)   # only if installed (./6-langfuse.sh)
-AGENT_PAUSE=(comfyui kokoro tika)    # stopped by `lab mode agents` (none is useful to the agents; ComfyUI takes VRAM)
+# Stopped by `lab mode agents` (dependents first; `lab mode normal` restarts them in reverse order, except ComfyUI).
+# Kept: Ollama, monitoring and alerts, portal, Langfuse (observes Hermes).
+AGENT_PAUSE=(comfyui open-webui n8n kokoro tika searxng qdrant postgres-n8n)
+OPENCLAW_CT="${OPENCLAW_CT:-openclaw-openclaw-gateway-1}"   # OpenClaw gateway (see openclaw/install.sh)
 EXPECTED=(ollama open-webui n8n qdrant postgres-n8n searxng kokoro tika
           prometheus grafana node-exporter gpu-exporter
           homepage ntfy alertmanager alertmanager-ntfy blackbox-exporter)
@@ -77,9 +82,15 @@ cmd_install() {
 }
 
 current_mode() { cat "$STATE/mode" 2>/dev/null || echo normal; }
+current_agent() { cat "$STATE/agent" 2>/dev/null || echo hermes; }   # agent kept active in agents mode
+hermes_sessions() { docker ps --format '{{.Names}}' 2>/dev/null | grep '^hermes-session-' || true; }
+openclaw_up() { [ -n "$(docker ps -q -f "name=^${OPENCLAW_CT}$" 2>/dev/null)" ]; }
 apply_mode() { # after an `up -d`, stops again what "agents" mode must keep stopped
   [ "$(current_mode)" = agents ] || return 0
   local c; for c in "${AGENT_PAUSE[@]}"; do docker stop "$c" >/dev/null 2>&1 && echo "  (agents mode: $c stays stopped)"; done
+  if [ "$(current_agent)" = hermes ] && openclaw_up; then
+    docker stop "$OPENCLAW_CT" >/dev/null 2>&1 && { touch "$STATE/openclaw-paused"; echo "  (agents mode, agent hermes: OpenClaw stays stopped)"; }
+  fi
 }
 
 cmd_start() {
@@ -118,13 +129,28 @@ cmd_mode() {
   need docker; local m="${1:-status}"; mkdir -p "$STATE"
   case "$m" in
     agents)
+      local ag="${2:-hermes}" c
+      case "$ag" in hermes|openclaw) ;; *) die "usage: lab mode agents [hermes|openclaw]   (only ONE agent stays active)";; esac
+      if [ "$ag" = openclaw ]; then
+        local sess; sess="$(hermes_sessions)"
+        [ -z "$sess" ] || die "Hermes session(s) still open: $(echo $sess). Close them first (Ctrl+D in Hermes); nothing was changed."
+        docker inspect "$OPENCLAW_CT" >/dev/null 2>&1 || die "OpenClaw is not installed (container $OPENCLAW_CT not found: openclaw/install.sh)"
+      fi
       echo "VRAM before: $(vram)"
-      local c; for c in "${AGENT_PAUSE[@]}"; do
+      for c in "${AGENT_PAUSE[@]}"; do
         if [ -n "$(docker ps -q -f "name=^${c}$")" ]; then docker stop "$c" >/dev/null && echo "$c_ok $c stopped"; else echo "· $c already stopped"; fi
       done
-      echo agents > "$STATE/mode"; sleep 3
+      echo agents > "$STATE/mode"; echo "$ag" > "$STATE/agent"
+      if [ "$ag" = hermes ]; then
+        if openclaw_up; then docker stop "$OPENCLAW_CT" >/dev/null && touch "$STATE/openclaw-paused" && echo "$c_ok OpenClaw stopped"; else echo "· OpenClaw already stopped"; fi
+      else
+        if openclaw_up; then echo "· OpenClaw already running"; else docker start "$OPENCLAW_CT" >/dev/null && echo "$c_ok OpenClaw started"; fi
+        rm -f "$STATE/openclaw-paused"
+      fi
+      sleep 3
       echo "VRAM after: $(vram)"
-      echo "Agents mode active. Ollama, Open WebUI, n8n, Qdrant, SearXNG, monitoring and Langfuse keep running (Langfuse observes the agents)."
+      echo "Agents mode active, agent: $ag. Kept: Ollama, monitoring and alerts, portal, Langfuse."
+      [ "$ag" = openclaw ] && echo "Hermes sessions are refused in this mode (./5-hermes.sh, lab dev start): lab mode agents hermes to switch."
       echo "To restore everything: lab mode normal" ;;
     images)
       [ -d "$ROOT/comfyui" ] || die "ComfyUI is not installed (./4-comfyui.sh)"
@@ -153,7 +179,13 @@ cmd_mode() {
     normal)
       local prev; prev="$(current_mode)"
       echo normal > "$STATE/mode"
-      local c; for c in kokoro tika; do docker start "$c" >/dev/null 2>&1 && echo "$c_ok $c restarted"; done
+      local c i; for ((i=${#AGENT_PAUSE[@]}-1;i>=0;i--)); do   # reverse order: databases first; ComfyUI is not restarted
+        c="${AGENT_PAUSE[i]}"; [ "$c" = comfyui ] && continue
+        docker start "$c" >/dev/null 2>&1 && echo "$c_ok $c restarted"
+      done
+      if [ -f "$STATE/openclaw-paused" ]; then
+        docker start "$OPENCLAW_CT" >/dev/null 2>&1 && echo "$c_ok OpenClaw restarted"; rm -f "$STATE/openclaw-paused"
+      fi
       if [ "$prev" = images ]; then
         docker stop comfyui >/dev/null 2>&1 && echo "$c_ok comfyui stopped (VRAM freed for the Ollama models)"
         sleep 2; echo "VRAM: $(vram)"
@@ -162,13 +194,13 @@ cmd_mode() {
       fi
       echo "Normal mode." ;;
     status)
-      echo "Mode: $(current_mode)"
+      echo "Mode: $(current_mode)$([ "$(current_mode)" = agents ] && echo " (agent: $(current_agent))")"
       echo "VRAM: $(vram)"
       docker exec ollama ollama ps 2>/dev/null
       echo; echo "Containers using the most RAM:"
       printf '%-8s %-22s %-22s %s\n' "RAM %" "Container" "Memory" "CPU"
       docker stats --no-stream --format '{{.MemPerc}}\t{{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}' | sort -rn | head -8 | awk -F'\t' '{printf "%-8s %-22s %-22s %s\n",$1,$2,$3,$4}' ;;
-    *) die "usage: lab mode agents|images|normal|status" ;;
+    *) die "usage: lab mode agents [hermes|openclaw]|images|normal|status" ;;
   esac
 }
 
@@ -341,6 +373,13 @@ cmd_doctor() {
   done
   for c in "${expected[@]}"; do grep -qx "$c" <<<"$running" || missing+=("$c"); done
   if [ ${#missing[@]} -eq 0 ]; then ok "${#expected[@]} expected containers running (mode: $mode)"; else ko "stopped or missing: ${missing[*]}"; fi
+  if [ "$mode" = agents ]; then
+    if [ "$(current_agent)" = hermes ]; then
+      if openclaw_up; then wa "agents mode (hermes): OpenClaw is running too (lab mode agents hermes stops it)"; fi
+    else
+      [ -z "$(hermes_sessions)" ] || wa "agents mode (openclaw): a Hermes session is open (lab mode agents hermes to switch)"
+    fi
+  fi
   if [ -f "$ROOT/langfuse/app/docker-compose.yml" ]; then
     if [ -n "$(docker ps -q --filter label=com.docker.compose.service=langfuse-web)" ]; then ok "Langfuse running"; else ko "Langfuse installed but stopped (lab start langfuse)"; fi
   fi
