@@ -353,6 +353,16 @@ docker exec ollama ollama list        # exact model name
 - **Graphical interface** (optional): the Hermes Desktop app can drive the agent instead of the terminal. `lab gateway
   start` serves the dashboard on `127.0.0.1:9119` (reached from your PC through the SSH tunnel), on the same data and
   with the same isolation as a command-line session: [docs/hermes-desktop.md](docs/hermes-desktop.md).
+- **Local serial device** (optional): to let Hermes talk to a USB serial device plugged into the AI machine (an Arduino,
+  a USB-serial or USB-I²C adapter…), the agent is given the single device node `/dev/ttyACM0` (not the whole USB bus, not
+  privileged mode). It is passed **only when the node is present**: `./5-hermes.sh` and `lab gateway start` include
+  `hermes/serial.yml` / `hermes/serial-gw.yml` when the device is plugged in, and start normally when it is not. One knob:
+  `HERMES_SERIAL` (default `/dev/ttyACM0`) and `HERMES_SERIAL_GID` (default `20`, the `dialout` group) — set them in the
+  environment or `lab.conf` if your device enumerates elsewhere (e.g. `/dev/ttyUSB0`, or `ttyACM1` when several are
+  plugged); for a stable name across reboots, add a udev rule giving the device a fixed symlink. The device must be
+  plugged **before** starting Hermes, and the gateway must be restarted (`lab gateway stop` then `start`) to pick up a
+  device plugged afterwards. **Security**: this is a real hardware capability for the agent — a wrapper limiting the
+  commands/addresses it may send on the bus is recommended (see the I²C note in [docs/hermes-ssh.md](docs/hermes-ssh.md)).
 
 ## Langfuse (agent tracing) — optional
 

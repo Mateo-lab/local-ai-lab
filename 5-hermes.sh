@@ -46,8 +46,17 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Optional local USB serial device: passed to Hermes only when the node is plugged in, so Hermes still
+# starts normally otherwise. One knob: HERMES_SERIAL (default /dev/ttyACM0), HERMES_SERIAL_GID (default 20).
+# See hermes/serial.yml and the README ("Local serial device for Hermes").
+export HERMES_SERIAL="${HERMES_SERIAL:-/dev/ttyACM0}" HERMES_SERIAL_GID="${HERMES_SERIAL_GID:-20}"
+RUN=(docker compose)
+if [ -e "$HERMES_SERIAL" ]; then
+  RUN+=(-f docker-compose.yml -f serial.yml)
+  echo "→ Serial device $HERMES_SERIAL detected: passed to Hermes."
+fi
 # HERMES_WORKDIR (set by `lab dev start`): working folder INSIDE the container, e.g. /opt/data/workspace/projects/NAME
-RUN=(docker compose run --rm --name "$SESSION")
+RUN+=(run --rm --name "$SESSION")
 [ -n "${HERMES_WORKDIR:-}" ] && RUN+=(-w "$HERMES_WORKDIR")
 rc=0
 if [ "$#" -gt 0 ]; then

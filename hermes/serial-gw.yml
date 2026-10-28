@@ -1,0 +1,10 @@
+# Optional override: give the Hermes Desktop gateway (service "hermes-gw") a local USB serial device.
+# Included automatically by `lab gateway start` ONLY when the device node exists (same rule and same device
+# as serial.yml — see its header and the README). Keep both files in sync if you change the node or GID.
+name: hermes
+services:
+  hermes-gw:
+    devices:
+      - "${HERMES_SERIAL:-/dev/ttyACM0}:${HERMES_SERIAL:-/dev/ttyACM0}"
+    group_add:
+      - "${HERMES_SERIAL_GID:-20}"   # host GID of the serial node's group; the agent runs as UID 1000

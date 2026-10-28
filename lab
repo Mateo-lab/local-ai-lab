@@ -373,7 +373,11 @@ cmd_gateway() {
       systemctl is-active --quiet ai-lab-isolation.service \
         || echo "$c_wa agent firewall inactive (lab isolation install): the gateway would have Internet access until it is enabled."
       printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > "$HDIR/.env"
-      ( cd "$HDIR" && COMPOSE_IGNORE_ORPHANS=1 docker compose -f gateway.yml up -d )
+      # Optional local USB serial device, passed only when plugged in (same knob as ./5-hermes.sh).
+      export HERMES_SERIAL="${HERMES_SERIAL:-/dev/ttyACM0}" HERMES_SERIAL_GID="${HERMES_SERIAL_GID:-20}"
+      local GWF=(-f gateway.yml)
+      if [ -e "$HERMES_SERIAL" ]; then GWF+=(-f serial-gw.yml); echo "   serial device $HERMES_SERIAL detected: passed to the gateway."; fi
+      ( cd "$HDIR" && COMPOSE_IGNORE_ORPHANS=1 docker compose "${GWF[@]}" up -d )
       echo "$c_ok gateway started → $URL"
       echo "   From your PC: open the 9119 tunnel (lab client regenerates it), then point the Hermes Desktop app at $URL."
       echo "   $c_wa do NOT run ./5-hermes.sh / lab dev while it is up (shared data/state.db). Stop it: lab gateway stop"

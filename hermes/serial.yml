@@ -1,0 +1,20 @@
+# Optional override: give the command-line Hermes (service "hermes") a local USB serial device.
+# Included automatically by ../5-hermes.sh ONLY when the device node exists, so Hermes still starts
+# normally when nothing is plugged in. Gateway equivalent: serial-gw.yml. See the README ("Local serial
+# device for Hermes").
+#
+# Security: this passes a SINGLE character device into the agent's sandbox — not the whole USB bus, not
+# privileged mode. The mass-storage side of a composite device is never passed. A command/address guardrail
+# (wrapper) is still recommended before letting the agent drive real hardware.
+#
+# The node and its group's GID are read from HERMES_SERIAL (default /dev/ttyACM0) and HERMES_SERIAL_GID
+# (default 20 = "dialout" on Ubuntu). Set them in the environment (or lab.conf, read by `lab`) if your device
+# enumerates elsewhere (e.g. /dev/ttyUSB0, or ttyACM1 when several are plugged), or add a udev rule for a
+# stable symlink (see the README). The launchers gate on the SAME variable, so there is a single knob.
+name: hermes
+services:
+  hermes:
+    devices:
+      - "${HERMES_SERIAL:-/dev/ttyACM0}:${HERMES_SERIAL:-/dev/ttyACM0}"
+    group_add:
+      - "${HERMES_SERIAL_GID:-20}"   # host GID of the serial node's group; the agent runs as UID 1000
