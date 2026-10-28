@@ -27,6 +27,7 @@
 #   lab panel install|token|status|logs|uninstall   web button panel (127.0.0.1:3011): docs/web-panel.md
 #   lab remote add|show|link|list|test|remove   Hermes SSH access to a test machine (dedicated key): docs/hermes-ssh.md
 #   lab dev new|list|start|review|check|merge|setup|ctx64   development with Hermes (code → test → review): docs/agent-development.md
+#   lab gateway start|stop|status   Hermes Desktop graphical interface (remote gateway on 127.0.0.1:9119): docs/hermes-desktop.md
 set -uo pipefail
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -355,6 +356,46 @@ cmd_backup()    { exec "$ROOT/scripts/backup.sh" "$@"; }
 cmd_client()    { exec "$ROOT/scripts/client-config.sh" "$@"; }
 cmd_isolation() { exec "$ROOT/scripts/isolation-agents.sh" "$@"; }
 
+# Hermes Desktop graphical interface: a persistent "serve" container on 127.0.0.1:9119, same data as the
+# command-line agent. docs/hermes-desktop.md. Shares data/state.db with ./5-hermes.sh / lab dev, so never both at once.
+cmd_gateway() {
+  need docker
+  local HDIR="$ROOT/hermes" act="${1:-status}" URL="http://127.0.0.1:9119"
+  case "$act" in
+    start)
+      docker network inspect hermes-net >/dev/null 2>&1 || die "hermes-net network missing: run ./3-demarrer.sh first"
+      [ -z "$(docker ps -q --filter 'name=^hermes-(session|hermes-run)-')" ] \
+        || die "an interactive Hermes session is running (./5-hermes.sh / lab dev); it shares data/state.db. Stop it before starting the gateway."
+      [ -f "$HDIR/data/config.yaml" ] \
+        || die "hermes/data/config.yaml missing: run ./5-hermes.sh MODEL once first (docs/hermes-desktop.md)."
+      grep -q '^dashboard:' "$HDIR/data/config.yaml" \
+        || die "no 'dashboard:' block in hermes/data/config.yaml: the dashboard refuses to bind on 0.0.0.0 without authentication (docs/hermes-desktop.md, section Authentication)."
+      systemctl is-active --quiet ai-lab-isolation.service \
+        || echo "$c_wa agent firewall inactive (lab isolation install): the gateway would have Internet access until it is enabled."
+      printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > "$HDIR/.env"
+      ( cd "$HDIR" && docker compose -f gateway.yml up -d )
+      echo "$c_ok gateway started → $URL"
+      echo "   From your PC: open the 9119 tunnel (lab client regenerates it), then point the Hermes Desktop app at $URL."
+      echo "   $c_wa do NOT run ./5-hermes.sh / lab dev while it is up (shared data/state.db). Stop it: lab gateway stop"
+      ;;
+    stop)
+      ( cd "$HDIR" && docker compose -f gateway.yml down )
+      echo "$c_ok gateway stopped"
+      ;;
+    status)
+      if [ -n "$(docker ps -q -f 'name=^hermes-gw$')" ]; then
+        local code; code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$URL/" 2>/dev/null || echo 000)"
+        echo "$c_ok gateway running — $URL (HTTP $code: 302/200/401 = answering)"
+        [ -z "$(docker ps -q --filter 'name=^hermes-(session|hermes-run)-')" ] \
+          || echo "$c_wa an interactive session is ALSO running: stop one (shared data/state.db)."
+      else
+        echo "· gateway stopped (start it: lab gateway start)"
+      fi
+      ;;
+    *) die "usage: lab gateway start|stop|status" ;;
+  esac
+}
+
 cmd_bureau() {
   local act="${1:-status}"; shift || true; local boot=0; [ "${1:-}" = "--boot" ] && boot=1
   local U=gnome-remote-desktop.service
@@ -507,8 +548,8 @@ case "$c" in
   urls) cmd_urls ;;          models) cmd_models ;;         task-model) cmd_task_model "$@" ;;
   bench) cmd_bench "$@" ;;   gpu-limit) cmd_gpu_limit "$@" ;;  desktop|bureau) cmd_bureau "$@" ;;
   backup) cmd_backup "$@" ;; update) cmd_update "$@" ;;    rollback) cmd_rollback ;;
-  mode) cmd_mode "$@" ;;     session) cmd_session "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     config) cmd_config "$@" ;;
+  mode) cmd_mode "$@" ;;     session) cmd_session "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     gateway) cmd_gateway "$@" ;;     config) cmd_config "$@" ;;
   tmux) cmd_tmux "$@" ;;     main-model) main_model ;;  client) cmd_client "$@" ;;  isolation) cmd_isolation "$@" ;;
-  help|-h|--help|"") sed -n '2,26p' "$SELF" | sed 's/^# \{0,1\}//' ;;
-  *) echo "lab: unknown command \"$c\"" >&2; sed -n '2,26p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
+  help|-h|--help|"") sed -n '2,30p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  *) echo "lab: unknown command \"$c\"" >&2; sed -n '2,30p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
 esac

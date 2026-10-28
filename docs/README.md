@@ -22,6 +22,7 @@ reference machine: RTX 3090 24 GB, 64 GB of RAM, Ubuntu 26.04.
 | [web-panel.md](web-panel.md) | Button page (modes, health, update, backup, Hermes review) through the SSH tunnel (`lab panel`) |
 | [hermes-ssh.md](hermes-ssh.md) | Give Hermes limited SSH access to a test machine (`lab remote`), admin scripts after approval |
 | [agent-development.md](agent-development.md) | Developing with Hermes: git projects, code → test → review loop, merge by you (`lab dev`) |
+| [hermes-desktop.md](hermes-desktop.md) | Hermes Desktop graphical interface: remote gateway on `127.0.0.1:9119`, authentication, tunnel, isolation (`lab gateway`) |
 | [openclaw.md](openclaw.md) | OpenClaw: installation, pitfalls (network, dummy key, model, 64k context), security, update |
 | [agents-langfuse.md](agents-langfuse.md) | Langfuse, connecting Hermes, agents mode, ComfyUI (first start), pitfalls |
 | [image-generation.md](image-generation.md) | Images with Qwen-Image-2.1 in ComfyUI: installation, settings, measurements, examples, pitfalls |

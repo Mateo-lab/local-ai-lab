@@ -1,0 +1,66 @@
+# Hermes Desktop — remote gateway (optional, started on demand by `lab gateway start`).
+#
+# Serves the Hermes dashboard on 127.0.0.1:9119 so the Hermes Desktop app (on your PC, through the SSH
+# tunnel: see `lab client`) can drive the agent with a graphical interface. It uses the SAME data as the
+# command-line agent (./data): the app shows your existing sessions, memory, skills and projects — nothing
+# is duplicated or lost.
+#
+# Networks: exactly the same as an interactive Hermes session —
+#   - hermes-net   : reaches Ollama (and nothing else), internal;
+#   - obs-net      : sends traces to Langfuse if installed, internal;
+#   - hermes-sortie: the ONLY non-internal network, required to publish the port. It is already filtered by
+#                    `lab isolation` (interface br-hermes-out): every outgoing connection is dropped except
+#                    SSH to the test machines in lab.conf. The gateway therefore has the SAME isolation as any
+#                    Hermes — no Internet, no local network — WITHOUT any extra firewall rule. The published
+#                    port stays reachable because the tunnel's incoming connection and its replies are allowed
+#                    (docs/agent-isolation.md), like OpenClaw's published interface.
+#   The port is bound to 127.0.0.1 only: never exposed on the local network. Reach it from your PC over SSH.
+#
+# Authentication: binding on 0.0.0.0 makes the dashboard refuse to start unless an auth provider is set.
+# Configure dashboard.basic_auth in data/config.yaml before the first start — see docs/hermes-desktop.md.
+#
+# IMPORTANT: do NOT run this at the same time as `./5-hermes.sh` / `lab dev` — both use the same SQLite state
+# (./data/state.db), running them together can corrupt the sessions. `lab gateway start` refuses if an
+# interactive session is running, and `./5-hermes.sh` refuses if the gateway is running.
+
+name: hermes
+
+services:
+  hermes-gw:
+    image: nousresearch/hermes-agent:${HERMES_TAG:-stable}
+    container_name: hermes-gw
+    # Persistent on purpose (unlike the disposable interactive session): the GUI stays available.
+    # It still does nothing without a request, and keeps no Internet access.
+    restart: unless-stopped
+    command: ["serve", "--host", "0.0.0.0", "--port", "9119"]
+    environment:
+      HERMES_UID: ${HERMES_UID:-1000}
+      HERMES_GID: ${HERMES_GID:-1000}
+    volumes:
+      - ./data:/opt/data
+    shm_size: 1g
+    mem_limit: 8g
+    ports:
+      # 127.0.0.1 only. From your PC: SSH tunnel on 9119 (see `lab client`), then the app points at
+      # http://127.0.0.1:9119.
+      - "127.0.0.1:9119:9119"
+    networks:
+      # hermes-sortie is listed FIRST so the non-internal network exists when the port is published
+      # (publishing is dropped if the container is attached only to internal networks at creation time).
+      - hermes-sortie
+      - hermes-net
+      - obs-net
+
+networks:
+  # Same declarations as hermes/docker-compose.yml so both compose files share the exact same networks.
+  hermes-net:
+    external: true
+    name: hermes-net
+  obs-net:
+    external: true
+    name: obs-net
+  # Created by the first Hermes run; its bridge name is fixed so `lab isolation` recognises it.
+  hermes-sortie:
+    name: hermes-sortie
+    driver_opts:
+      com.docker.network.bridge.name: br-hermes-out
