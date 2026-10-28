@@ -373,18 +373,18 @@ cmd_gateway() {
       systemctl is-active --quiet ai-lab-isolation.service \
         || echo "$c_wa agent firewall inactive (lab isolation install): the gateway would have Internet access until it is enabled."
       printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > "$HDIR/.env"
-      ( cd "$HDIR" && docker compose -f gateway.yml up -d )
+      ( cd "$HDIR" && COMPOSE_IGNORE_ORPHANS=1 docker compose -f gateway.yml up -d )
       echo "$c_ok gateway started → $URL"
       echo "   From your PC: open the 9119 tunnel (lab client regenerates it), then point the Hermes Desktop app at $URL."
       echo "   $c_wa do NOT run ./5-hermes.sh / lab dev while it is up (shared data/state.db). Stop it: lab gateway stop"
       ;;
     stop)
-      ( cd "$HDIR" && docker compose -f gateway.yml down )
+      ( cd "$HDIR" && COMPOSE_IGNORE_ORPHANS=1 docker compose -f gateway.yml down )
       echo "$c_ok gateway stopped"
       ;;
     status)
       if [ -n "$(docker ps -q -f 'name=^hermes-gw$')" ]; then
-        local code; code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$URL/" 2>/dev/null || echo 000)"
+        local code; code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$URL/" 2>/dev/null)"; [ -n "$code" ] || code=000
         echo "$c_ok gateway running — $URL (HTTP $code: 302/200/401 = answering)"
         [ -z "$(docker ps -q --filter 'name=^hermes-(session|hermes-run)-')" ] \
           || echo "$c_wa an interactive session is ALSO running: stop one (shared data/state.db)."
