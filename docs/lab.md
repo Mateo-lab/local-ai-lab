@@ -32,6 +32,7 @@ If `~/.local/bin` is not in your PATH, the command says so (line to add to `~/.b
 | `lab backup repo` | Prints the location of the backup repository (used by the off-machine copy from Windows) |
 | `lab tmux update\|backup\|doctor` | Long action in a tmux session (survives an SSH disconnection) |
 | `lab dev new\|list\|start\|review\|check\|merge\|setup\|ctx64` | Development with Hermes: `docs/agent-development.md` |
+| `lab gateway start\|stop\|status` | Hermes Desktop graphical interface (remote gateway on `127.0.0.1:9119`): `docs/hermes-desktop.md` |
 | `lab panel install\|token\|status\|logs\|uninstall` | Web button panel: `docs/web-panel.md` |
 | `lab remote add\|show\|link\|list\|test\|remove` | Hermes SSH access to a test machine: `docs/hermes-ssh.md` |
 | `lab mode agents\|images\|normal\|status` | See "Agents mode" and "Images mode" below |

@@ -13,3 +13,10 @@ delegation:
   max_concurrent_children: 1
   max_spawn_depth: 1
   max_iterations: 60
+# Hermes Desktop graphical interface (optional, `lab gateway`): the dashboard refuses to bind on 0.0.0.0
+# without authentication. Uncomment and fill in to enable it. The password_hash is NOT the password: generate
+# it inside the image (docs/hermes-desktop.md) — never store the clear password here.
+# dashboard:
+#   basic_auth:
+#     username: hermes
+#     password_hash: "PASTE-THE-HASH-HERE"

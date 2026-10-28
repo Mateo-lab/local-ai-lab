@@ -350,6 +350,9 @@ docker exec ollama ollama list        # exact model name
   12 h.
 - **Development workflow** (git projects, review, merge by you): [docs/agent-development.md](docs/agent-development.md).
   **Access to a test machine** over SSH, admin scripts after your approval: [docs/hermes-ssh.md](docs/hermes-ssh.md).
+- **Graphical interface** (optional): the Hermes Desktop app can drive the agent instead of the terminal. `lab gateway
+  start` serves the dashboard on `127.0.0.1:9119` (reached from your PC through the SSH tunnel), on the same data and
+  with the same isolation as a command-line session: [docs/hermes-desktop.md](docs/hermes-desktop.md).
 
 ## Langfuse (agent tracing) — optional
 

@@ -15,6 +15,10 @@ shift || true
 docker info >/dev/null 2>&1 || { echo "Docker does not answer (see ./1-prerequis.sh)." >&2; exit 1; }
 docker network inspect hermes-net >/dev/null 2>&1 || {
   echo "The hermes-net network does not exist: update the stack then run ./3-demarrer.sh again" >&2; exit 1; }
+if [ -n "$(docker ps -q -f 'name=^hermes-gw$')" ]; then
+  echo "The Hermes Desktop gateway is running (lab gateway): it shares data/state.db with this session." >&2
+  echo "Stop it first:  lab gateway stop" >&2; exit 1
+fi
 
 mkdir -p data/workspace
 printf 'HERMES_UID=%s\nHERMES_GID=%s\n' "$(id -u)" "$(id -g)" > .env

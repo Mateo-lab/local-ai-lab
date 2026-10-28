@@ -65,6 +65,8 @@ Host aibeast
   LocalForward 127.0.0.1:2586 127.0.0.1:2586
   LocalForward 127.0.0.1:9093 127.0.0.1:9093
   LocalForward 127.0.0.1:18789 127.0.0.1:18789
+  # Hermes Desktop graphical interface (only carries traffic when "lab gateway" is running; harmless otherwise)
+  LocalForward 127.0.0.1:9119 127.0.0.1:9119
   # Remote desktop (RDP): on your PC, connect to 127.0.0.1:$RDP
   LocalForward 127.0.0.1:$RDP 127.0.0.1:3389
 EOF
