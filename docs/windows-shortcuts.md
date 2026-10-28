@@ -11,6 +11,7 @@ is in `outils\`). A window opens with buttons, grouped by theme:
 3. **Delivery**: deploy the new version to AiBeast, copy the backups to this PC.
 4. **Modes**: images, normal, agents, state, health.
 5. **Maintenance**: update, backup, Hermes (projects, review, merge).
+6. **Hermes Desktop**: start / stop the graphical-interface gateway (`127.0.0.1:9119`), gateway status (see `docs/hermes-desktop.md`).
 
 Actions that change AiBeast (deploy, update, backup) ask for a confirmation. Every long action opens in its own window,
 which stays open until you press Enter: it reuses the scripts below, unchanged. The individual `.bat` files remain usable
@@ -35,10 +36,13 @@ the SSH key and the `aibeast` shortcut in the PC's SSH configuration, generated 
 | `AiBeast-Sante.bat` | Full health check | `lab doctor` |
 | `AiBeast-Mise-a-jour.bat` | Backup then image update, in a `tmux` session (continues if the connection drops) | `lab update` |
 | `AiBeast-Hermes.bat` | Review and merge the agent's work, open Hermes in a project, create a project | `lab dev …` |
+| `AiBeast-Gateway-Start.bat` | Starts the Hermes Desktop gateway (`127.0.0.1:9119`); then open the Hermes Desktop app (see `docs/hermes-desktop.md`) | `lab gateway start` |
+| `AiBeast-Gateway-Stop.bat` | Stops the Hermes Desktop gateway (frees `state.db` for `./5-hermes.sh` / `lab dev`) | `lab gateway stop` |
 
 The console (`AiBeast.bat`) has an "Agents: only one at a time" group with the same three actions (Hermes only, OpenClaw only,
-Close the Hermes session); the text menu has them as items 3, 10 and 11. They were written without being able to run PowerShell
-here: not tested on a PC yet.
+Close the Hermes session); the text menu has them as items 3, 10 and 11. It also has a "Hermes Desktop (graphical interface)"
+group (start / stop / status of the gateway), which the text menu offers as item 12 and a sub-menu. They were written without
+being able to run PowerShell here: not tested on a PC yet.
 
 The menu adds the state (`lab mode status`), the backup (`lab backup run` under tmux) and opening the portal.
 

@@ -133,6 +133,26 @@ function Action-FermerHermes {
     Invoke-Lab "session close --all" | Out-Null
 }
 
+# Hermes Desktop graphical interface (remote gateway on 127.0.0.1:9119). It shares AiBeast's state with a
+# command-line Hermes session, so lab refuses to start it while a session is open (and the reverse).
+function Action-Gateway {
+    while ($true) {
+        Write-Host ""
+        Write-Host "=== Hermes Desktop (graphical interface) ===" -ForegroundColor Cyan
+        Write-Host " 1) Start  (gateway on 127.0.0.1:9119)"
+        Write-Host " 2) Stop"
+        Write-Host " 3) Status"
+        Write-Host " 0) Back"
+        $c = Read-Host "Choice"
+        switch ($c) {
+            "1" { Invoke-Lab "gateway start" | Out-Null; Write-Host "Now open the Hermes Desktop app (it connects to http://127.0.0.1:9119). The 9119 tunnel must be open (Ouvrir-AiBeast.bat)." -ForegroundColor Cyan; Attendre }
+            "2" { Invoke-Lab "gateway stop" | Out-Null; Attendre }
+            "3" { Invoke-Lab "gateway status" | Out-Null; Attendre }
+            "0" { return }
+        }
+    }
+}
+
 function Executer([string]$a) {
     switch ($a) {
         "images"  { Action-Images }
@@ -146,6 +166,10 @@ function Executer([string]$a) {
         "update"  { Write-Host "Update (tmux session 'lab-update': it continues if the connection drops)..." -ForegroundColor Cyan; Invoke-Lab "tmux update" -Tty | Out-Null }
         "backup"  { Write-Host "Backup (tmux session 'lab-backup')..." -ForegroundColor Cyan; Invoke-Lab "tmux backup" -Tty | Out-Null }
         "hermes"  { Action-Hermes }
+        "gateway"        { Action-Gateway }
+        "gateway-start"  { Invoke-Lab "gateway start" | Out-Null }
+        "gateway-stop"   { Invoke-Lab "gateway stop" | Out-Null }
+        "gateway-status" { Invoke-Lab "gateway status" | Out-Null }
         "portail" { & (Join-Path $PSScriptRoot "Ouvrir-AiBeast.ps1") }
         default   { Write-Host "Unknown action: $a" -ForegroundColor Yellow }
     }
@@ -174,9 +198,10 @@ while ($true) {
     Write-Host " 9) Open the portal in the browser"
     Write-Host "10) OPENCLAW only (agents mode with OpenClaw instead of Hermes)"
     Write-Host "11) Close the Hermes session"
+    Write-Host "12) Hermes Desktop interface (gateway: start / stop)"
     Write-Host " 0) Quit"
     $c = Read-Host "Choice"
-    $map = @{ "1" = "images"; "2" = "normal"; "3" = "agents"; "4" = "status"; "5" = "doctor"; "6" = "update"; "7" = "backup"; "8" = "hermes"; "9" = "portail"; "10" = "agents-openclaw"; "11" = "close-hermes" }
+    $map = @{ "1" = "images"; "2" = "normal"; "3" = "agents"; "4" = "status"; "5" = "doctor"; "6" = "update"; "7" = "backup"; "8" = "hermes"; "9" = "portail"; "10" = "agents-openclaw"; "11" = "close-hermes"; "12" = "gateway" }
     if ($c -eq "0") { break }
-    if ($map.ContainsKey($c)) { Executer $map[$c]; if ($c -ne "8") { Attendre } }
+    if ($map.ContainsKey($c)) { Executer $map[$c]; if ($c -ne "8" -and $c -ne "12") { Attendre } }
 }

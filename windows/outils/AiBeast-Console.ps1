@@ -96,6 +96,9 @@ function Executer([string]$cle) {
         "update"         { if (Confirmer "Start the update of the Docker images on AiBeast?`n`nA backup is made first. This can take a long time.") { Lancer-Fenetre "AiBeast.ps1" "-Action update" } }
         "backup"         { if (Confirmer "Start a backup on AiBeast now?") { Lancer-Fenetre "AiBeast.ps1" "-Action backup" } }
         "hermes"         { Lancer-Fenetre "AiBeast.ps1" "-Action hermes" }
+        "gateway-start"  { Lancer-Fenetre "AiBeast.ps1" "-Action gateway-start";  Message "Hermes Desktop gateway starting in a window. Open the Hermes Desktop app on http://127.0.0.1:9119 (tunnels must be open)." }
+        "gateway-stop"   { Lancer-Fenetre "AiBeast.ps1" "-Action gateway-stop";   Message "Stopping the Hermes Desktop gateway." }
+        "gateway-status" { Lancer-Fenetre "AiBeast.ps1" "-Action gateway-status" }
     }
 }
 
@@ -156,6 +159,8 @@ Ajouter-Groupe "5. Agents: only one at a time" @(
     @("Hermes only", "agents-hermes"), @("OpenClaw only", "agents-openclaw"), @("Close the Hermes session", "fermer-hermes"))
 Ajouter-Groupe "6. Maintenance and Hermes" @(
     @("Update", "update"), @("Backup", "backup"), @("Hermes (projects, review)", "hermes"))
+Ajouter-Groupe "7. Hermes Desktop (graphical interface)" @(
+    @("Start gateway", "gateway-start"), @("Stop gateway", "gateway-stop"), @("Gateway status", "gateway-status"))
 
 $lblMessage = New-Object System.Windows.Forms.Label
 $lblMessage.Location = New-Object System.Drawing.Point(16, ($y + 2))
