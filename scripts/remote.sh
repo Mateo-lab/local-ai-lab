@@ -7,6 +7,7 @@
 #   remote.sh list                                      machines known to Hermes
 #   remote.sh link NAME PROJECT                         adds the rules for using this machine to an existing project's AGENTS.md
 #   remote.sh test NAME                                 tries the connection FROM the Hermes container (the agent's)
+#   remote.sh hostkey NAME [--yes]                      also accept the CURRENT host key (dual-boot machine: run once per OS booted)
 #   remote.sh remove NAME                               removes key, fingerprint and entry
 set -uo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
@@ -190,6 +191,38 @@ cmd_link() {
   echo "  \"Read AGENTS.md again. You can connect to the machine $name with ssh -F /opt/data/ssh/config $name 'command'.\""
 }
 
+# Pins an ADDITIONAL host key for an existing machine. Use for a dual-boot test machine: each OS (Windows,
+# Linux) presents a different SSH host key on the same IP; without this, switching OS triggers a host-key
+# mismatch and Hermes refuses to connect. Boot the machine on one OS, run this, boot the other, run it again.
+cmd_hostkey() {
+  local name="" yes=""; for a in "$@"; do case "$a" in --yes) yes=1;; *) name="$a";; esac; done
+  [ -n "$name" ] || die "usage: lab remote hostkey NAME [--yes]"
+  valid_name "$name"; exists "$name" || die "\"$name\" unknown (lab remote add first)"
+  command -v ssh-keyscan >/dev/null || die "ssh-keyscan is missing"
+  command -v ssh-keygen >/dev/null || die "ssh-keygen is missing"
+  local host port
+  host="$(awk -v n="$name" '$1=="Host"{c=($2==n)} c&&$1=="HostName"{print $2}' "$SSHD/config")"
+  port="$(awk -v n="$name" '$1=="Host"{c=($2==n)} c&&$1=="Port"{print $2}' "$SSHD/config")"
+  valid_host "$host"; valid_port "$port"
+  local tmp; tmp="$(mktemp)"; trap 'rm -f "$tmp"' RETURN
+  if [ -n "${REMOTE_HOSTKEY_FILE:-}" ]; then cp "$REMOTE_HOSTKEY_FILE" "$tmp"
+  else ssh-keyscan -T 8 -t ed25519 -p "$port" "$host" 2>/dev/null | grep -v '^#' > "$tmp"; fi
+  local hk; hk="$(head -n1 "$tmp")"
+  [[ "$hk" =~ ^[^[:space:]]+[[:space:]]ssh-ed25519[[:space:]][A-Za-z0-9+/=]+$ ]] || die "no ed25519 key received from $host:$port (machine off, port closed, or no ed25519 key)"
+  local pub="${hk#* }" entry
+  if [ "$port" = 22 ]; then entry="$host $pub"; else entry="[$host]:$port $pub"; fi
+  if grep -qxF "$entry" "$SSHD/known_hosts" 2>/dev/null; then echo "This host key is already accepted for \"$name\" (nothing to do)."; return 0; fi
+  echo "Host key presented NOW by $host:$port (the OS currently booted on \"$name\"):"
+  echo "  $(echo "$pub" | ssh-keygen -lf - 2>/dev/null)"
+  echo "Compare it with the machine's (type this ON the machine booted now):"
+  echo "  Linux:   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub"
+  echo "  Windows: ssh-keygen -lf C:\\ProgramData\\ssh\\ssh_host_ed25519_key.pub"
+  if [ -z "$yes" ]; then read -r -p "Add it as ALSO accepted for \"$name\"? [y/N] " r; [[ "$r" =~ ^([yYoO]|yes|oui)$ ]] || die "aborted: host key not confirmed"; fi
+  echo "$entry" >> "$SSHD/known_hosts"; chmod 600 "$SSHD/known_hosts"
+  local n; n="$(grep -cE "^(\[)?$(printf '%s' "$host" | sed 's/[.[\*^$]/\\&/g')" "$SSHD/known_hosts" 2>/dev/null)"
+  echo "✓ Added. \"$name\" now accepts $n host key(s) (dual boot: expected 2 once both OSes are pinned). Then: lab remote test $name"
+}
+
 cmd_remove() {
   local name="${1:?usage: lab remote remove NAME}"; valid_name "$name"; exists "$name" || die "\"$name\" unknown"
   local host port; host="$(awk -v n="$name" '$1=="Host"{c=($2==n)} c&&$1=="HostName"{print $2}' "$SSHD/config")"
@@ -202,6 +235,6 @@ cmd_remove() {
 }
 
 case "${1:-}" in
-  add) shift; cmd_add "$@" ;; show) shift; cmd_show "$@" ;; list) cmd_list ;; link) shift; cmd_link "$@" ;; test) shift; cmd_test "$@" ;; remove) shift; cmd_remove "$@" ;;
-  *) sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  add) shift; cmd_add "$@" ;; show) shift; cmd_show "$@" ;; list) cmd_list ;; link) shift; cmd_link "$@" ;; test) shift; cmd_test "$@" ;; hostkey) shift; cmd_hostkey "$@" ;; remove) shift; cmd_remove "$@" ;;
+  *) sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

@@ -25,7 +25,7 @@
 #   lab session list|close [NAME|--all]   open Hermes sessions: list, or close them (memory and history are kept)
 #   lab config [list|set MODEL NAME]  stored main model; `lab tmux update|backup|doctor`: long action that survives a disconnection
 #   lab panel install|token|status|logs|uninstall   web button panel (127.0.0.1:3011): docs/web-panel.md
-#   lab remote add|show|link|list|test|remove   Hermes SSH access to a test machine (dedicated key): docs/hermes-ssh.md
+#   lab remote add|show|link|list|test|hostkey|remove   Hermes SSH access to a test machine (dedicated key; hostkey = dual-boot): docs/hermes-ssh.md
 #   lab dev new|list|start|review|check|merge|setup|ctx64   development with Hermes (code → test → review): docs/agent-development.md
 #   lab gateway start|stop|status   Hermes Desktop graphical interface (remote gateway on 127.0.0.1:9119): docs/hermes-desktop.md
 set -uo pipefail

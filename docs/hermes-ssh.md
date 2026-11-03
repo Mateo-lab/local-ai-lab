@@ -106,6 +106,28 @@ accounts or `C:\ProgramData\hermes-admin`. What is approved runs with **SYSTEM**
 Seen on the reference Windows machine: installation, approval of a test script and launch by Hermes work; Hermes stays
 a standard account.
 
+## Dual-boot test machine (Windows + Linux)
+
+If the test machine boots into either Windows or Linux (same IP), set it up the same way under **both** OSes — same
+user name, so a single `Host` entry and a single dedicated key work for both:
+
+- The **client key** (the one `lab remote add` created, `hermes/data/ssh/id_ed25519_<name>.pub`) must be authorized for
+  that user on **each** OS. `lab remote show <name>` (add `--windows` for the Windows steps) prints the key and what to
+  do on the machine; apply it once per OS. The key is the same in both.
+- The **host key** differs between the two OSes on the same IP, so a single pinned key is not enough: without the second
+  one, switching OS makes ssh report *HOST IDENTIFICATION HAS CHANGED* and the agent's connection is refused
+  (`StrictHostKeyChecking yes`). Pin the second one with:
+
+  ```
+  lab remote hostkey <name>
+  ```
+
+  Boot the machine on one OS, run it, boot the other OS, run it again (it verifies the fingerprint like `add`, and only
+  appends if it is new). `lab remote test <name>` should then pass whichever OS is currently booted. The agent's command
+  does not change: `ssh -F /opt/data/ssh/config <name> '…'` reaches whichever OS is up.
+
+`lab remote remove <name>` clears every pinned host key for that machine (both OSes).
+
 ## Good practice
 
 - **Isolation**: Hermes has no network access except those you allow. Add the machine's address to
