@@ -42,6 +42,11 @@
 # 13389 rather than 3389: on Windows, 3389 may already be taken by the PC's own remote desktop.
 #LAB_RDP_LOCAL_PORT=13389
 
+# Local port (on your PC) of the tunnel to the Ollama API (port 11434 of the AI machine, bound to 127.0.0.1 there).
+# For clients such as ollmcp. If your PC already runs its own Ollama on 11434, pick another port, or 0 for no tunnel
+# (with ExitOnForwardFailure, a port already taken makes the whole "ssh aibeast" connection fail).
+#LAB_OLLAMA_LOCAL_PORT=11434
+
 # ─── 3. Agent isolation (lab isolation) ────────────────────────────────────────
 # Hermes and OpenClaw have no access to the Internet, the local network or this machine.
 # Exceptions: test machines Hermes may reach over SSH (lab remote), separated by spaces,

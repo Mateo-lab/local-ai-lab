@@ -5,7 +5,7 @@
 #   lab client --print    only prints the configuration block (nothing is written)
 #
 # The block defines the "aibeast" shortcut (used by every script in windows/) and the tunnels
-# to all the interfaces, plus the remote desktop (RDP). Nothing is opened on the network:
+# to all the interfaces, plus the remote desktop (RDP) and the Ollama API. Nothing is opened on the network:
 # the interfaces stay bound to 127.0.0.1 on the AI machine, the tunnels go through SSH.
 # See docs/remote-access.md.
 set -euo pipefail
@@ -17,6 +17,7 @@ USER_="${LAB_USER:-${USER:-$(id -un)}}"
 PORT="${LAB_SSH_PORT:-22}"
 KEY="${LAB_SSH_KEY:-~/.ssh/id_ed25519}"
 RDP="${LAB_RDP_LOCAL_PORT:-13389}"
+OLLAMA="${LAB_OLLAMA_LOCAL_PORT:-11434}"   # 0 = no Ollama tunnel
 
 if [ -z "$HOST" ]; then
   cat >&2 <<EOF
@@ -30,8 +31,8 @@ $(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v '^$' | sed 's/^/       /')
 EOF
   exit 1
 fi
-case "$HOST$USER_$PORT$KEY$RDP" in *[[:space:]\"\'\;\&\|\`\$]*) echo "lab client: invalid value in lab.conf (space or special character)" >&2; exit 1 ;; esac
-[[ "$PORT" =~ ^[0-9]+$ && "$RDP" =~ ^[0-9]+$ ]] || { echo "lab client: LAB_SSH_PORT and LAB_RDP_LOCAL_PORT must be numbers" >&2; exit 1; }
+case "$HOST$USER_$PORT$KEY$RDP$OLLAMA" in *[[:space:]\"\'\;\&\|\`\$]*) echo "lab client: invalid value in lab.conf (space or special character)" >&2; exit 1 ;; esac
+[[ "$PORT" =~ ^[0-9]+$ && "$RDP" =~ ^[0-9]+$ && "$OLLAMA" =~ ^[0-9]+$ ]] || { echo "lab client: LAB_SSH_PORT, LAB_RDP_LOCAL_PORT and LAB_OLLAMA_LOCAL_PORT must be numbers" >&2; exit 1; }
 
 bloc() {
 cat <<EOF
@@ -69,6 +70,12 @@ Host aibeast
   LocalForward 127.0.0.1:9119 127.0.0.1:9119
   # Remote desktop (RDP): on your PC, connect to 127.0.0.1:$RDP
   LocalForward 127.0.0.1:$RDP 127.0.0.1:3389
+$(if [ "$OLLAMA" != "0" ]; then cat <<EOT
+  # Ollama API (for clients such as ollmcp: ollmcp -H http://127.0.0.1:$OLLAMA). No authentication: only this PC can reach it.
+  # If a local Ollama already uses this port, set LAB_OLLAMA_LOCAL_PORT in lab.conf (0 = no Ollama tunnel).
+  LocalForward 127.0.0.1:$OLLAMA 127.0.0.1:11434
+EOT
+fi)
 EOF
 }
 

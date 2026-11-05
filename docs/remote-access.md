@@ -99,7 +99,7 @@ On the AI machine:
 lab client
 ```
 
-The command reads `lab.conf` (`LAB_HOST`, `LAB_USER`, `LAB_SSH_PORT`, `LAB_SSH_KEY`, `LAB_RDP_LOCAL_PORT`), prints the
+The command reads `lab.conf` (`LAB_HOST`, `LAB_USER`, `LAB_SSH_PORT`, `LAB_SSH_KEY`, `LAB_RDP_LOCAL_PORT`, `LAB_OLLAMA_LOCAL_PORT`), prints the
 configuration block, also writes it to `windows/ssh_config_aibeast.txt` (a file specific to your machine, ignored by
 git), and reminds you of the steps. Example block: `windows/ssh_config_aibeast.example`.
 
@@ -124,6 +124,7 @@ What each line means:
 | `ExitOnForwardFailure yes` | If a local port is already taken, the connection fails with a clear message instead of opening half the tunnels |
 | `LocalForward 127.0.0.1:3000 127.0.0.1:3000` | Tunnel: port 3000 **of the PC** (on `127.0.0.1` only) leads to port 3000 **of the AI machine** |
 | `LocalForward 127.0.0.1:13389 127.0.0.1:3389` | Remote desktop tunnel: port 13389 of the PC → 3389 of the AI machine (see §9) |
+| `LocalForward 127.0.0.1:11434 127.0.0.1:11434` | Ollama API tunnel (see "Using Ollama from your PC" in §8); port set by `LAB_OLLAMA_LOCAL_PORT`, `0` removes the line |
 
 Test: `ssh aibeast` must open a terminal on the AI machine, without the account password.
 
@@ -184,6 +185,27 @@ Then, in the PC's browser:
 | http://127.0.0.1:2586 | ntfy (alerts) |
 | http://127.0.0.1:9093 | Alertmanager |
 | http://127.0.0.1:18789 | OpenClaw (if installed) |
+| http://127.0.0.1:11434 | Ollama API (no web page: for clients such as `ollmcp`, see below) |
+
+### Using Ollama from your PC (for example `ollmcp`)
+
+Ollama listens on `127.0.0.1:11434` of the AI machine only; the tunnel makes it available on the same address of your
+PC. With the tunnels open, point the client at it, for example:
+
+```bash
+curl http://127.0.0.1:11434/api/tags                       # lists the models (JSON)
+ollmcp -H http://127.0.0.1:11434 -m qwen3.8:27b-64k        # MCP client for Ollama (--host / -H sets the server)
+```
+
+- Use the model that is already loaded (`docker exec ollama ollama ps`): another model forces a reload and takes VRAM.
+- Ollama has **no authentication**: anything running on your PC can use the tunnel, and Hermes, OpenClaw and your client
+  share the same GPU. Several clients at once have not been measured.
+- If your PC already runs its own Ollama on port 11434, `ssh aibeast` fails with `Address already in use` (see
+  `ExitOnForwardFailure` above): set `LAB_OLLAMA_LOCAL_PORT` in `lab.conf` (another port, or `0` for no tunnel), run
+  `lab client` again and reinstall the block.
+- One-off, without touching your config (close the usual tunnels first, since the shortcut also opens its own):
+  `ssh -N -o ExitOnForwardFailure=yes -L 11434:127.0.0.1:11434 aibeast`. Do **not** add
+  `-o ClearAllForwardings=yes`: it also cancels the `-L` given on the command line.
 
 ### Common problems
 

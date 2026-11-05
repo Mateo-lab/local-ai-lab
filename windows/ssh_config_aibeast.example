@@ -30,3 +30,6 @@ Host aibeast
   LocalForward 127.0.0.1:18789 127.0.0.1:18789
   # Remote desktop (RDP): on your PC, connect to 127.0.0.1:13389
   LocalForward 127.0.0.1:13389 127.0.0.1:3389
+  # Ollama API (for clients such as ollmcp: ollmcp -H http://127.0.0.1:11434). No authentication: only this PC can reach it.
+  # If a local Ollama already uses this port, set LAB_OLLAMA_LOCAL_PORT in lab.conf (0 = no Ollama tunnel).
+  LocalForward 127.0.0.1:11434 127.0.0.1:11434

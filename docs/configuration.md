@@ -30,6 +30,7 @@ Without `lab.conf`, the default values apply.
 | `LAB_SSH_PORT` | `22` | `lab client` |
 | `LAB_SSH_KEY` | `~/.ssh/id_ed25519` | `lab client`: private key **on the PC** |
 | `LAB_RDP_LOCAL_PORT` | `13389` | `lab client`: local port of the tunnel to the remote desktop (port 3389 of the AI machine) |
+| `LAB_OLLAMA_LOCAL_PORT` | `11434` | `lab client`: local port of the tunnel to the Ollama API (port 11434 of the AI machine); `0` = no Ollama tunnel |
 | `LAB_AGENT_SSH_ALLOW` | empty (no exception) | `lab isolation`: test machines Hermes may reach over SSH (`IP` or `IP:PORT`, separated by spaces) |
 
 Notes:
