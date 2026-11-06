@@ -35,13 +35,16 @@ done
 
 echo "· setup-mailpush.sh (dry run)"
 KEY="$T/key.pub"; echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeFakeFakeFakeFakeFakeFakeFakeFakeFakeFake user@pc' > "$KEY"
+# the real file may already exist (setup applied on this machine): compare before/after instead of testing absence
+AK=/etc/ssh/authorized_keys.d/mailpush; before="$(stat -c '%Y %s' "$AK" 2>/dev/null || echo absent)"
 out="$("$S" --pubkey-file "$KEY" --from 192.0.2.10 2>&1)"; rc=$?
 [ $rc -eq 0 ] && ok "dry run exits 0 without root" || ko "dry run rc=$rc: $out"
 grep -q 'restrict,from="192.0.2.10" ssh-ed25519 AAAA' <<<"$out" && ok "authorized_keys line restricted" || ko "no restricted line"
 grep -q 'ChrootDirectory /srv/mail-in' <<<"$out" && grep -q 'ForceCommand internal-sftp' <<<"$out" && ok "chroot + internal-sftp" || ko "sshd block"
 grep -q 'AllowTcpForwarding no' <<<"$out" && grep -q 'PermitTTY no' <<<"$out" && ok "no tunnel, no tty" || ko "forwarding/tty not disabled"
 grep -q 'user@pc' <<<"$out" && ko "the key comment leaked into the line" || ok "key comment dropped"
-[ ! -e /etc/ssh/authorized_keys.d/mailpush ] && ok "dry run created nothing" || ko "dry run wrote a file"
+after="$(stat -c '%Y %s' "$AK" 2>/dev/null || echo absent)"
+[ "$before" = "$after" ] && ok "dry run changed nothing ($AK)" || ko "dry run modified $AK"
 printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nxxx\n-----END OPENSSH PRIVATE KEY-----\n' > "$T/priv"
 "$S" --pubkey-file "$T/priv" >/dev/null 2>&1 && ko "accepted a private key" || ok "refuses a private key file"
 printf 'ssh-ed25519 AAAA one\nssh-ed25519 BBBB two\n' > "$T/two.pub"
