@@ -1,0 +1,36 @@
+{
+  "folders": ["Inbox"],
+  "firstRunHours": 24,
+  "overlapMinutes": 120,
+  "maxLookbackDays": 7,
+  "maxItemsPerRun": 500,
+  "maxBodyChars": 200000,
+  "minIntervalHours": 20,
+  "startupWaitSeconds": 45,
+  "quitOutlookIfStartedByScript": true,
+  "filters": {
+    "excludeSenders": ["noreply@", "no-reply@", "newsletter"],
+    "includeSenders": [],
+    "excludeKeywords": [],
+    "includeKeywords": [],
+    "excludeCategories": ["Private"],
+    "includeCategories": [],
+    "skipEncrypted": false
+  },
+  "attachments": {
+    "export": false,
+    "maxSizeMB": 10,
+    "blockedExtensions": [".exe", ".dll", ".bat", ".cmd", ".com", ".scr", ".js", ".jse", ".vbs", ".vbe", ".wsf", ".ps1", ".msi", ".lnk", ".jar", ".hta"]
+  },
+  "paths": {
+    "stateDir": "%LOCALAPPDATA%\\MailExport"
+  },
+  "remote": {
+    "host": "AIBEAST_ADDRESS",
+    "port": 22,
+    "user": "mailpush",
+    "keyFile": "%USERPROFILE%\\.ssh\\mail_export_ed25519",
+    "knownHosts": "%LOCALAPPDATA%\\MailExport\\known_hosts",
+    "remoteDir": "/inbox"
+  }
+}

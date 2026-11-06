@@ -1,0 +1,12 @@
+[Unit]
+Description=Delete old exported mails from the drop folder
+
+[Service]
+Type=oneshot
+User=mailpush
+ExecStart=/usr/local/sbin/purge-mail-exports --dir /srv/mail-in/inbox --days 30 --apply
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/srv/mail-in/inbox

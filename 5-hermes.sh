@@ -50,11 +50,21 @@ trap 'exit 143' TERM
 # starts normally otherwise. One knob: HERMES_SERIAL (default /dev/ttyACM0), HERMES_SERIAL_GID (default 20).
 # See hermes/serial.yml and the README ("Local serial device for Hermes").
 export HERMES_SERIAL="${HERMES_SERIAL:-/dev/ttyACM0}" HERMES_SERIAL_GID="${HERMES_SERIAL_GID:-20}"
+# Optional read-only mount of the Outlook-export drop folder (hermes/mail.yml): opt-in, only when HERMES_MAIL_DIR is
+# set to an existing folder, e.g.  HERMES_MAIL_DIR=/srv/mail-in/inbox ./5-hermes.sh MODEL   (docs/mail-export.md).
 RUN=(docker compose)
+OVERRIDES=()
 if [ -e "$HERMES_SERIAL" ]; then
-  RUN+=(-f docker-compose.yml -f serial.yml)
+  OVERRIDES+=(-f serial.yml)
   echo "→ Serial device $HERMES_SERIAL detected: passed to Hermes."
 fi
+if [ -n "${HERMES_MAIL_DIR:-}" ]; then
+  [ -d "$HERMES_MAIL_DIR" ] || { echo "HERMES_MAIL_DIR=$HERMES_MAIL_DIR is not a folder." >&2; exit 1; }
+  export HERMES_MAIL_DIR
+  OVERRIDES+=(-f mail.yml)
+  echo "→ Mail drop folder $HERMES_MAIL_DIR mounted read-only at /opt/mail-inbox (its content is untrusted third-party text)."
+fi
+[ "${#OVERRIDES[@]}" -gt 0 ] && RUN+=(-f docker-compose.yml "${OVERRIDES[@]}")
 # HERMES_WORKDIR (set by `lab dev start`): working folder INSIDE the container, e.g. /opt/data/workspace/projects/NAME
 RUN+=(run --rm --name "$SESSION")
 [ -n "${HERMES_WORKDIR:-}" ] && RUN+=(-w "$HERMES_WORKDIR")

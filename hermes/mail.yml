@@ -1,0 +1,13 @@
+# Optional override: mount the Outlook-export drop folder READ-ONLY into the command-line Hermes (service "hermes").
+# Used by ../5-hermes.sh ONLY when HERMES_MAIL_DIR is set to an existing folder, so ordinary sessions (and every
+# `lab dev` project session) do not see your mails. See docs/mail-export.md.
+#
+#   HERMES_MAIL_DIR=/srv/mail-in/inbox ./5-hermes.sh MODEL
+#
+# Security: the mount is :ro, so the agent cannot alter or delete the exports; the container has no Internet and no
+# mail credentials. Mail text is THIRD-PARTY content: prompt injection is the main risk (docs/mail-export.md).
+name: hermes
+services:
+  hermes:
+    volumes:
+      - "${HERMES_MAIL_DIR:?set HERMES_MAIL_DIR}:/opt/mail-inbox:ro"
