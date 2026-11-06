@@ -18,11 +18,17 @@
 param(
     [string]$At = '07:30',
     [string]$Name = 'MailExport\OutlookDaily',
-    [string]$Script = (Join-Path $PSScriptRoot 'Export-Outlook.ps1'),
-    [string]$Config = (Join-Path $PSScriptRoot 'export-outlook.config.json'),
+    [string]$Script = '',
+    [string]$Config = '',
     [switch]$Remove,
     [switch]$PrintXml
 )
+# $PSScriptRoot can be empty in a param() default on Windows PowerShell 5.1: resolve the script folder here instead.
+$ScriptDir = $PSScriptRoot
+if ([string]::IsNullOrEmpty($ScriptDir) -and $MyInvocation.MyCommand.Path) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if ([string]::IsNullOrEmpty($ScriptDir)) { $ScriptDir = (Get-Location).Path }
+if ([string]::IsNullOrEmpty($Script)) { $Script = Join-Path $ScriptDir 'Export-Outlook.ps1' }
+if ([string]::IsNullOrEmpty($Config)) { $Config = Join-Path $ScriptDir 'export-outlook.config.json' }
 $ErrorActionPreference = 'Stop'
 if ($Remove) {
     & schtasks.exe /Delete /TN $Name /F

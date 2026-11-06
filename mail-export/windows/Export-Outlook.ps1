@@ -29,7 +29,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Config = (Join-Path $PSScriptRoot 'export-outlook.config.json'),
+    [string]$Config = '',
     [switch]$DryRun,
     [switch]$NoPush,
     [switch]$Status,
@@ -37,6 +37,11 @@ param(
     [int]$Hours = 0,
     [int]$Limit = 0
 )
+# $PSScriptRoot can be empty in a param() default on Windows PowerShell 5.1: resolve the script folder here instead.
+$ScriptDir = $PSScriptRoot
+if ([string]::IsNullOrEmpty($ScriptDir) -and $MyInvocation.MyCommand.Path) { $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if ([string]::IsNullOrEmpty($ScriptDir)) { $ScriptDir = (Get-Location).Path }
+if ([string]::IsNullOrEmpty($Config)) { $Config = Join-Path $ScriptDir 'export-outlook.config.json' }
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
