@@ -28,6 +28,7 @@
 #   lab remote add|show|link|list|test|hostkey|remove   Hermes SSH access to a test machine (dedicated key; hostkey = dual-boot): docs/hermes-ssh.md
 #   lab dev new|list|start|review|check|merge|setup|ctx64   development with Hermes (code → test → review): docs/agent-development.md
 #   lab gateway start|stop|status   Hermes Desktop graphical interface (remote gateway on 127.0.0.1:9119): docs/hermes-desktop.md
+#   lab mail [MODEL] [--force]      Hermes session that reads the exported mails (read-only mount, no serial): docs/mail-export.md
 set -uo pipefail
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
@@ -350,6 +351,7 @@ UNIT
 }
 
 cmd_dev() { exec "$ROOT/scripts/dev.sh" "$@"; }
+cmd_mail() { LAB_AGENT_SSH_ALLOW="${LAB_AGENT_SSH_ALLOW:-}" exec "$ROOT/scripts/mail-agent.sh" "$@"; }
 cmd_remote() { exec "$ROOT/scripts/remote.sh" "$@"; }
 cmd_gpu_limit() { [ $# -eq 0 ] && set -- status; exec "$ROOT/scripts/gpu-power-limit.sh" "$@"; }
 cmd_backup()    { exec "$ROOT/scripts/backup.sh" "$@"; }
@@ -552,8 +554,8 @@ case "$c" in
   urls) cmd_urls ;;          models) cmd_models ;;         task-model) cmd_task_model "$@" ;;
   bench) cmd_bench "$@" ;;   gpu-limit) cmd_gpu_limit "$@" ;;  desktop|bureau) cmd_bureau "$@" ;;
   backup) cmd_backup "$@" ;; update) cmd_update "$@" ;;    rollback) cmd_rollback ;;
-  mode) cmd_mode "$@" ;;     session) cmd_session "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     gateway) cmd_gateway "$@" ;;     config) cmd_config "$@" ;;
+  mode) cmd_mode "$@" ;;     session) cmd_session "$@" ;;     panel) cmd_panel "$@" ;;     remote) cmd_remote "$@" ;;     dev) cmd_dev "$@" ;;     mail) cmd_mail "$@" ;;     gateway) cmd_gateway "$@" ;;     config) cmd_config "$@" ;;
   tmux) cmd_tmux "$@" ;;     main-model) main_model ;;  client) cmd_client "$@" ;;  isolation) cmd_isolation "$@" ;;
-  help|-h|--help|"") sed -n '2,30p' "$SELF" | sed 's/^# \{0,1\}//' ;;
-  *) echo "lab: unknown command \"$c\"" >&2; sed -n '2,30p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
+  help|-h|--help|"") sed -n '2,31p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  *) echo "lab: unknown command \"$c\"" >&2; sed -n '2,31p' "$SELF" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
 esac

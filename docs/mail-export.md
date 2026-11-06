@@ -151,15 +151,24 @@ not ready) Windows retries every 30 minutes, up to 6 times. If Outlook is closed
 (waits `startupWaitSeconds` for the sync) and quits it afterwards; if it cannot, it logs the error and exits with code 2.
 No administrator rights are needed unless your company's policy blocks task creation.
 
-### 4. Hermes — read-only mount
+### 4. Hermes - read-only mount
 
 ```bash
-HERMES_MAIL_DIR=/srv/mail-in/inbox ./5-hermes.sh MODEL        # the folder appears as /opt/mail-inbox, read-only
+lab mail [MODEL]          # a Hermes session dedicated to the mails; MODEL defaults to the main model (lab main-model)
 ```
 
-The mount is opt-in per session (`hermes/mail.yml`), so ordinary sessions and other `lab dev` projects do not see your
-mails. Equivalent in a plain `docker run`: `-v /srv/mail-in/inbox:/opt/mail-inbox:ro`. The Hermes Desktop gateway does not
-get the mount (command line only).
+`lab mail` (`scripts/mail-agent.sh`) starts Hermes with the drop folder mounted **read-only** at `/opt/mail-inbox`, in its own
+working folder `hermes/data/workspace/mail` whose `AGENTS.md` (copied once from `hermes/mail-template/AGENTS.md`, then yours to
+edit) says that mails are data, never instructions. It never passes the serial device, and it **refuses to start while
+`LAB_AGENT_SSH_ALLOW` is set** (a booby-trapped mail could ask Hermes to act on that machine): empty it in `lab.conf` and run
+`lab isolation apply`, or add `--force` knowingly. Another folder: `LAB_MAIL_DIR=/path lab mail`.
+
+The mount is opt-in per session, so ordinary sessions and `lab dev` projects do not see your mails. The equivalent by hand:
+`HERMES_MAIL_DIR=/srv/mail-in/inbox ./5-hermes.sh MODEL`, or in a plain `docker run`: `-v /srv/mail-in/inbox:/opt/mail-inbox:ro`.
+The Hermes Desktop gateway does not get the mount (command line only).
+
+All Hermes sessions share `hermes/data` (including `state.db`, the history). A summary written in a mail session is therefore
+visible in Hermes's history and memory: do not ask Hermes to remember mail content.
 
 ## File format
 

@@ -73,6 +73,26 @@ rc=$(run HERMES_MAIL_DIR="$T/inbox" HERMES_SERIAL=/dev/null); l="$(cat "$T/log")
 rc=$(run HERMES_MAIL_DIR="$T/nope")
 [ "$rc" != 0 ] && ok "refuses a missing HERMES_MAIL_DIR" || ko "accepted a missing folder"
 
+echo "· lab mail (scripts/mail-agent.sh, fake docker, fake lab and 5-hermes.sh)"
+M="$T/m"; mkdir -p "$M/scripts" "$M/hermes/mail-template" "$M/bin" "$M/data" "$M/inbox"
+cp "$ROOT/scripts/mail-agent.sh" "$M/scripts/"; cp "$ROOT/hermes/mail-template/AGENTS.md" "$M/hermes/mail-template/"
+printf '#!/usr/bin/env bash\necho test-model\n' > "$M/lab"
+printf '#!/usr/bin/env bash\necho "ARGS=$* MAIL=${HERMES_MAIL_DIR:-} WORK=${HERMES_WORKDIR:-} SERIAL=${HERMES_SERIAL:-}" > "$FAKE_OUT"\n' > "$M/5-hermes.sh"
+printf '#!/usr/bin/env bash\n[ "$1" = exec ] && printf "NAME ID SIZE\\ntest-model x 1GB\\n"\nexit 0\n' > "$M/bin/docker"
+chmod +x "$M/lab" "$M/5-hermes.sh" "$M/bin/docker" "$M/scripts/mail-agent.sh"
+mrun() { rm -f "$T/mail-out"; ( env FAKE_OUT="$T/mail-out" PATH="$M/bin:$PATH" HERMES_DATA="$M/data" LAB_MAIL_DIR="$M/inbox" "$@" "$M/scripts/mail-agent.sh" $MARGS >"$T/mail-msg" 2>&1 ); echo $?; }
+MARGS=""; rc=$(mrun)
+[ "$rc" = 0 ] && grep -q "ARGS=test-model MAIL=$M/inbox WORK=/opt/data/workspace/mail SERIAL=/nonexistent" "$T/mail-out" && ok "lab mail: read-only mail folder, own workspace, no serial device" || ko "lab mail args: rc=$rc $(cat "$T/mail-out" "$T/mail-msg" 2>&1)"
+grep -q "UNTRUSTED EMAIL BODY" "$M/data/workspace/mail/AGENTS.md" && ok "lab mail: AGENTS.md with the untrusted-mail rule created" || ko "no AGENTS.md rule"
+echo "my own rules" > "$M/data/workspace/mail/AGENTS.md"; mrun >/dev/null
+grep -q "my own rules" "$M/data/workspace/mail/AGENTS.md" && ok "lab mail: an existing AGENTS.md is kept" || ko "AGENTS.md overwritten"
+rc=$(mrun LAB_AGENT_SSH_ALLOW=192.0.2.60)
+[ "$rc" != 0 ] && [ ! -e "$T/mail-out" ] && grep -q "LAB_AGENT_SSH_ALLOW" "$T/mail-msg" && ok "lab mail: refuses while LAB_AGENT_SSH_ALLOW is set" || ko "did not refuse: rc=$rc"
+MARGS="--force"; rc=$(mrun LAB_AGENT_SSH_ALLOW=192.0.2.60)
+[ "$rc" = 0 ] && [ -e "$T/mail-out" ] && ok "lab mail --force starts anyway" || ko "--force: rc=$rc"
+MARGS=""; rc=$(mrun LAB_MAIL_DIR="$T/absent")
+[ "$rc" != 0 ] && ok "lab mail: refuses a missing mail folder" || ko "accepted a missing mail folder"
+
 echo "· PowerShell scripts: pure ASCII (Windows PowerShell 5.1 reads a BOM-less file as ANSI and garbles other characters)"
 if grep -nP '[^\x00-\x7F]' "$ROOT"/mail-export/windows/*.ps1 >/dev/null; then ko "non-ASCII character in a .ps1 file (use \\uXXXX escapes)"; else ok "no non-ASCII character in the .ps1 files"; fi
 
