@@ -11,6 +11,8 @@
   "filters": {
     "excludeSenders": ["noreply@", "no-reply@", "newsletter"],
     "includeSenders": [],
+    "excludeRecipients": [],
+    "includeRecipients": [],
     "excludeKeywords": [],
     "includeKeywords": [],
     "excludeCategories": ["Private"],

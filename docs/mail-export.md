@@ -201,6 +201,7 @@ each run (time, status, count): its modification time tells the server side when
 | `firstRunHours` / `overlapMinutes` / `maxLookbackDays` | 24 / 120 / 7 | window of the first run; overlap re-read at each run (duplicates are skipped); longest look-back after a long absence |
 | `maxItemsPerRun` / `maxBodyChars` | 500 / 200000 | safety limits |
 | `filters.excludeSenders` / `includeSenders` | `[]` | substrings of the address or display name (case-insensitive); with `includeSenders`, only those are exported |
+| `filters.excludeRecipients` / `includeRecipients` | `[]` | substrings of an address or display name among the To, Cc **and** Bcc recipients (case-insensitive); with `includeRecipients`, only mails addressed to one of them are exported (e.g. `["team-list@example.com"]` for a team list). A distribution list is matched by its own address, not by its members |
 | `filters.excludeKeywords` / `includeKeywords` | `[]` | words looked for in the subject **and** body |
 | `filters.excludeCategories` / `includeCategories` | `[]` | Outlook categories |
 | `filters.skipEncrypted` | `false` | skip S/MIME-encrypted mails instead of exporting their metadata |

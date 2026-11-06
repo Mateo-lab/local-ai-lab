@@ -149,6 +149,7 @@ $StartupWait   = [int](Get-Prop $cfg 'startupWaitSeconds' 45)
 $QuitIfStarted = [bool](Get-Prop $cfg 'quitOutlookIfStartedByScript' $true)
 $flt = Get-Prop $cfg 'filters' $null
 $ExclSenders = @(Get-Prop $flt 'excludeSenders' @());   $InclSenders = @(Get-Prop $flt 'includeSenders' @())
+$ExclRecips = @(Get-Prop $flt 'excludeRecipients' @()); $InclRecips = @(Get-Prop $flt 'includeRecipients' @())
 $ExclKeywords = @(Get-Prop $flt 'excludeKeywords' @()); $InclKeywords = @(Get-Prop $flt 'includeKeywords' @())
 $ExclCats = @(Get-Prop $flt 'excludeCategories' @());   $InclCats = @(Get-Prop $flt 'includeCategories' @())
 $SkipEncrypted = [bool](Get-Prop $flt 'skipEncrypted' $false)
@@ -272,12 +273,22 @@ function Clean-Body([string]$text, [ref]$strippedCount) {
     return $t
 }
 
-function Get-RejectReason([string]$smtp, [string]$senderName, [string]$subject, [string[]]$cats, [scriptblock]$bodyGetter) {
+function Get-RejectReason([string]$smtp, [string]$senderName, [string]$subject, [string[]]$cats, [scriptblock]$bodyGetter, [scriptblock]$recipGetter) {
     foreach ($x in $ExclSenders) { if ((Test-Contains $smtp $x) -or (Test-Contains $senderName $x)) { return 'excluded sender' } }
     if ($InclSenders.Count -gt 0) {
         $ok = $false
         foreach ($x in $InclSenders) { if ((Test-Contains $smtp $x) -or (Test-Contains $senderName $x)) { $ok = $true } }
         if (-not $ok) { return 'sender not in includeSenders' }
+    }
+    if ($ExclRecips.Count -gt 0 -or $InclRecips.Count -gt 0) {
+        # To, Cc and Bcc of the mail (a group address such as a distribution list stays unexpanded in Recipients)
+        $rl = @(& $recipGetter)
+        foreach ($x in $ExclRecips) { foreach ($r in $rl) { if ((Test-Contains $r.address $x) -or (Test-Contains $r.name $x)) { return 'excluded recipient' } } }
+        if ($InclRecips.Count -gt 0) {
+            $ok = $false
+            foreach ($x in $InclRecips) { foreach ($r in $rl) { if ((Test-Contains $r.address $x) -or (Test-Contains $r.name $x)) { $ok = $true } } }
+            if (-not $ok) { return 'no includeRecipients match' }
+        }
     }
     foreach ($c in $cats) { foreach ($x in $ExclCats) { if ($c.Trim() -ieq $x) { return 'excluded category' } } }
     if ($InclCats.Count -gt 0) {
@@ -427,7 +438,8 @@ try {
                 $smtp = Get-SenderSmtp $it; $sname = [string]$it.SenderName
                 $cats = @(([string]$it.Categories) -split '[,;]' | Where-Object { $_.Trim() -ne '' })
                 $bodyGetter = { try { [string]$it.Body } catch { '' } }
-                $why = Get-RejectReason $smtp $sname ([string]$it.Subject) $cats $bodyGetter
+                $recipGetter = { Get-RecipientList $it }
+                $why = Get-RejectReason $smtp $sname ([string]$it.Subject) $cats $bodyGetter $recipGetter
                 if ($why) { $res.skipped++; continue }
                 $total++
                 if ($DryRun) {
