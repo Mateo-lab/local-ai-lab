@@ -23,9 +23,11 @@ Files: `mail-export/windows/` (PC), `mail-export/linux/` (server), `hermes/mail.
 | Part | Status |
 |---|---|
 | `purge-mail-exports.sh`, `setup-mailpush.sh` (dry run and `--apply` with a fake `sshd`), `5-hermes.sh` mount arguments | Tested offline: `scripts/test-mail-export.sh` |
-| A real `sshd` with the generated `Match User mailpush` block (chroot, `internal-sftp`, `restrict`) | **Not tested** (no sshd where this was written). Check it yourself: "Test procedure", step 3 |
-| `Export-Outlook.ps1`, `Install-MailExportTask.ps1` | **Not executed** (no Windows, no Outlook). Written for Windows PowerShell 5.1. Use `-DryRun -Limit 5` first |
-| `sftp` batch on Windows (paths with `/`, `-rm`, `rename`, `-F NUL`) | **Not tested** |
+| A real `sshd` with the generated `Match User mailpush` block (chroot, `internal-sftp`, `restrict`) | Tested for real: `sshd -t` and `sshd -T` as `mailpush`, then an SFTP login from the PC that lists `/inbox`. The "must fail" checks of "Test procedure", step 3 were not run |
+| `Export-Outlook.ps1` | Run for real on Windows PowerShell 5.1 with classic Outlook 16.0: `-DryRun`, `-NoPush` (4 mails exported, header format checked) and a push. Not tested: attachments, S/MIME, the Outlook security prompt, a folder other than `Inbox` |
+| `sftp` batch on Windows (paths with `/`, `-rm`, `rename`, `-F NUL`) | Tested for real: 4 mails and `_export-status.json` arrived complete in `/srv/mail-in/inbox` |
+| `Install-MailExportTask.ps1` | The task is created and `schtasks /Query` shows the expected command and trigger. No scheduled run has been observed yet |
+| Read-only mount in the container | Tested for real: the files are listed in `/opt/mail-inbox`, `touch` fails with "Read-only file system", `docker inspect` shows `rw=false` |
 
 ## Security design
 
@@ -106,7 +108,11 @@ notepad export-outlook.config.json         # at least: remote.host (the AI machi
 Pin the server's SSH key (never accept it blindly) and compare the fingerprints:
 
 ```powershell
-ssh-keyscan -t ed25519 -p 22 AIBEAST_ADDRESS | Out-File -Encoding ascii "$env:LOCALAPPDATA\MailExport\known_hosts"
+# the Windows ssh-keyscan can fail with "unsupported KEX method" on a recent server: copy the server's public host key over your trusted SSH shortcut instead
+scp aibeast:/etc/ssh/ssh_host_ed25519_key.pub "$env:TEMP\aibeast_hostkey.pub"
+$k = ((Get-Content "$env:TEMP\aibeast_hostkey.pub") -split ' ')[0..1] -join ' '
+"AIBEAST_ADDRESS $k" | Out-File -Encoding ascii "$env:LOCALAPPDATA\MailExport\known_hosts"
+Remove-Item "$env:TEMP\aibeast_hostkey.pub"
 ssh-keygen -lf "$env:LOCALAPPDATA\MailExport\known_hosts"
 ```
 ```bash
@@ -247,6 +253,7 @@ no mail failed, so a failing mail is retried (bounded by `maxLookbackDays`).
 | Symptom | Cause / fix |
 |---|---|
 | `Outlook (classic) COM is not available` | The "new Outlook" has no COM interface; use classic Outlook. Or Outlook runs elevated while the script does not (or the reverse): run both normally |
+| `80080005 Server execution failed` when starting Outlook | Outlook is in a bad state (seen after a long session). Quit it with File > Quit, check `Get-Process OUTLOOK` is empty, reopen it normally and test `New-Object -ComObject Outlook.Application`. Not a reason to run PowerShell as administrator |
 | `Cannot create ActiveX component` / language mode errors | Your company enforces PowerShell Constrained Language Mode or AppLocker: this approach is then blocked; ask IT |
 | Outlook shows a security prompt about addresses | Object-model guard (no up-to-date antivirus detected). Ask IT, or keep the filters to what you need; the export still works once you allow it |
 | `Permission denied (publickey)` on push | Wrong key, `from=` does not match your PC address, `AllowUsers` refuses `mailpush`, or the key file permissions are too open (`icacls`) |
