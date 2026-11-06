@@ -48,7 +48,7 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $Inv = [Globalization.CultureInfo]::InvariantCulture
 $script:LogFile = $null
 
-# ───────────────────────── helpers ─────────────────────────
+# ------------------------- helpers -------------------------
 function Expand-Env([string]$p) { if ([string]::IsNullOrEmpty($p)) { return $p }; return [Environment]::ExpandEnvironmentVariables($p) }
 
 function Get-Prop($obj, [string]$name, $default) {
@@ -124,7 +124,7 @@ function Get-MapiProp($obj, [string]$tag) {
     try { return $obj.PropertyAccessor.GetProperty($PT + $tag) } catch { return $null }
 }
 
-# ───────────────────────── configuration ─────────────────────────
+# ------------------------- configuration -------------------------
 try {
     $cfg = Read-JsonFile $Config
     if ($null -eq $cfg) { throw "configuration not found or empty: $Config (copy export-outlook.config.example.json)" }
@@ -164,7 +164,7 @@ $AttMaxMB  = [double](Get-Prop $att 'maxSizeMB' 10)
 $AttBlocked = @(Get-Prop $att 'blockedExtensions' @('.exe','.dll','.bat','.cmd','.com','.scr','.js','.jse','.vbs','.vbe','.wsf','.ps1','.msi','.lnk','.jar','.hta'))
 $rem = Get-Prop $cfg 'remote' $null
 
-# ───────────────────────── -Status ─────────────────────────
+# ------------------------- -Status -------------------------
 if ($Status) {
     $lr = Read-JsonFile $LastRunFile
     if ($null -eq $lr) { Write-Host 'No run recorded yet.'; exit 1 }
@@ -178,12 +178,12 @@ if ($Status) {
     Write-Host 'ATTENTION: no successful export in the last 26 h (or the last run failed).' -ForegroundColor Yellow; exit 1
 }
 
-# ───────────────────────── single instance ─────────────────────────
+# ------------------------- single instance -------------------------
 $createdNew = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Local\MailExportOutlook', [ref]$createdNew)
 if (-not $createdNew) { Write-Log 'WARN' 'Another export is already running; exiting.'; exit 0 }
 
-# ───────────────────────── scheduled-run guard ─────────────────────────
+# ------------------------- scheduled-run guard -------------------------
 if ($Scheduled) {
     try {
         $lr0 = Read-JsonFile $LastRunFile
@@ -197,7 +197,7 @@ if ($Scheduled) {
     } catch { Write-Log 'WARN' "Could not evaluate the last run: $($_.Exception.Message)" }
 }
 
-# ───────────────────────── state ─────────────────────────
+# ------------------------- state -------------------------
 $watermark = $null
 $seen = @{}
 try {
@@ -222,7 +222,7 @@ function Save-State([DateTime]$newWatermarkUtc) {
     Write-FileAtomic $StateFile $text
 }
 
-# ───────────────────────── run ─────────────────────────
+# ------------------------- run -------------------------
 $runStart = (Get-Date).ToUniversalTime()
 $res = @{ exported = 0; skipped = 0; errors = 0; pushed = 0; pending = 0; status = 'ok'; message = ''; code = 0 }
 $outlookStartedByUs = $false
@@ -272,7 +272,7 @@ function Clean-Body([string]$text, [ref]$strippedCount) {
     $t = $text -replace "`r`n", "`n" -replace "`r", "`n"
     $before = $t.Length
     # control characters (except \n and \t) and invisible / bidirectional-override characters used to hide instructions
-    $t = [regex]::Replace($t, '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F​-‏‪-‮⁠-⁤⁦-⁩﻿]', '')
+    $t = [regex]::Replace($t, '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]', '')
     $strippedCount.Value = $before - $t.Length
     $t = $t -replace 'BEGIN UNTRUSTED EMAIL BODY', '[marker removed]' -replace 'END UNTRUSTED EMAIL BODY', '[marker removed]'
     return $t
@@ -398,7 +398,7 @@ function Export-One($it, [string]$folderName, [DateTime]$exportedAt, [string]$ke
 }
 
 try {
-    # ── connect to Outlook ──
+    # -- connect to Outlook --
     $wasRunning = [bool](Get-Process -Name OUTLOOK -ErrorAction SilentlyContinue)
     try { $ol = New-Object -ComObject Outlook.Application } catch { throw "Outlook (classic) COM is not available: $($_.Exception.Message)" }
     $ns = $ol.GetNamespace('MAPI')
@@ -409,7 +409,7 @@ try {
         Start-Sleep -Seconds $StartupWait
     }
 
-    # ── time window ──
+    # -- time window --
     $now = (Get-Date).ToUniversalTime()
     if ($Hours -gt 0) { $sinceUtc = $now.AddHours(-$Hours) }
     elseif ($null -ne $watermark) { $sinceUtc = $watermark.AddMinutes(-$OverlapMin) }
@@ -481,7 +481,7 @@ try {
 
 if ($DryRun) { Write-Log 'INFO' 'Dry run finished: nothing written, nothing pushed.'; $mutex.ReleaseMutex(); exit 0 }
 
-# ───────────────────────── push (independent of Outlook: pending files are retried) ─────────────────────────
+# ------------------------- push (independent of Outlook: pending files are retried) -------------------------
 function Write-LastRun {
     $text = "{`n  `"started`": $(ConvertTo-JsonString $runStart.ToString('o', $Inv)),`n  `"finished`": $(ConvertTo-JsonString ((Get-Date).ToUniversalTime().ToString('o', $Inv))),`n" +
             "  `"status`": $(ConvertTo-JsonString $res.status),`n  `"exported`": $($res.exported),`n  `"skipped`": $($res.skipped),`n  `"errors`": $($res.errors),`n" +

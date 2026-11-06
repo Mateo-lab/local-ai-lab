@@ -70,4 +70,7 @@ rc=$(run HERMES_MAIL_DIR="$T/inbox" HERMES_SERIAL=/dev/null); l="$(cat "$T/log")
 rc=$(run HERMES_MAIL_DIR="$T/nope")
 [ "$rc" != 0 ] && ok "refuses a missing HERMES_MAIL_DIR" || ko "accepted a missing folder"
 
+echo "· PowerShell scripts: pure ASCII (Windows PowerShell 5.1 reads a BOM-less file as ANSI and garbles other characters)"
+if grep -nP '[^\x00-\x7F]' "$ROOT"/mail-export/windows/*.ps1 >/dev/null; then ko "non-ASCII character in a .ps1 file (use \\uXXXX escapes)"; else ok "no non-ASCII character in the .ps1 files"; fi
+
 echo; [ $fail -eq 0 ] && echo "All good" || { echo "FAILURES"; exit 1; }
