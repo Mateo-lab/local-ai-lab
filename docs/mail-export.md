@@ -163,6 +163,14 @@ edit) says that mails are data, never instructions. It never passes the serial d
 `LAB_AGENT_SSH_ALLOW` is set** (a booby-trapped mail could ask Hermes to act on that machine): empty it in `lab.conf` and run
 `lab isolation apply`, or add `--force` knowingly. Another folder: `LAB_MAIL_DIR=/path lab mail`.
 
+**Reasoning level.** For summarising and sorting mails a lower reasoning level is faster and uses less of the 64k context, so
+`lab mail` runs with `agent.reasoning_effort: low` (`LAB_MAIL_REASONING` in `lab.conf`: `xhigh|high|medium|low|minimal|none`, or `off`
+to leave it alone). `hermes/data/config.yaml` is shared by every Hermes session, so this is set **for this session only**: the
+file is put back exactly (previous value, or the added block removed) when the session ends, including after a failure or a closed
+terminal; if the machine was killed, the next `lab mail` repairs it first (record in `hermes/data/.mail-reasoning-undo`). A Hermes
+session started *while* a mail session is open would see `low`: keep one session at a time. Whether Hermes passes this level on to
+a local model served by Ollama is not documented: measure the answer time with and without it.
+
 The mount is opt-in per session, so ordinary sessions and `lab dev` projects do not see your mails. The equivalent by hand:
 `HERMES_MAIL_DIR=/srv/mail-in/inbox ./5-hermes.sh MODEL`, or in a plain `docker run`: `-v /srv/mail-in/inbox:/opt/mail-inbox:ro`.
 The Hermes Desktop gateway does not get the mount (command line only).

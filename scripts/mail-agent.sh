@@ -6,6 +6,8 @@
 # - mounts the drop folder read-only at /opt/mail-inbox (HERMES_MAIL_DIR; default /srv/mail-in/inbox, LAB_MAIL_DIR to change);
 # - works in its own folder hermes/data/workspace/mail, whose AGENTS.md (hermes/mail-template/AGENTS.md) says that mails are data;
 # - never passes the serial device;
+# - runs with agent.reasoning_effort = LAB_MAIL_REASONING (default low; "off" leaves it alone) ONLY for this session: the
+#   previous state of config.yaml is put back when the session ends (and at the next start if a kill prevented it);
 # - refuses to start while LAB_AGENT_SSH_ALLOW lets Hermes reach a test machine (a booby-trapped mail could ask it to act there),
 #   unless --force.
 set -uo pipefail
@@ -39,6 +41,55 @@ if [ -f "$cfg" ]; then
   fi
 fi
 
+# --- reasoning level, for this session only -------------------------------------------------------------------------------
+# config.yaml is shared by every Hermes session, so the change is undone when this session ends. What was changed is recorded
+# in $STATE ("kind|previous value or size|value we set"), so a leftover (kill -9, power cut) is repaired at the next start.
+EFFORT="${LAB_MAIL_REASONING:-low}"
+[[ "$EFFORT" =~ ^(xhigh|high|medium|low|minimal|none|off)$ ]] || die "LAB_MAIL_REASONING=\"$EFFORT\": expected xhigh|high|medium|low|minimal|none|off"
+STATE="$DATA/.mail-reasoning-undo"
+
+undo_reasoning() { # puts config.yaml back as it was before set_reasoning
+  [ -f "$STATE" ] || return 0
+  local kind prev set blk
+  IFS='|' read -r kind prev set < "$STATE"
+  if [ -f "$cfg" ]; then
+    case "$kind" in
+      replace) sed -i "/^agent:/,/^[^ #]/ s/^  reasoning_effort: ${set}\$/  reasoning_effort: ${prev}/" "$cfg" ;;
+      insert)  sed -i "/^agent:/{n;/^  reasoning_effort: ${set}\$/d}" "$cfg" ;;
+      append)  # prev = size of the file before we appended; cut back only if the tail is still exactly our block
+               blk=$'\nagent:\n  reasoning_effort: '"$set"$'\n'
+               [ "$(tail -c "${#blk}" "$cfg"; echo x)" = "${blk}x" ] && truncate -s "$prev" "$cfg" ;;
+    esac
+  fi
+  rm -f "$STATE"
+}
+
+set_reasoning() { # set_reasoning VALUE
+  local v="$1" kind prev="" shown=""
+  [ -f "$cfg" ] || return 0
+  if ! grep -q '^agent:' "$cfg"; then
+    kind=append; prev="$(stat -c %s "$cfg")"; printf '\nagent:\n  reasoning_effort: %s\n' "$v" >> "$cfg"
+  elif prev="$(awk '/^agent:/{a=1;next} a&&/^[^ #]/{exit} a&&/^  reasoning_effort:/{print $2; f=1; exit} END{exit !f}' "$cfg")"; then
+    kind=replace; shown="$prev"
+    sed -i "/^agent:/,/^[^ #]/ s/^  reasoning_effort:.*/  reasoning_effort: ${v}/" "$cfg"
+  else
+    kind=insert; prev=""
+    sed -i "/^agent:/a\\  reasoning_effort: ${v}" "$cfg"
+  fi
+  printf '%s|%s|%s\n' "$kind" "$prev" "$v" > "$STATE"
+  echo "→ Reasoning: ${shown:-default} → $v for this session only (put back when it ends)."
+}
+
+undo_reasoning                          # repairs a leftover of a session that could not clean up
+if [ "$EFFORT" != off ] && [ -f "$cfg" ]; then
+  trap undo_reasoning EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  set_reasoning "$EFFORT"
+fi
+
 echo "Mail reader — model $MODEL — mails: $MAIL_DIR (read-only) — folder: workspace/mail"
 HERMES_MAIL_DIR="$MAIL_DIR" HERMES_WORKDIR="/opt/data/workspace/mail" HERMES_SERIAL=/nonexistent \
-  exec "$ROOT/5-hermes.sh" "$MODEL"
+  "$ROOT/5-hermes.sh" "$MODEL"
+exit $?

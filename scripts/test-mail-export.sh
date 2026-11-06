@@ -77,7 +77,7 @@ echo "· lab mail (scripts/mail-agent.sh, fake docker, fake lab and 5-hermes.sh)
 M="$T/m"; mkdir -p "$M/scripts" "$M/hermes/mail-template" "$M/bin" "$M/data" "$M/inbox"
 cp "$ROOT/scripts/mail-agent.sh" "$M/scripts/"; cp "$ROOT/hermes/mail-template/AGENTS.md" "$M/hermes/mail-template/"
 printf '#!/usr/bin/env bash\necho test-model\n' > "$M/lab"
-printf '#!/usr/bin/env bash\necho "ARGS=$* MAIL=${HERMES_MAIL_DIR:-} WORK=${HERMES_WORKDIR:-} SERIAL=${HERMES_SERIAL:-}" > "$FAKE_OUT"\n' > "$M/5-hermes.sh"
+printf '#!/usr/bin/env bash\necho "ARGS=$* MAIL=${HERMES_MAIL_DIR:-} WORK=${HERMES_WORKDIR:-} SERIAL=${HERMES_SERIAL:-} EFFORT=$(grep -h reasoning_effort ${HERMES_DATA:-/nonexistent}/config.yaml 2>/dev/null | tr -d " ")" > "$FAKE_OUT"\n' > "$M/5-hermes.sh"
 printf '#!/usr/bin/env bash\n[ "$1" = exec ] && printf "NAME ID SIZE\\ntest-model x 1GB\\n"\nexit 0\n' > "$M/bin/docker"
 chmod +x "$M/lab" "$M/5-hermes.sh" "$M/bin/docker" "$M/scripts/mail-agent.sh"
 mrun() { rm -f "$T/mail-out"; ( env FAKE_OUT="$T/mail-out" PATH="$M/bin:$PATH" HERMES_DATA="$M/data" LAB_MAIL_DIR="$M/inbox" "$@" "$M/scripts/mail-agent.sh" $MARGS >"$T/mail-msg" 2>&1 ); echo $?; }
@@ -92,6 +92,27 @@ MARGS="--force"; rc=$(mrun LAB_AGENT_SSH_ALLOW=192.0.2.60)
 [ "$rc" = 0 ] && [ -e "$T/mail-out" ] && ok "lab mail --force starts anyway" || ko "--force: rc=$rc"
 MARGS=""; rc=$(mrun LAB_MAIL_DIR="$T/absent")
 [ "$rc" != 0 ] && ok "lab mail: refuses a missing mail folder" || ko "accepted a missing mail folder"
+
+# reasoning level: set for the session only, then put back exactly (three shapes of config.yaml, then leftover repair)
+C="$M/data/config.yaml"; MARGS=""
+printf 'model:\n  default: test-model\ndelegation:\n  max_iterations: 60\n' > "$C"; cp "$C" "$T/cfg.a"
+rc=$(mrun); grep -q 'EFFORT=reasoning_effort:low' "$T/mail-out" && cmp -s "$C" "$T/cfg.a" && [ ! -e "$M/data/.mail-reasoning-undo" ] \
+  && ok "reasoning: low during the session, config.yaml back to the byte (no agent block)" || ko "append case: rc=$rc $(cat "$T/mail-out"; diff "$T/cfg.a" "$C")"
+printf 'agent:\n  max_turns: 5\nmodel:\n  default: test-model\n' > "$C"; cp "$C" "$T/cfg.b"
+rc=$(mrun); grep -q 'EFFORT=reasoning_effort:low' "$T/mail-out" && cmp -s "$C" "$T/cfg.b" \
+  && ok "reasoning: back to the byte (agent block without reasoning_effort)" || ko "insert case: $(cat "$T/mail-out"; diff "$T/cfg.b" "$C")"
+printf 'agent:\n  max_turns: 5\n  reasoning_effort: high\n  other: 1\nmodel:\n  default: test-model\n' > "$C"; cp "$C" "$T/cfg.c"
+rc=$(mrun); grep -q 'EFFORT=reasoning_effort:low' "$T/mail-out" && cmp -s "$C" "$T/cfg.c" \
+  && ok "reasoning: back to the previous value (high) afterwards" || ko "replace case: $(cat "$T/mail-out"; diff "$T/cfg.c" "$C")"
+rc=$(mrun LAB_MAIL_REASONING=medium); grep -q 'EFFORT=reasoning_effort:medium' "$T/mail-out" && cmp -s "$C" "$T/cfg.c" && ok "LAB_MAIL_REASONING is honoured" || ko "LAB_MAIL_REASONING: $(cat "$T/mail-out")"
+rc=$(mrun LAB_MAIL_REASONING=off); grep -q 'EFFORT=reasoning_effort:high' "$T/mail-out" && cmp -s "$C" "$T/cfg.c" && ok "LAB_MAIL_REASONING=off leaves config.yaml alone" || ko "off: $(cat "$T/mail-out")"
+rc=$(mrun LAB_MAIL_REASONING=banana); [ "$rc" != 0 ] && ok "an invalid LAB_MAIL_REASONING is refused" || ko "accepted banana"
+# leftover of a killed session: simulate by running set_reasoning's effect by hand, then start again
+printf 'model:\n  default: test-model\n' > "$T/cfg.d"; printf 'model:\n  default: test-model\n\nagent:\n  reasoning_effort: low\n' > "$C"; printf 'append|%s|low\n' "$(wc -c < "$T/cfg.d")" > "$M/data/.mail-reasoning-undo"
+rc=$(mrun LAB_MAIL_REASONING=off); [ ! -e "$M/data/.mail-reasoning-undo" ] && cmp -s "$C" "$T/cfg.d" && ok "a leftover of a killed session is repaired at the next start" || ko "leftover: $(cat "$C")"
+# a failing Hermes session still restores
+printf 'model:\n  default: test-model\n' > "$C"; cp "$C" "$T/cfg.e"; printf '#!/usr/bin/env bash\nexit 7\n' > "$M/5-hermes.sh"
+rc=$(mrun); [ "$rc" = 7 ] && cmp -s "$C" "$T/cfg.e" && ok "reasoning restored and exit code kept when the session fails" || ko "failing session: rc=$rc"
 
 echo "· PowerShell scripts: pure ASCII (Windows PowerShell 5.1 reads a BOM-less file as ANSI and garbles other characters)"
 if grep -nP '[^\x00-\x7F]' "$ROOT"/mail-export/windows/*.ps1 >/dev/null; then ko "non-ASCII character in a .ps1 file (use \\uXXXX escapes)"; else ok "no non-ASCII character in the .ps1 files"; fi

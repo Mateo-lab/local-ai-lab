@@ -351,7 +351,7 @@ UNIT
 }
 
 cmd_dev() { exec "$ROOT/scripts/dev.sh" "$@"; }
-cmd_mail() { LAB_AGENT_SSH_ALLOW="${LAB_AGENT_SSH_ALLOW:-}" exec "$ROOT/scripts/mail-agent.sh" "$@"; }
+cmd_mail() { LAB_AGENT_SSH_ALLOW="${LAB_AGENT_SSH_ALLOW:-}" LAB_MAIL_REASONING="${LAB_MAIL_REASONING:-}" LAB_MAIL_DIR="${LAB_MAIL_DIR:-}" exec "$ROOT/scripts/mail-agent.sh" "$@"; }
 cmd_remote() { exec "$ROOT/scripts/remote.sh" "$@"; }
 cmd_gpu_limit() { [ $# -eq 0 ] && set -- status; exec "$ROOT/scripts/gpu-power-limit.sh" "$@"; }
 cmd_backup()    { exec "$ROOT/scripts/backup.sh" "$@"; }

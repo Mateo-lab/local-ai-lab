@@ -52,3 +52,8 @@
 # Exceptions: test machines Hermes may reach over SSH (lab remote), separated by spaces,
 # as IP or IP:PORT (port 22 by default). Empty = no exception. See docs/agent-isolation.md.
 #LAB_AGENT_SSH_ALLOW="192.168.1.60"
+
+# `lab mail` (docs/mail-export.md): folder of the exported mails, and Hermes' reasoning level for that session only
+# (xhigh|high|medium|low|minimal|none, or "off" to leave hermes/data/config.yaml alone; default low).
+#LAB_MAIL_DIR=/srv/mail-in/inbox
+#LAB_MAIL_REASONING=low
