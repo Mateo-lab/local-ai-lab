@@ -172,8 +172,8 @@ session started *while* a mail session is open would see `low`: keep one session
 a local model served by Ollama is not documented: measure the answer time with and without it.
 
 The default `AGENTS.md` (`hermes/mail-template/AGENTS.md`) makes Hermes a follow-up assistant for a development team: it keeps a task
-register (`taches.md`, a table that can be pasted into a ticket tracker), summaries before meetings, points of attention and
-draft replies, all in French, writing only in `workspace/mail/`. Put what is specific to you (names, roles, projects, meeting days,
+register (`taches.md`, pasteable into a ticket tracker), the list of processed mails (`traites.txt`, so mails that arrive late are not
+missed), summaries before the two weekly meetings, points of attention and draft replies, all in French, writing only in `workspace/mail/`. Put what is specific to you (names, roles, projects, meeting days,
 ticket format) in `hermes/data/workspace/mail/EQUIPE.md`, which stays on the AI machine and never goes into this repository.
 `lab mail` copies the template only when the workspace has no `AGENTS.md` yet; to take a newer template, back up and copy it by hand.
 
