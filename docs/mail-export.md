@@ -171,6 +171,12 @@ terminal; if the machine was killed, the next `lab mail` repairs it first (recor
 session started *while* a mail session is open would see `low`: keep one session at a time. Whether Hermes passes this level on to
 a local model served by Ollama is not documented: measure the answer time with and without it.
 
+The default `AGENTS.md` (`hermes/mail-template/AGENTS.md`) makes Hermes a follow-up assistant for a development team: it keeps a task
+register (`taches.md`, a table that can be pasted into a ticket tracker), summaries before meetings, points of attention and
+draft replies, all in French, writing only in `workspace/mail/`. Put what is specific to you (names, roles, projects, meeting days,
+ticket format) in `hermes/data/workspace/mail/EQUIPE.md`, which stays on the AI machine and never goes into this repository.
+`lab mail` copies the template only when the workspace has no `AGENTS.md` yet; to take a newer template, back up and copy it by hand.
+
 The mount is opt-in per session, so ordinary sessions and `lab dev` projects do not see your mails. The equivalent by hand:
 `HERMES_MAIL_DIR=/srv/mail-in/inbox ./5-hermes.sh MODEL`, or in a plain `docker run`: `-v /srv/mail-in/inbox:/opt/mail-inbox:ro`.
 The Hermes Desktop gateway does not get the mount (command line only).
