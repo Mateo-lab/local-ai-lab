@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Hermes session dedicated to reading the exported Outlook mails (docs/mail-export.md). Called by `lab mail`.
 #
-#   lab mail [MODEL] [--force]
+#   lab mail [MODEL] [--force]            interactive session
+#   lab mail run registre|planning|synchro [MODEL] [--force]   one pass without conversation (hermes chat -q), then exits
 #
 # - mounts the drop folder read-only at /opt/mail-inbox (HERMES_MAIL_DIR; default /srv/mail-in/inbox, LAB_MAIL_DIR to change);
 # - works in its own folder hermes/data/workspace/mail, whose AGENTS.md (hermes/mail-template/AGENTS.md) says that mails are data;
@@ -15,7 +16,16 @@ ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 DATA="${HERMES_DATA:-$ROOT/hermes/data}"
 die() { echo "lab mail: $*" >&2; exit 1; }
 
-MODEL=""; FORCE=0
+MODEL=""; FORCE=0; QUERY=""
+if [ "${1:-}" = run ]; then   # fixed prompts only (nothing typed by the caller reaches the agent): the phrases AGENTS.md answers to
+  case "${2:-}" in
+    registre) QUERY="Mets à jour le registre." ;;
+    planning) QUERY="Prépare le sprint planning." ;;
+    synchro)  QUERY="Prépare la synchro." ;;
+    *) die "usage: lab mail run registre|planning|synchro [MODEL] [--force]" ;;
+  esac
+  shift 2
+fi
 for a in "$@"; do case "$a" in --force) FORCE=1 ;; -*) die "unknown option $a" ;; *) [ -z "$MODEL" ] && MODEL="$a" || die "too many arguments" ;; esac; done
 
 MAIL_DIR="${LAB_MAIL_DIR:-/srv/mail-in/inbox}"
@@ -91,5 +101,5 @@ fi
 
 echo "Mail reader — model $MODEL — mails: $MAIL_DIR (read-only) — folder: workspace/mail"
 HERMES_MAIL_DIR="$MAIL_DIR" HERMES_WORKDIR="/opt/data/workspace/mail" HERMES_SERIAL=/nonexistent \
-  "$ROOT/5-hermes.sh" "$MODEL"
+  "$ROOT/5-hermes.sh" "$MODEL" ${QUERY:+chat -q "$QUERY"}
 exit $?

@@ -93,6 +93,14 @@ MARGS="--force"; rc=$(mrun LAB_AGENT_SSH_ALLOW=192.0.2.60)
 MARGS=""; rc=$(mrun LAB_MAIL_DIR="$T/absent")
 [ "$rc" != 0 ] && ok "lab mail: refuses a missing mail folder" || ko "accepted a missing mail folder"
 
+# one pass without conversation: fixed prompts only
+MARGS="run registre"; rc=$(mrun); grep -q "ARGS=test-model chat -q Mets à jour le registre\. MAIL=" "$T/mail-out" && ok "lab mail run registre: hermes chat -q with the fixed prompt" || ko "run registre: rc=$rc $(cat "$T/mail-out" "$T/mail-msg")"
+MARGS="run planning"; rc=$(mrun); grep -q "chat -q Prépare le sprint planning\." "$T/mail-out" && ok "lab mail run planning" || ko "run planning: $(cat "$T/mail-out")"
+MARGS="run synchro"; rc=$(mrun); grep -q "chat -q Prépare la synchro\." "$T/mail-out" && ok "lab mail run synchro" || ko "run synchro: $(cat "$T/mail-out")"
+MARGS="run n'importe quoi"; rc=$(mrun); [ "$rc" != 0 ] && [ ! -e "$T/mail-out" ] && ok "lab mail run refuses an unknown keyword (no free-text prompt)" || ko "accepted a free prompt: rc=$rc"
+MARGS="run"; rc=$(mrun); [ "$rc" != 0 ] && ok "lab mail run alone is refused" || ko "run without keyword accepted"
+MARGS=""; rc=$(mrun); grep -q "ARGS=test-model MAIL=" "$T/mail-out" && ok "plain lab mail still starts the interactive session" || ko "interactive broken: $(cat "$T/mail-out")"
+
 # reasoning level: set for the session only, then put back exactly (three shapes of config.yaml, then leftover repair)
 C="$M/data/config.yaml"; MARGS=""
 printf 'model:\n  default: test-model\ndelegation:\n  max_iterations: 60\n' > "$C"; cp "$C" "$T/cfg.a"

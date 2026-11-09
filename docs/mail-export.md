@@ -177,6 +177,17 @@ missed), summaries before the two weekly meetings, points of attention and draft
 ticket format) in `hermes/data/workspace/mail/EQUIPE.md`, which stays on the AI machine and never goes into this repository.
 `lab mail` copies the template only when the workspace has no `AGENTS.md` yet; to take a newer template, back up and copy it by hand.
 
+**One pass without a conversation.** `lab mail run registre|planning|synchro [MODEL]` starts the same session but sends one fixed
+prompt to Hermes (`hermes chat -q`, documented as "single query, non-interactive") and exits when the answer is done. The three
+prompts are the phrases `AGENTS.md` answers to ("Mets à jour le registre.", "Prépare le sprint planning.", "Prépare la synchro.");
+nothing typed by the caller reaches the agent. Over SSH it needs a terminal: `ssh -t aibeast "lab mail run registre"`.
+Not verified at the time of writing: whether Hermes asks for confirmations that block a non-interactive pass, and what exactly it
+prints; try it once by hand.
+
+**From the PC.** `mail-export/windows/Get-MailSummaries.ps1` fetches `taches.md`, `traites.txt`, `resumes/` and `brouillons/` from the
+AI machine (read direction only, over your SSH shortcut) into `Documents\AiBeast-Mails` and opens the newest summary. With
+`-Run registre|planning|synchro` it starts the pass first: update, then show. Not tested on a real PC when it was written.
+
 The mount is opt-in per session, so ordinary sessions and `lab dev` projects do not see your mails. The equivalent by hand:
 `HERMES_MAIL_DIR=/srv/mail-in/inbox ./5-hermes.sh MODEL`, or in a plain `docker run`: `-v /srv/mail-in/inbox:/opt/mail-inbox:ro`.
 The Hermes Desktop gateway does not get the mount (command line only).

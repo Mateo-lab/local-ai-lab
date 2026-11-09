@@ -28,7 +28,7 @@
 #   lab remote add|show|link|list|test|hostkey|remove   Hermes SSH access to a test machine (dedicated key; hostkey = dual-boot): docs/hermes-ssh.md
 #   lab dev new|list|start|review|check|merge|setup|ctx64   development with Hermes (code → test → review): docs/agent-development.md
 #   lab gateway start|stop|status   Hermes Desktop graphical interface (remote gateway on 127.0.0.1:9119): docs/hermes-desktop.md
-#   lab mail [MODEL] [--force]      Hermes session that reads the exported mails (read-only mount, no serial): docs/mail-export.md
+#   lab mail [run registre|planning|synchro] [MODEL] [--force]   Hermes that reads the exported mails (read-only, no serial); run = one pass without chat: docs/mail-export.md
 set -uo pipefail
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
