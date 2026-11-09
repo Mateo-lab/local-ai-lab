@@ -200,6 +200,13 @@ ollmcp -H http://127.0.0.1:11434 -m qwen3.8:27b-64k        # MCP client for Olla
 - Use the model that is already loaded (`docker exec ollama ollama ps`): another model forces a reload and takes VRAM.
 - Ollama has **no authentication**: anything running on your PC can use the tunnel, and Hermes, OpenClaw and your client
   share the same GPU. Several clients at once have not been measured.
+- **Slow generation (a few tok/s instead of about 50) from a graphical client.** A client that uses Ollama's native API may send
+  its own context size (`num_ctx`), for example the model's maximum (262,144 for `qwen3.8`), which overrides the `-64k` variant. The
+  cache then no longer fits in VRAM: `ollama ps` shows `CONTEXT 262144` and `40%/60% CPU/GPU`, and the logs show
+  `offloaded 43/66 layers`. Measured with Cherry Studio and its "Ollama" provider. Fix: declare the server as an **OpenAI-compatible**
+  provider instead (`http://127.0.0.1:11434`, final URL `.../v1/chat/completions`, any API key): `/v1` cannot request `num_ctx`, so the
+  model's own 65,536 applies. Check with `docker exec ollama ollama ps` while it generates: `100% GPU`, `CONTEXT 65536`. After a wrong
+  configuration, `docker exec ollama ollama stop MODEL` unloads the oversized instance.
 - If your PC already runs its own Ollama on port 11434, `ssh aibeast` fails with `Address already in use` (see
   `ExitOnForwardFailure` above): set `LAB_OLLAMA_LOCAL_PORT` in `lab.conf` (another port, or `0` for no tunnel), run
   `lab client` again and reinstall the block.
